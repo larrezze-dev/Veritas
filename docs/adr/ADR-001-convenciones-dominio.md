@@ -97,6 +97,7 @@ Contrato futuro de diagnóstico: code estable (ASCII), message_key traducible, p
 | INPUT_NONFINITE | NaN/infinito |
 | UNITS_INCOMPATIBLE | Dimensiones incompatibles |
 | UNITS_UNREPRESENTABLE | Overflow/underflow total |
+| UNITS_UNKNOWN | Símbolo de unidad no registrado (ampliación aprobada en el plan T-002, 2026-10-27) |
 | GEOMETRY_ZERO_LENGTH | Extremos coincidentes |
 | GEOMETRY_INVALID_ORIENTATION | Referencia cero/casi paralela o base inválida |
 | REFERENCE_NOT_FOUND | Referencia no resoluble |
@@ -128,3 +129,4 @@ Implementación y validación numérica del producto: NO_IMPLEMENTADA.
 
 - 2026-10-27: reinicio del proyecto con Claude Code; ADR conservado como PROPUESTO, pendiente de revisión y aprobación del usuario.
 - 2026-10-27: usuario aprueba ADR-001; estado ACCEPTED. Sin implementación ni validación numérica.
+- 2026-10-27: ampliación de la tabla §5 con `UNITS_UNKNOWN` (plan T-002 aprobado). Implementación del objeto `Diagnostic` en `veritas.core.diagnostics`.

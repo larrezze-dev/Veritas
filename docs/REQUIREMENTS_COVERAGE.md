@@ -132,7 +132,7 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | NFR-002 | Offline | Modelado y cálculo sin Internet tras instalación y carga local de datos. | — | NO INICIADO |
 | NFR-003 | Robustez | El fallo del solver no destruye el modelo ni genera éxito ficticio. | — | NO INICIADO |
 | NFR-004 | Interfaz | Fluidez de trabajo medida sobre modelo de referencia de 1.000 barras; umbrales cuantitativos tras benchmark. | — | NO INICIADO |
-| NFR-005 | Precisión | Doble precisión cuando corresponda; tolerancias y unidades documentadas. | — | NO INICIADO |
+| NFR-005 | Precisión | Doble precisión cuando corresponda; tolerancias y unidades documentadas. | T-002: `Quantity` en doble precisión con valor SI y dimensión; registro cerrado de 42 unidades contrastado con fracciones exactas; rechazo de no finitos, desbordamiento y subnormales; tolerancias justificadas por caso | PARCIAL — T-002 aceptado 2026-10-27; sin magnitudes de carga superficial ni desplazamiento, sin temperatura; no cubre cálculos posteriores |
 | NFR-006 | Seguridad | Importaciones validadas; no ejecutar código contenido en un proyecto. | — | NO INICIADO |
 | NFR-007 | Auditoría | Logs de análisis, errores y versiones; historial de cambios esenciales. | ADR-001 (contrato de convenciones, aprobado 2026-10-27) | PARCIAL / DOCUMENTAL — sin implementación ni tests |
 | NFR-008 | Calidad | Tests unitarios, integración, referencia y regresión; tipado, lint y CI. | T-001: pytest (22 tests), ruff, mypy estricto, test de aislamiento de capas y workflow CI | PARCIAL — CI en GitHub (repo público larrezze-dev/Veritas) en verde: run 40545484065 (2026-10-27, windows-latest, CPython 3.12.10, 22 tests); windows-latest ≠ Windows 11; sin tests estructurales todavía |

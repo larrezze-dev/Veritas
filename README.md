@@ -4,7 +4,7 @@ Aplicación experimental de estructuras de barras y nudos 3D (Python, PySide6, P
 
 > **Aviso:** aplicación experimental. No apta para justificar obras reales sin validación independiente por profesionales competentes.
 
-**Estado:** fase F0, ticket T-001 (repositorio y entorno). Todavía no hay cálculo, interfaz gráfica ni análisis FEM. La verificación normativa figura como `NO_COMPROBADA`. Estado de fases en [docs/ROADMAP.md](docs/ROADMAP.md) y de tickets en [tasks/BACKLOG.md](tasks/BACKLOG.md).
+**Estado:** fase F0. Disponibles: entorno (T-001) y sistema de unidades SI (T-002). Todavía no hay cálculo estructural, interfaz gráfica ni análisis FEM. La verificación normativa figura como `NO_COMPROBADA`. Estado de fases en [docs/ROADMAP.md](docs/ROADMAP.md) y de tickets en [tasks/BACKLOG.md](tasks/BACKLOG.md).
 
 ## Requisitos
 
@@ -22,6 +22,19 @@ uv run veritas --version     # veritas 0.0.1
 uv run veritas desconocido   # uso incorrecto: mensaje en stderr
 $LASTEXITCODE                # 2
 ```
+
+### Unidades (T-002)
+
+```powershell
+uv run veritas units list                            # magnitudes, dimensiones y unidades
+uv run veritas units profiles                        # perfiles de presentación SI, kN-m, N-mm
+uv run veritas units convert 12.5 kN*m --to N*m      # 12.5 kN·m = 12500 N·m
+uv run veritas units convert 210000 N/mm2 --to GPa   # 210000 N/mm² = 210 GPa
+uv run veritas units convert 1 kN --to m             # UNITS_INCOMPATIBLE en stderr
+$LASTEXITCODE                                        # 2
+```
+
+Las unidades admiten alias ASCII: `kN*m`, `mm4`, `N/mm2`, `kg/m3`.
 
 ## Comprobaciones de calidad
 

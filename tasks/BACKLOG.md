@@ -11,7 +11,7 @@ Regla de avance: un ticket a la vez; no iniciar el siguiente sin la aceptación 
 | ID | SRS backlog | Fase | Título | Requisitos SRS (aporte previsto) | Dependencias | Estado |
 |---|---|---|---|---|---|---|
 | T-001 | S3D-001 | F0 | Repositorio, entorno Python, test runner, lint/tipado, CI y subagentes `.claude/agents/` | NFR-001, NFR-008 | — | ACEPTADO — 2026-10-27, aceptación expresa del usuario ([plan](../plans/T-001.md)) |
-| T-002 | S3D-002 | F0 | Sistema de unidades SI y conversión de presentación | NFR-005 | T-001 | NO INICIADO |
+| T-002 | S3D-002 | F0 | Sistema de unidades SI y conversión de presentación | NFR-005 | T-001 | ACEPTADO — 2026-10-27, aceptación expresa del usuario ([plan](../plans/T-002.md)) |
 | T-003 | S3D-003 | F1A | Node/Member, base local y orientación; extremos I/J rígidos por defecto | GEO-001, GEO-002, GEO-004, CON-001, CON-002 | T-002, ADR-001 | NO INICIADO |
 | T-004 | S3D-004 | F1A | Revisiones de material y sección rectangular; un material y una sección por barra | MAT-001, MAT-002, SEC-001, SEC-002, SEC-003, GEO-003 | T-003 | NO INICIADO |
 | T-005 | S3D-005 | F1B | Apoyos por GDL global | GEO-010 (parcial) | T-004 | NO INICIADO |
@@ -20,6 +20,19 @@ Regla de avance: un ticket a la vez; no iniciar el siguiente sin la aceptación 
 | T-008 | S3D-008 | F1B | Resultados normalizados: desplazamientos, reacciones y esfuerzos de extremo | FEM-004, RES-001 | T-007 | NO INICIADO |
 | T-009 | S3D-009 | F1B | Pruebas analíticas de referencia (viga biapoyada, voladizo) y primera demostración | T-FEM-001, T-FEM-002 | T-008 | NO INICIADO |
 | T-010 | — | F1C | Liberaciones y resortes I/J, detección de mecanismo | CON-003, CON-004, CON-009, CON-011, FEM-008 | T-009 | NO INICIADO |
+
+## Propuestas pendientes asignadas a tickets
+
+Origen: revisión structural-reviewer de T-002 (ver `plans/T-002.md`). El usuario decidió (2026-10-27) evaluarlas en el plan de cada ticket; requieren aprobación allí.
+
+| Ticket | Propuesta |
+|---|---|
+| T-003 | Documentar en ADR-001 §5 que la división por magnitud nula usa `UNITS_UNREPRESENTABLE` (clave `units.division_by_zero`), al ampliar el uso de diagnósticos |
+| T-004 | Unidad kg/m (masa lineal de perfiles) |
+| T-006 | Magnitud `SURFACE_LOAD` (kN/m², separada de tensión/módulo) y unidad kN/m³ (peso específico, DB-SE-AE Anejo C) |
+| T-008 | Magnitud `DISPLACEMENT` (flechas en mm con perfil kN-m) |
+| T-012 | Perfil «N-mm» no coherente N-mm-t: renombrar o documentar al persistir perfiles de usuario |
+| Modal (por crear) | Unidades Hz/s y rigidez rotacional distribuida |
 
 ## Tickets posteriores (por desglosar al llegar a su fase)
 

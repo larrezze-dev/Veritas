@@ -29,10 +29,12 @@ def test_info_reports_version_warning_and_module_status(
         assert status in out
 
 
-def test_no_module_is_declared_as_implemented() -> None:
-    statuses = {status for _, status in cli.MODULE_STATUS}
-    assert statuses <= {cli.PENDING, cli.NOT_CHECKED}
-    assert dict(cli.MODULE_STATUS)["Verificación normativa"] == cli.NOT_CHECKED
+def test_only_units_module_is_declared_available() -> None:
+    status = dict(cli.MODULE_STATUS)
+    assert status["Unidades SI"].startswith(cli.AVAILABLE)
+    others = {value for name, value in status.items() if name != "Unidades SI"}
+    assert others <= {cli.PENDING, cli.NOT_CHECKED}
+    assert status["Verificación normativa"] == cli.NOT_CHECKED
 
 
 def test_no_arguments_prints_help_and_succeeds(capsys: pytest.CaptureFixture[str]) -> None:
