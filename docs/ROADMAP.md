@@ -6,7 +6,7 @@ El Product Owner puede probar cada fase y detener el desarrollo sin invalidar lo
 
 | Fase | Unidad demostrable | Gate del usuario | Estado |
 |---|---|---|---|
-| F0 | Estructura proyecto, entorno, test runner, sistema de unidades, configuración, subagentes de Claude Code y plantillas de trabajo | Ejecución de test de ejemplo en Windows | EN VALIDACIÓN (T-001 y T-002 aceptados; falta aceptación expresa de la fase) |
+| F0 | Estructura proyecto, entorno, test runner, sistema de unidades, configuración, subagentes de Claude Code y plantillas de trabajo | Ejecución de test de ejemplo en Windows | ACEPTADA — 2026-10-27, aceptación expresa del usuario (T-001 y T-002) |
 | F1A | Node/Member, material, sección rectangular, conexión rígida I/J | CLI o pequeña vista de barras y propiedades | NO INICIADA |
 | F1B | Apoyos y cargas nodales/barras, adaptador OpenSeesPy | Viga de referencia, reacciones/desplazamientos verificables | NO INICIADA |
 | F1C | Cambio de liberación I/J, resorte rotacional y errores por mecanismo | Usuario compara tres uniones y verifica mensajes | NO INICIADA |
