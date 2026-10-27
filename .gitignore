@@ -1,0 +1,24 @@
+# Entornos virtuales
+.venv/
+.venv-*/
+
+# Cachés de Python y herramientas
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Artefactos de build
+build/
+dist/
+*.egg-info/
+
+# Configuración local de Claude Code (la compartida sí se versiona)
+.claude/settings.local.json
+
+# Sistema
+Thumbs.db
+desktop.ini

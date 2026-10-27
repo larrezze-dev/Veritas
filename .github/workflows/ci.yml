@@ -1,0 +1,24 @@
+# CI de T-001. No ejecutado: el repositorio no tiene remoto.
+# windows-latest no equivale a Windows 11 (NFR-001 se verifica localmente).
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Instalar entorno desde uv.lock
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check .
+      - name: Formato
+        run: uv run ruff format --check .
+      - name: Tipado
+        run: uv run mypy
+      - name: Tests
+        run: uv run pytest
