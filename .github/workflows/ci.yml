@@ -1,4 +1,4 @@
-# CI de T-001. No ejecutado: el repositorio no tiene remoto.
+# CI de T-001. Repositorio público larrezze-dev/Veritas.
 # windows-latest no equivale a Windows 11 (NFR-001 se verifica localmente).
 name: ci
 
@@ -10,8 +10,8 @@ jobs:
   checks:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
       - name: Instalar entorno desde uv.lock
         run: uv sync --locked
       - name: Lint
