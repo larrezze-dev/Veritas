@@ -22,3 +22,6 @@ dist/
 # Sistema
 Thumbs.db
 desktop.ini
+
+# Material conceptual original: archivo local, no se publica
+_concept/

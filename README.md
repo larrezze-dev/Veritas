@@ -39,6 +39,6 @@ uv run mypy
 - `docs/`: decisiones, arquitectura, roadmap, validación y referencias (SRS v1.1.0).
 - `tasks/`, `plans/`, `handoffs/`: backlog, planes de ticket y checkpoints de sesión.
 - `.claude/agents/`: subagentes de Claude Code ([docs/AGENT_POLICY.md](docs/AGENT_POLICY.md)).
-- `_concept/`: material conceptual original, conservado como archivo histórico.
+- `_concept/`: material conceptual original, archivo local excluido del repositorio (`.gitignore`). La versión de referencia vigente está en `docs/references/`.
 
 Licencia: pendiente (DEC-006). No redistribuir.
