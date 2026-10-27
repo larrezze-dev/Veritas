@@ -33,7 +33,7 @@ P0: dominio/solver mínimo, uniones rígidas por defecto, unidades y tests. P1: 
 
 1. Leer `CLAUDE.md`, [DECISIONS.md](DECISIONS.md), [ARCHITECTURE.md](ARCHITECTURE.md) y este documento.
 2. Backlog inicial en `tasks/BACKLOG.md`, plantillas `tasks/TEMPLATE.md` y `handoffs/TEMPLATE.md` y carpeta `plans/` creados el 2026-10-27. Backlog sugerido por la SRS (sección 18): repositorio/CI, sistema de unidades, Node/Member, materiales y sección rectangular, apoyos, cargas, adaptador OpenSeesPy, resultados, pruebas analíticas, viewport mínimo, persistencia e informe básico. Los IDs de ticket se asignan en el backlog, no en estos documentos.
-3. [ADR-001](adr/ADR-001-convenciones-dominio.md) aprobado el 2026-10-27. Revisar y aprobar, modificar o rechazar [ADR-002](adr/ADR-002-adaptador-plano-proceso-solver.md) antes del adaptador OpenSeesPy (T-007).
+3. [ADR-001](adr/ADR-001-convenciones-dominio.md) aprobado el 2026-10-27. [ADR-002](adr/ADR-002-adaptador-plano-proceso-solver.md) aprobado el 2026-10-27, con la revisión DEC-011; se implementa en T-007.
 4. Subagentes del proyecto definidos en `.claude/agents/` (T-001) según [AGENT_POLICY.md](AGENT_POLICY.md).
 5. Primer ticket: plan en `plans/<ID-TICKET>.md`, aprobación del usuario, implementación, demo y aceptación según [MODULE_CONTRACT.md](MODULE_CONTRACT.md).
 

@@ -37,6 +37,7 @@ def test_only_implemented_modules_are_declared_available() -> None:
         "Materiales y secciones",
         "Apoyos",
         "Cargas",
+        "Análisis FEM",
     }
     for name in implemented:
         assert status[name].startswith(cli.AVAILABLE)

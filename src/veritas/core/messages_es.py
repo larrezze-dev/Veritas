@@ -91,6 +91,86 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "El peso propio solo puede estar en un caso permanente; el caso «{case}» sería {category}."
     ),
     "load.self_weight_missing": "El modelo no tiene peso propio definido.",
+    "fem.no_members": "El modelo no tiene barras: no hay nada que analizar.",
+    "fem.node_out_of_plane": (
+        "El nudo {node} está fuera del plano de análisis XZ "
+        "(Y = {y} m; se exige |Y| ≤ {tolerance} m)."
+    ),
+    "fem.isolated_node": "El nudo {node} no pertenece a ninguna barra.",
+    "fem.member_end_not_rigid": (
+        "El extremo {end} de la barra {member} no es rígido; el análisis plano aún no admite "
+        "liberaciones (T-010)."
+    ),
+    "fem.material_family_unsupported": (
+        "La barra {member} usa material {family}; el análisis plano solo admite acero y aluminio "
+        "con E isótropo (ADR-002 §2)."
+    ),
+    "fem.member_axis_not_plane": (
+        "Los ejes locales de la barra {member} no permiten flexión en el plano XZ "
+        "(ex·Y = {ex_y}, ey·Y = {ey_y}, ez·Y = {ez_y}; tolerancia {tolerance})."
+    ),
+    "fem.section_property_unavailable": (
+        "La propiedad {property} de la sección no está disponible; no se sustituye por cero."
+    ),
+    "fem.section_coupled_bending": (
+        "La sección de la barra {member} tiene Iyz = {iyz}; la flexión acoplada no está soportada."
+    ),
+    "fem.support_basis_not_plane": (
+        "La base inclinada del apoyo no tiene ey′ normal al plano XZ "
+        "(ex′·Y = {ex_y}, ez′·Y = {ez_y}; tolerancia {tolerance})."
+    ),
+    "fem.support_spring_out_of_plane": (
+        "Resorte de apoyo en {dof}, fuera del plano XZ: "
+        "no se puede representar en el análisis plano."
+    ),
+    "fem.load_out_of_plane": (
+        "Carga nodal fuera del plano XZ (Fy = {fy} N, Mx = {mx} N·m, Mz = {mz} N·m)."
+    ),
+    "fem.member_load_out_of_plane": (
+        "Carga de barra con componente global Y = {qy} N/m (límite {limit} N/m)."
+    ),
+    "fem.empty_case": "El caso «{case}» no tiene cargas.",
+    "fem.too_many_dofs": (
+        "El modelo tiene {count} GDL libres; la comprobación de singularidad admite como máximo "
+        "{limit} en esta versión."
+    ),
+    "fem.singular": (
+        "Rigidez singular o extremadamente mal condicionada (pivote escalado {pivot} ≤ "
+        "{tolerance}, componente {component}): posible mecanismo o apoyos insuficientes. "
+        "No se calcula."
+    ),
+    "fem.invalid_stiffness": "Matriz de rigidez con diagonal negativa o no finita (error interno).",
+    "fem.solver_failed": "El solver falló (código {code}). No hay resultados.",
+    "fem.timeout": (
+        "El análisis superó el tiempo máximo de {timeout} s y se detuvo. No hay resultados."
+    ),
+    "fem.worker_crashed": (
+        "El proceso de cálculo terminó sin respuesta válida (código {returncode}). "
+        "No hay resultados."
+    ),
+    "fem.protocol_error": "Respuesta del proceso de cálculo no válida. No hay resultados.",
+    "fem.nonfinite_result": "El solver devolvió valores no finitos. No hay resultados.",
+    "fem.equilibrium_failed": (
+        "Control de equilibrio no superado (residuo de fuerzas {force}, de momentos {moment}; "
+        "tolerancia {tolerance}). No hay resultados."
+    ),
+    "fem.out_of_plane_implicit_restraint": (
+        "Ningún apoyo restringe {dof}: el análisis plano lo restringe implícitamente en los "
+        "{nodes} nudos. El modelo 3D podría ser un mecanismo fuera del plano; el resultado solo "
+        "vale para el modelo plano."
+    ),
+    "fem.hypothesis_planar": ("Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry."),
+    "fem.hypothesis_euler_bernoulli": (
+        "Barras Euler–Bernoulli 2D (sin deformación por cortante); se usan A, E e Iy o Iz."
+    ),
+    "fem.hypothesis_implicit_out_of_plane": (
+        "Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se "
+        "calculan."
+    ),
+    "fem.hypothesis_penalty": (
+        "Al menos un apoyo inclinado rígido se representa por penalización (error relativo del "
+        "orden de 1e-8 en la dirección restringida)."
+    ),
     "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",
     "section.property_unrepresentable": (
         "La propiedad {property} no es representable como valor positivo en doble precisión "

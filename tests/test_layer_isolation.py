@@ -4,6 +4,7 @@ Análisis estático con ``ast`` de la biblioteca estándar; no importa los módu
 """
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -157,3 +158,22 @@ def test_loads_module_is_scanned_and_isolated() -> None:
             )
             for name in internal
         ), internal
+
+
+WORKER_FILE = PACKAGE_ROOT / "fem" / "adapters" / "opensees_worker.py"
+
+
+def test_worker_imports_only_stdlib_and_openseespy() -> None:
+    """El worker no importa ``veritas`` ni dependencias ajenas (ADR-002 §4, plan T-007)."""
+    tops = {name.split(".")[0] for name in imported_modules(WORKER_FILE, PACKAGE_ROOT)}
+    assert "veritas" not in tops
+    assert tops - {"openseespy"} <= sys.stdlib_module_names
+
+
+def test_only_the_worker_imports_openseespy() -> None:
+    importers = {
+        path.relative_to(PACKAGE_ROOT).as_posix()
+        for path in PACKAGE_ROOT.rglob("*.py")
+        if any(name.split(".")[0] == "openseespy" for name in imported_modules(path, PACKAGE_ROOT))
+    }
+    assert importers == {"fem/adapters/opensees_worker.py"}

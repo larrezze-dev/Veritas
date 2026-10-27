@@ -23,10 +23,15 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   cargas uniformes locales; resultantes ΣF/ΣM de las acciones prescritas respecto al
   origen y traza de ``model_revision``, código 0 (plan T-006). No son resultados de
   análisis y se dice expresamente.
+- ``veritas analyze demo [--caso viga|mecanismo] [--timeout S]``: análisis plano XZ con
+  OpenSeesPy en un proceso aislado (plan T-007). Imprime estado, procedencia,
+  diagnósticos y, solo si la corrida es SUCCEEDED, la tabla BRUTA en la base del solver,
+  marcada como no normalizada. Código 0 si SUCCEEDED; 3 si FAILED (sin resultados).
 - Subcomando u opción desconocidos: uso en stderr, stdout vacío, código 2.
 - Error de dominio (diagnóstico): ``CÓDIGO: mensaje`` en stderr, stdout vacío, código 2.
 
-Esta CLI no ejecuta análisis estructurales.
+Solo ``veritas analyze`` ejecuta un análisis estructural; sus valores no están normalizados
+ni validados frente a referencias (T-008, T-009).
 """
 
 import argparse
@@ -63,7 +68,7 @@ from veritas.core.loads.loads import (
     vector_quantities,
 )
 from veritas.core.materials.material import MaterialFamily, MaterialRevision
-from veritas.core.messages_es import render_message
+from veritas.core.messages_es import MESSAGES_ES, render_message
 from veritas.core.presentation import (
     BUILTIN_PROFILES,
     PresentationProfile,
@@ -84,6 +89,7 @@ from veritas.core.supports.support import (
     roller_restraints,
 )
 from veritas.core.validation import positive_si
+from veritas.fem import AnalysisConfiguration, AnalysisRun, RunStatus, analyze_planar_xz
 
 EXPERIMENTAL_WARNING: Final = (
     "AVISO: aplicación experimental. No apta para justificar obras reales "
@@ -93,6 +99,7 @@ EXPERIMENTAL_WARNING: Final = (
 EXIT_OK: Final = 0
 EXIT_USAGE: Final = 2  # Código que emite argparse ante un uso incorrecto.
 EXIT_DIAGNOSTIC: Final = 2  # Entrada rechazada con diagnóstico de dominio.
+EXIT_ANALYSIS_FAILED: Final = 3  # Corrida de análisis FAILED: sin resultados (plan T-007).
 
 AVAILABLE: Final = "DISPONIBLE"
 PENDING: Final = "PENDIENTE"
@@ -105,7 +112,7 @@ MODULE_STATUS: Final[tuple[tuple[str, str], ...]] = (
     ("Materiales y secciones", f"{AVAILABLE} (T-004)"),
     ("Apoyos", f"{AVAILABLE} (T-005)"),
     ("Cargas", f"{AVAILABLE} (T-006)"),
-    ("Análisis FEM", PENDING),
+    ("Análisis FEM", f"{AVAILABLE} (T-007): plano XZ, resultados BRUTOS no normalizados"),
     ("Interfaz gráfica", PENDING),
     ("Verificación normativa", NOT_CHECKED),
 )
@@ -198,7 +205,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
     )
     _add_load_parser(subparsers, profile_names)
+    _add_analyze_parser(subparsers)
     return parser
+
+
+def _add_analyze_parser(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+    analyze_parser = subparsers.add_parser("analyze", help="Análisis FEM plano XZ (OpenSeesPy).")
+    analyze_sub = analyze_parser.add_subparsers(
+        dest="analyze_command", metavar="ACCIÓN", required=True
+    )
+    analyze_demo = analyze_sub.add_parser(
+        "demo", help="Voladizo (viga) o mecanismo; resultados BRUTOS no normalizados."
+    )
+    analyze_demo.add_argument("--caso", default="viga", choices=["viga", "mecanismo"])
+    analyze_demo.add_argument(
+        "--timeout", default="60", help="Tiempo máximo de la corrida en s (por defecto 60)."
+    )
 
 
 def _add_load_parser(
@@ -970,6 +992,114 @@ def format_load_demo(profile_name: str) -> str:
     return "\n".join(lines)
 
 
+ANALYZE_DEMO_P: Final = 10_000.0  # N, hacia -Z en la punta del voladizo.
+ANALYZE_DEMO_L: Final = 2.0  # m
+ANALYZE_DEMO_E: Final = 210_000.0  # N/mm²
+RAW_NOTE: Final = (
+    "RESULTADOS BRUTOS: base del solver SOLVER_XZ_RAW (x₁ = X, x₂ = Z, θ = −Ry). "
+    "NO normalizados a ADR-001 (T-008) ni validados frente a referencias (T-009)."
+)
+
+
+def _analyze_demo_model(case: str) -> tuple[StructuralModel, UUID, dict[UUID, str], str]:
+    model = StructuralModel()
+
+    def m(value: float) -> u.Quantity:
+        return u.Quantity.of(value, "m")
+
+    steel = model.add_material(
+        name="Acero estructural (ejemplo)",
+        family=MaterialFamily.STEEL,
+        source="CTE DB-SE-A §4.2",
+        standard_edition=_DEMO_EDITION,
+        elastic_modulus=u.Quantity.of(ANALYZE_DEMO_E, "N/mm²"),
+        shear_modulus=u.Quantity.of(81_000, "N/mm²"),
+        poisson_ratio=0.3,
+        density=u.Quantity.of(7850, "kg/m³"),
+    )
+    section = model.add_rectangular_section(b=m(0.2), h=m(0.4), name="R 200×400")
+    a = model.add_node(m(0), m(0), m(0), label="N1")
+    b = model.add_node(m(ANALYZE_DEMO_L), m(0), m(0), label="N2")
+    model.add_member(a.id, b.id, material=steel.ref, section=section.ref, label="B1")
+    load_case = model.add_load_case("Q1", LoadCategory.VARIABLE)
+    model.add_nodal_load(load_case.id, b.id, fz=u.Quantity.of(-ANALYZE_DEMO_P, "N"))
+    if case == "viga":
+        model.set_support(a.id, fixed_restraints(), label="Empotramiento")
+        description = (
+            "Voladizo B1 de 2 m en +X, R 200×400 de acero (E = 210 000 N/mm²), "
+            "empotrado en N1, P = −10 kN en Z en N2."
+        )
+    else:
+        model.set_support(a.id, roller_restraints(), label="Rodillo 1")
+        model.set_support(b.id, roller_restraints(), label="Rodillo 2")
+        description = (
+            "Mecanismo: la misma barra sobre dos rodillos verticales, sin restricción en X."
+        )
+    labels = {node.id: node.label for node in model.nodes.values()}
+    return model, load_case.id, labels, description
+
+
+def _raw(value: float | None) -> str:
+    return "—" if value is None else f"{value:.6e}"
+
+
+def _run_lines(run: AnalysisRun, labels: dict[UUID, str]) -> list[str]:
+    versions = " · ".join(f"{key} {value or '—'}" for key, value in run.versions.items())
+    lines = [
+        f"Estado: {run.status}",
+        f"run_id: {run.run_id}",
+        f"model_revision: {run.model_revision} · caso {run.case_id} rev {run.case_revision}",
+        f"Versiones: {versions}",
+        f"Inicio (UTC): {run.started_utc.isoformat(timespec='seconds')} · "
+        f"duración {run.duration_s:.3f} s",
+    ]
+    if run.pivot is not None:
+        node = "—" if run.pivot.node_id is None else labels.get(run.pivot.node_id, "—")
+        pivot = "—" if run.pivot.min_pivot is None else f"{run.pivot.min_pivot:.3e}"
+        lines.append(
+            f"Salvaguarda de singularidad: {run.pivot.free_dofs} GDL libres, pivote escalado "
+            f"mínimo {pivot} en {node} ({run.pivot.component or '—'})"
+        )
+    lines.append("Hipótesis:")
+    lines.extend(f"  - {MESSAGES_ES.get(key, key)}" for key in run.hypotheses)
+    lines.append("Diagnósticos:" if run.diagnostics else "Diagnósticos: ninguno")
+    lines.extend(f"  {d.severity} {d.code}: {render_message(d)}" for d in run.diagnostics)
+    return lines
+
+
+def run_analyze_demo(case: str, timeout_text: str) -> tuple[str, int]:
+    """Demo de ``veritas analyze``: (texto, código de salida 0 o 3)."""
+    timeout = _parse_number(timeout_text)
+    model, case_id, labels, description = _analyze_demo_model(case)
+    run = analyze_planar_xz(model, AnalysisConfiguration(case_id, timeout_s=timeout))
+    lines = [description, "", *_run_lines(run, labels), ""]
+    if run.raw is None:
+        lines.append("Sin resultados: la corrida no es SUCCEEDED.")
+    else:
+        rows = [
+            [
+                labels.get(n.node_id, str(n.node_id)),
+                *(_raw(v) for v in n.displacement),
+                *(_raw(v) for v in n.reaction),
+            ]
+            for n in run.raw.nodes
+        ]
+        header = ["Nudo", "u₁ [m]", "u₂ [m]", "θ [rad]", "R₁ [N]", "R₂ [N]", "M [N·m]"]
+        inertia = 0.2 * 0.4**3 / 12
+        expected = -ANALYZE_DEMO_P * ANALYZE_DEMO_L**3 / (3 * ANALYZE_DEMO_E * 1e6 * inertia)
+        lines.extend(
+            [
+                RAW_NOTE,
+                _table(header, rows),
+                "(— = GDL no fijado: reacción no aplicable, no es cero)",
+                f"Referencia a mano (gate G1): u₂ punta = −PL³/(3EI) = {expected:.6e} m",
+            ]
+        )
+    lines.extend(["", EXPERIMENTAL_WARNING])
+    code = EXIT_OK if run.status is RunStatus.SUCCEEDED else EXIT_ANALYSIS_FAILED
+    return "\n".join(lines), code
+
+
 def _tolerant_streams() -> None:
     # Una salida canalizada en Windows usa la codificación local (p. ej. cp1252), sin
     # símbolos como «⁴». Se sustituyen en lugar de abortar con UnicodeEncodeError.
@@ -1016,6 +1146,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == "analyze":
+            text, code = run_analyze_demo(args.caso, args.timeout)
+            print(text)
+            return code
         output = _run(args, parser)
     except DiagnosticError as error:
         print(f"{error.code}: {render_message(error.diagnostic)}", file=sys.stderr)

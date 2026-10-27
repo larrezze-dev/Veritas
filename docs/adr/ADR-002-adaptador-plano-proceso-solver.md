@@ -1,6 +1,6 @@
 # ADR-002 — Primer adaptador plano y proceso solver independiente
 
-**Estado: PROPUESTO** — pendiente de revalidación del entorno y aprobación del usuario. **Fase:** F1B (adaptador OpenSeesPy). **Ticket:** T-007 en `tasks/BACKLOG.md`.
+**Estado: ACCEPTED** — aprobado por el usuario el 2026-10-27 («Apruebo ADR-002 completo, incluida la revisión DEC-011»), con la revisión DEC-011 (un solo intérprete 3.12). **Fase:** F1B (adaptador OpenSeesPy). **Ticket:** T-007 en `tasks/BACKLOG.md`.
 Depende de [ADR-001](ADR-001-convenciones-dominio.md) (ACCEPTED el 2026-10-27). La aprobación no acreditaría implementación ni validación del solver. El contrato detallado y las pruebas se definirán en `plans/<ID-TICKET>.md` del ticket del adaptador.
 
 ## Problema y hechos a verificar al iniciar el ticket
@@ -33,9 +33,9 @@ Dos intérpretes implican instalación, empaquetado del worker y pruebas del pro
 
 La aprobación solicitada abarca alcance plano, nuevos contratos `fem` del plan del ticket, proceso con dos versiones (si procede) y dependencias propuestas. La instalación de un intérprete adicional requiere autorización de entorno y receta concreta; ningún comando de instalación se ejecuta en planificación. La decisión comercial/licencia sigue en DEC-006; no se autoriza redistribución.
 
-**Aprobación del usuario:** pendiente.
+**Aprobación del usuario:** 2026-10-27, ADR completo con la revisión DEC-011.
 
-## Revisión propuesta (2026-10-27) — pendiente de aprobación
+## Revisión DEC-011 (2026-10-27) — aprobada; prevalece sobre los puntos 3 y 4 y sobre las alternativas
 
 DEC-011 fija Python 3.12 para todo el proyecto. Comprobación en T-001 (venv temporal fuera del repo): `openseespy`/`openseespywin` 3.8.0.0 se importan en CPython 3.12.9 y un modelo mínimo termina con `analyze=0` (solo ejecución; sin validación de resultados). Propuesta de revisión:
 
@@ -43,9 +43,10 @@ DEC-011 fija Python 3.12 para todo el proyecto. Comprobación en T-001 (venv tem
 - Punto 4: se mantiene un proceso nuevo por corrida (aislamiento, FEM-009, NFR-003); el worker sigue sin importar `veritas.core`.
 - Alternativas: «Fijar todo el proyecto en la versión de Python del solver» pasa a ser la opción adoptada por DEC-011.
 
-Los puntos 1, 2, 5 y 6 no cambian. Esta revisión y el ADR completo se someten a aprobación antes de T-007.
+Los puntos 1, 2, 5 y 6 no cambian. La importación y el smoke test reales siguen siendo el primer gate técnico de T-007.
 
 ## Historial
 
 - 2026-10-27: reinicio del proyecto con Claude Code; ADR conservado como PROPUESTO. Hechos de entorno reclasificados como verificaciones pendientes.
 - 2026-10-27: revisión propuesta tras DEC-011 (un solo intérprete 3.12); pendiente de aprobación.
+- 2026-10-27: usuario aprueba el ADR completo con la revisión DEC-011. Estado: ACCEPTED. Contratos detallados en `plans/T-007.md`.

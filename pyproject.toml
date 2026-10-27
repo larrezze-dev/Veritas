@@ -11,7 +11,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Operating System :: Microsoft :: Windows",
 ]
-dependencies = []
+dependencies = [
+    "openseespy==3.8.0.0",
+]
 
 [project.scripts]
 veritas = "veritas.cli:main"
@@ -30,7 +32,12 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
+# Módulos auxiliares de prueba (fem_support.py) importables desde los tests.
+pythonpath = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+markers = [
+    "solver: ejecuta OpenSeesPy en un proceso aislado (gate G1-G7 y extremo a extremo, plan T-007)",
+]
 
 [tool.ruff]
 line-length = 100
@@ -39,8 +46,9 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF", "PL", "PT"]
-# Símbolos técnicos legítimos en textos en español (producto, densidad, Poisson).
-allowed-confusables = ["×", "ρ", "ν"]
+# Símbolos técnicos legítimos en textos en español (producto, densidad, Poisson, signo
+# menos, raya de «Euler–Bernoulli» y prima de las bases de apoyo x′/z′).
+allowed-confusables = ["×", "ρ", "ν", "−", "–", "′"]
 
 [tool.ruff.lint.per-file-ignores]
 # En los tests los valores literales son las referencias que se comprueban.
@@ -50,3 +58,4 @@ allowed-confusables = ["×", "ρ", "ν"]
 python_version = "3.12"
 strict = true
 files = ["src", "tests"]
+mypy_path = ["tests"]

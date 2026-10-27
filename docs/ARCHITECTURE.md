@@ -25,7 +25,7 @@ Python tipado; dominio independiente; Pydantic para datos/validación de fronter
 - Todo Member tiene EndConnection I/J; se inicializan rígidas por defecto.
 - Una unión liberada y una semirrígida se traducen mediante formulación FEM soportada; no improvisar release universal OpenSeesPy.
 - Resultados asociados al hash de la revisión del modelo, configuración y versión del adaptador.
-- Excepción incremental **propuesta** en [ADR-002](adr/ADR-002-adaptador-plano-proceso-solver.md), pendiente de aprobación: el primer adaptador se limitaría al plano XZ y conservaría la procedencia mediante snapshots/configuración exactos en memoria, run_id y versiones, sin hash canónico ni CURRENT/STALE hasta especificar ese contrato, con worker OpenSeesPy en proceso e intérprete separados del dominio/app. No sustituye el objetivo espacial del producto. Mientras no se apruebe, rige el contrato general anterior.
+- Excepción incremental **aprobada** en [ADR-002](adr/ADR-002-adaptador-plano-proceso-solver.md) (2026-10-27, con la revisión DEC-011): el primer adaptador se limita al plano XZ y conserva la procedencia mediante snapshots/configuración exactos en memoria, run_id y versiones, sin hash canónico ni CURRENT/STALE hasta especificar ese contrato. El worker OpenSeesPy corre en un proceso nuevo por corrida con el mismo intérprete 3.12 del proyecto y no importa `veritas.core`. No sustituye el objetivo espacial del producto.
 - Todo cambio de perfil, material, conexión o carga invalida resultados afectados.
 - Las combinaciones no lineales se calculan por ejecución, no por suma indiscriminada de esfuerzos.
 - Para catálogo: no confundir Iy+Iz con J; propiedad avanzada no disponible queda explícita.
@@ -34,7 +34,7 @@ Python tipado; dominio independiente; Pydantic para datos/validación de fronter
 
 ## Carpetas de código previstas
 
-Paquete `veritas` bajo `src/` (DEC-011): `src/veritas/` con `cli.py` como punto de entrada y un subpaquete por capa: core/ (geometry/, materials/, sections/, connections/, supports/, loads/), catalogs/, section_editor/, connections/, loads/, fem/ (adapters/, runners/, results/), design_codes/ (cte/), gui/ (modeler/, inspector/, results/), reports/, persistence/. Tests en `tests/`. Los subpaquetes de segundo nivel se crean en sus tickets.
+Paquete `veritas` bajo `src/` (DEC-011): `src/veritas/` con `cli.py` como punto de entrada y un subpaquete por capa: core/ (geometry/, materials/, sections/, connections/, supports/, loads/), catalogs/, section_editor/, connections/, loads/, fem/ (adapters/, runners/, results/), design_codes/ (cte/), gui/ (modeler/, inspector/, results/), reports/, persistence/. Tests en `tests/`. Los subpaquetes de segundo nivel se crean en sus tickets. `fem/` existe desde T-007: `config.py`, `adapters/` (traductor plano XZ, protocolo, salvaguarda de singularidad y worker OpenSeesPy, único módulo que importa `openseespy`), `runners/` (proceso aislado) y `results/` (registro de corrida y salida bruta). Dependencia de ejecución: `openseespy==3.8.0.0` (aprobada en T-007).
 
 Carpetas de trabajo de Claude Code (no son código de producto): `.claude/agents/` (subagentes del proyecto), `tasks/` (backlog y plantilla de ticket), `plans/` (plan y estado de aprobación por ticket), `handoffs/` (checkpoints de sesión).
 
