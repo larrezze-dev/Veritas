@@ -135,7 +135,7 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | NFR-005 | Precisión | Doble precisión cuando corresponda; tolerancias y unidades documentadas. | — | NO INICIADO |
 | NFR-006 | Seguridad | Importaciones validadas; no ejecutar código contenido en un proyecto. | — | NO INICIADO |
 | NFR-007 | Auditoría | Logs de análisis, errores y versiones; historial de cambios esenciales. | ADR-001 (contrato de convenciones, aprobado 2026-10-27) | PARCIAL / DOCUMENTAL — sin implementación ni tests |
-| NFR-008 | Calidad | Tests unitarios, integración, referencia y regresión; tipado, lint y CI. | T-001: pytest (22 tests), ruff, mypy estricto, test de aislamiento de capas y workflow CI | PARCIAL — CI creado pero no ejecutado (sin remoto; windows-latest ≠ Windows 11); sin tests estructurales todavía |
+| NFR-008 | Calidad | Tests unitarios, integración, referencia y regresión; tipado, lint y CI. | T-001: pytest (22 tests), ruff, mypy estricto, test de aislamiento de capas y workflow CI | PARCIAL — CI en GitHub (repo privado larrezze-dev/Veritas) no ejecutado: el run 40545340569 (2026-10-27) no arrancó por límite de gasto/facturación de la cuenta; windows-latest ≠ Windows 11; sin tests estructurales todavía |
 | NFR-009 | Localización | Cadenas externalizadas; español inicial, arquitectura preparada para alemán e inglés. | — | NO INICIADO |
 | NFR-010 | Accesibilidad | Diálogos/tabla navegables por teclado y escalado DPI. | — | NO INICIADO |
 | NFR-011 | Recuperación | Autoguardado y recuperación explícita sin sobrescritura oculta. | — | NO INICIADO |
