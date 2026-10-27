@@ -17,7 +17,7 @@ Regla de avance: un ticket a la vez; no iniciar el siguiente sin la aceptación 
 | T-005 | S3D-005 | F1B | Apoyos por GDL: rígidos, resortes, rodillos y base inclinada | GEO-010 (parcial) | T-004 | ACEPTADO (2026-10-27) |
 | T-006 | S3D-006 | F1B | Casos de carga, cargas nodales y peso propio | LD-001, LD-002, LD-003 | T-005 | ACEPTADO (2026-10-27) ([plan](../plans/T-006.md)) |
 | T-007 | S3D-007 | F1B | Adaptador OpenSeesPy en proceso aislado | FEM-001, FEM-003, FEM-005, FEM-008, FEM-010, NFR-003 | T-006, ADR-002 (aceptado 2026-10-27) | ACEPTADO (2026-10-27) ([plan](../plans/T-007.md)) |
-| T-008 | S3D-008 | F1B | Resultados normalizados: desplazamientos, reacciones y esfuerzos de extremo | FEM-004, RES-001 | T-007 | NO INICIADO |
+| T-008 | S3D-008 | F1B | Resultados normalizados: desplazamientos, reacciones y esfuerzos de extremo | FEM-004, RES-001 | T-007 | ACEPTADO (2026-10-28) |
 | T-009 | S3D-009 | F1B | Pruebas analíticas de referencia (viga biapoyada, voladizo) y primera demostración | T-FEM-001, T-FEM-002 | T-008 | NO INICIADO |
 | T-010 | — | F1C | Liberaciones y resortes I/J, detección de mecanismo | CON-003, CON-004, CON-009, CON-011, FEM-008 | T-009 | NO INICIADO |
 
@@ -31,6 +31,7 @@ Origen: revisión structural-reviewer de T-002 (ver `plans/T-002.md`). El usuari
 | T-004 | ~~Unidad kg/m (masa lineal de perfiles)~~ — incorporada en T-004 (D6; aceptado 2026-10-27) |
 | ~~T-006~~ → F5A / ticket de γ | Magnitud `SURFACE_LOAD` (kN/m², separada de tensión/módulo) → F5A (paneles, LD-004/005); unidad kN/m³ (peso específico, DB-SE-AE) → ticket que introduzca γ o paneles. Aplazadas en T-006 (D7-A, aprobado 2026-10-27) |
 | T-008 | Magnitud `DISPLACEMENT` (flechas en mm con perfil kN-m) |
+| T-009 / T-010 | Estructura sin GDL libres (p. ej. biempotrada de una barra): hoy FAILED con `fem.worker_crashed` (LAPACK `DGBSV`). Detectarla antes de lanzar el worker con un diagnóstico propio o resolverla sin solver. Origen: P2 de T-008 (requiere aprobación en el plan del ticket) |
 | T-012 | Perfil «N-mm» no coherente N-mm-t: renombrar o documentar al persistir perfiles de usuario |
 | Modal (por crear) | Unidades Hz/s y rigidez rotacional distribuida |
 | F5A (ticket por crear) | Peso específico γ (kN/m³) como propiedad del material, para reproducir los pesos específicos tabulados de DB-SE-AE (por verificar). Cambia la API aceptada de `MaterialRevision` (T-004): requiere plan y aprobación. Origen: límite de T-006 (D4-C) |

@@ -171,6 +171,31 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Al menos un apoyo inclinado rígido se representa por penalización (error relativo del "
         "orden de 1e-8 en la dirección restringida)."
     ),
+    "fem.hypothesis_normalized": (
+        "Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); no validados "
+        "frente a referencias analíticas (T-009)."
+    ),
+    "fem.hypothesis_support_projection": (
+        "Reacción en base del apoyo inclinado: Q_apoyo·R con Y, Mx y Mz tomados como 0 (no "
+        "calculados); su efecto en Ux′/Uz′ es ≤ tol_axis·|R fuera del plano|."
+    ),
+    "fem.results_unavailable": (
+        "No hay resultados que normalizar: la corrida no es SUCCEEDED (estado {status})."
+    ),
+    "fem.results_model_mismatch": (
+        "El modelo no corresponde a la corrida analizada ({reason}). Vuelve a analizar."
+    ),
+    "fem.results_axes_inconsistent": (
+        "Ejes de barra incoherentes con el plano al normalizar (componente {component} = "
+        "{value}, límite {limit}; error interno). No hay resultados."
+    ),
+    "fem.results_equilibrium": (
+        "Control de equilibrio de los resultados normalizados no superado ({where}: residuo de "
+        "fuerza {force}, de momento {moment}; error interno). No hay resultados."
+    ),
+    "fem.results_unsupported_load": (
+        "Carga {load} de un tipo que la normalización no admite (error interno)."
+    ),
     "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",
     "section.property_unrepresentable": (
         "La propiedad {property} no es representable como valor positivo en doble precisión "
@@ -181,6 +206,7 @@ MESSAGES_ES: Final[dict[str, str]] = {
 
 QUANTITY_KIND_LABELS_ES: Final[dict[str, str]] = {
     "LENGTH": "Longitud",
+    "DISPLACEMENT": "Desplazamiento",
     "AREA": "Área",
     "SECTION_MODULUS": "Módulo resistente",
     "SECOND_MOMENT": "Inercia / constante de torsión",

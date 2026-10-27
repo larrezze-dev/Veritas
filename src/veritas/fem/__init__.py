@@ -43,6 +43,19 @@ from veritas.fem.adapters.singularity import (
     reduced_coordinates,
 )
 from veritas.fem.config import AnalysisConfiguration
+from veritas.fem.results.normalized import (
+    Component,
+    ComponentStatus,
+    MemberEndForces,
+    NodeDisplacement,
+    PlanarResults,
+    ReactionSource,
+    ResultBasis,
+    ResultsNormalizationError,
+    SupportReaction,
+    Vector6,
+    normalize_planar_xz,
+)
 from veritas.fem.results.run import (
     ADAPTER_ID,
     ADAPTER_VERSION,
@@ -57,7 +70,23 @@ from veritas.fem.results.run import (
 )
 from veritas.fem.runners.subprocess_runner import WORKER_PATH, WorkerOutcome, run_worker
 
-__all__ = ["AnalysisConfiguration", "AnalysisRun", "RunStatus", "analyze_planar_xz"]
+__all__ = [
+    "AnalysisConfiguration",
+    "AnalysisRun",
+    "Component",
+    "ComponentStatus",
+    "MemberEndForces",
+    "NodeDisplacement",
+    "PlanarResults",
+    "ReactionSource",
+    "ResultBasis",
+    "ResultsNormalizationError",
+    "RunStatus",
+    "SupportReaction",
+    "Vector6",
+    "analyze_planar_xz",
+    "normalize_planar_xz",
+]
 
 # Constante c de la ampliación del control de equilibrio por redondeo de K·u: error hacia
 # atrás de la solución directa (R2) y de la penalización (R1). Se registra en la procedencia.

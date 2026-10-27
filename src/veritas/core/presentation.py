@@ -23,6 +23,7 @@ class QuantityKind(StrEnum):
     """Magnitud semántica con dimensión asociada."""
 
     LENGTH = "LENGTH"
+    DISPLACEMENT = "DISPLACEMENT"
     AREA = "AREA"
     SECTION_MODULUS = "SECTION_MODULUS"
     SECOND_MOMENT = "SECOND_MOMENT"
@@ -51,6 +52,7 @@ class QuantityKind(StrEnum):
 
 _KIND_DIMENSIONS: Final[dict[QuantityKind, u.Dimension]] = {
     QuantityKind.LENGTH: u.LENGTH,
+    QuantityKind.DISPLACEMENT: u.LENGTH,
     QuantityKind.AREA: u.AREA,
     QuantityKind.SECTION_MODULUS: u.SECTION_MODULUS,
     QuantityKind.SECOND_MOMENT: u.SECOND_MOMENT,
@@ -162,6 +164,7 @@ PROFILE_SI: Final = _builtin(
     "SI",
     {
         QuantityKind.LENGTH: "m",
+        QuantityKind.DISPLACEMENT: "m",
         QuantityKind.AREA: "m²",
         QuantityKind.SECTION_MODULUS: "m³",
         QuantityKind.SECOND_MOMENT: "m⁴",
@@ -185,6 +188,7 @@ PROFILE_KN_M: Final = _builtin(
     "kN-m",
     {
         QuantityKind.LENGTH: "m",
+        QuantityKind.DISPLACEMENT: "mm",
         QuantityKind.AREA: "cm²",
         QuantityKind.SECTION_MODULUS: "cm³",
         QuantityKind.SECOND_MOMENT: "cm⁴",
@@ -208,6 +212,7 @@ PROFILE_N_MM: Final = _builtin(
     "N-mm",
     {
         QuantityKind.LENGTH: "mm",
+        QuantityKind.DISPLACEMENT: "mm",
         QuantityKind.AREA: "mm²",
         QuantityKind.SECTION_MODULUS: "mm³",
         QuantityKind.SECOND_MOMENT: "mm⁴",

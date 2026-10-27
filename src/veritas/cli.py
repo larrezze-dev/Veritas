@@ -23,15 +23,17 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   cargas uniformes locales; resultantes ΣF/ΣM de las acciones prescritas respecto al
   origen y traza de ``model_revision``, código 0 (plan T-006). No son resultados de
   análisis y se dice expresamente.
-- ``veritas analyze demo [--caso viga|mecanismo] [--timeout S]``: análisis plano XZ con
-  OpenSeesPy en un proceso aislado (plan T-007). Imprime estado, procedencia,
-  diagnósticos y, solo si la corrida es SUCCEEDED, la tabla BRUTA en la base del solver,
-  marcada como no normalizada. Código 0 si SUCCEEDED; 3 si FAILED (sin resultados).
+- ``veritas analyze demo [--caso viga|mecanismo|portico] [--timeout S] [--profile P]
+  [--bruto]``: análisis plano XZ con OpenSeesPy en un proceso aislado (plan T-007).
+  Imprime estado, procedencia, diagnósticos y, solo si la corrida es SUCCEEDED, tablas
+  normalizadas a ADR-001 (plan T-008): desplazamientos, reacciones y fuerzas/esfuerzos de
+  extremo; ``--bruto`` añade la tabla BRUTA del solver. Código 0 si SUCCEEDED; 3 si FAILED
+  o si la normalización no supera sus postcondiciones (sin resultados).
 - Subcomando u opción desconocidos: uso en stderr, stdout vacío, código 2.
 - Error de dominio (diagnóstico): ``CÓDIGO: mensaje`` en stderr, stdout vacío, código 2.
 
-Solo ``veritas analyze`` ejecuta un análisis estructural; sus valores no están normalizados
-ni validados frente a referencias (T-008, T-009).
+Solo ``veritas analyze`` ejecuta un análisis estructural; sus valores están normalizados a
+ADR-001 pero no validados frente a referencias (T-009).
 """
 
 import argparse
@@ -75,6 +77,7 @@ from veritas.core.presentation import (
     QuantityKind,
     format_quantity,
 )
+from veritas.core.references import RevisionRef
 from veritas.core.sections.properties import SectionProperty
 from veritas.core.sections.section import SectionRevision
 from veritas.core.supports.support import (
@@ -89,7 +92,17 @@ from veritas.core.supports.support import (
     roller_restraints,
 )
 from veritas.core.validation import positive_si
-from veritas.fem import AnalysisConfiguration, AnalysisRun, RunStatus, analyze_planar_xz
+from veritas.fem import (
+    AnalysisConfiguration,
+    AnalysisRun,
+    ComponentStatus,
+    PlanarResults,
+    ReactionSource,
+    RunStatus,
+    Vector6,
+    analyze_planar_xz,
+    normalize_planar_xz,
+)
 
 EXPERIMENTAL_WARNING: Final = (
     "AVISO: aplicación experimental. No apta para justificar obras reales "
@@ -112,7 +125,10 @@ MODULE_STATUS: Final[tuple[tuple[str, str], ...]] = (
     ("Materiales y secciones", f"{AVAILABLE} (T-004)"),
     ("Apoyos", f"{AVAILABLE} (T-005)"),
     ("Cargas", f"{AVAILABLE} (T-006)"),
-    ("Análisis FEM", f"{AVAILABLE} (T-007): plano XZ, resultados BRUTOS no normalizados"),
+    (
+        "Análisis FEM",
+        f"{AVAILABLE} (T-007): plano XZ, resultados normalizados (T-008), no validados (T-009)",
+    ),
     ("Interfaz gráfica", PENDING),
     ("Verificación normativa", NOT_CHECKED),
 )
@@ -205,21 +221,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
     )
     _add_load_parser(subparsers, profile_names)
-    _add_analyze_parser(subparsers)
+    _add_analyze_parser(subparsers, profile_names)
     return parser
 
 
-def _add_analyze_parser(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+def _add_analyze_parser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]", profile_names: list[str]
+) -> None:
     analyze_parser = subparsers.add_parser("analyze", help="Análisis FEM plano XZ (OpenSeesPy).")
     analyze_sub = analyze_parser.add_subparsers(
         dest="analyze_command", metavar="ACCIÓN", required=True
     )
     analyze_demo = analyze_sub.add_parser(
-        "demo", help="Voladizo (viga) o mecanismo; resultados BRUTOS no normalizados."
+        "demo", help="Voladizo (viga), mecanismo o pórtico; resultados normalizados a ADR-001."
     )
-    analyze_demo.add_argument("--caso", default="viga", choices=["viga", "mecanismo"])
+    analyze_demo.add_argument("--caso", default="viga", choices=["viga", "mecanismo", "portico"])
     analyze_demo.add_argument(
         "--timeout", default="60", help="Tiempo máximo de la corrida en s (por defecto 60)."
+    )
+    analyze_demo.add_argument(
+        "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
+    )
+    analyze_demo.add_argument(
+        "--bruto", action="store_true", help="Añade la tabla BRUTA en la base del solver."
     )
 
 
@@ -995,10 +1019,19 @@ def format_load_demo(profile_name: str) -> str:
 ANALYZE_DEMO_P: Final = 10_000.0  # N, hacia -Z en la punta del voladizo.
 ANALYZE_DEMO_L: Final = 2.0  # m
 ANALYZE_DEMO_E: Final = 210_000.0  # N/mm²
+NO_RESULTS_FAILED: Final = "Sin resultados: la corrida no es SUCCEEDED."
+NO_RESULTS_NORMALIZATION: Final = (
+    "Sin resultados: la normalización no superó sus comprobaciones (plan T-008)."
+)
 RAW_NOTE: Final = (
     "RESULTADOS BRUTOS: base del solver SOLVER_XZ_RAW (x₁ = X, x₂ = Z, θ = −Ry). "
     "NO normalizados a ADR-001 (T-008) ni validados frente a referencias (T-009)."
 )
+
+
+PORTICO_Q: Final = 20_000.0  # N/m, hacia -Z sobre el dintel.
+PORTICO_H: Final = 10_000.0  # N, en +X en la cabeza del pilar izquierdo.
+PORTICO_K_RY: Final = 5e7  # N·m/rad, resorte de giro del rodillo.
 
 
 def _analyze_demo_model(case: str) -> tuple[StructuralModel, UUID, dict[UUID, str], str]:
@@ -1018,25 +1051,61 @@ def _analyze_demo_model(case: str) -> tuple[StructuralModel, UUID, dict[UUID, st
         density=u.Quantity.of(7850, "kg/m³"),
     )
     section = model.add_rectangular_section(b=m(0.2), h=m(0.4), name="R 200×400")
-    a = model.add_node(m(0), m(0), m(0), label="N1")
-    b = model.add_node(m(ANALYZE_DEMO_L), m(0), m(0), label="N2")
-    model.add_member(a.id, b.id, material=steel.ref, section=section.ref, label="B1")
     load_case = model.add_load_case("Q1", LoadCategory.VARIABLE)
-    model.add_nodal_load(load_case.id, b.id, fz=u.Quantity.of(-ANALYZE_DEMO_P, "N"))
-    if case == "viga":
-        model.set_support(a.id, fixed_restraints(), label="Empotramiento")
-        description = (
-            "Voladizo B1 de 2 m en +X, R 200×400 de acero (E = 210 000 N/mm²), "
-            "empotrado en N1, P = −10 kN en Z en N2."
-        )
+    if case == "portico":
+        description = _portico(model, steel.ref, section.ref, load_case.id)
     else:
-        model.set_support(a.id, roller_restraints(), label="Rodillo 1")
-        model.set_support(b.id, roller_restraints(), label="Rodillo 2")
-        description = (
-            "Mecanismo: la misma barra sobre dos rodillos verticales, sin restricción en X."
-        )
+        a = model.add_node(m(0), m(0), m(0), label="N1")
+        b = model.add_node(m(ANALYZE_DEMO_L), m(0), m(0), label="N2")
+        model.add_member(a.id, b.id, material=steel.ref, section=section.ref, label="B1")
+        model.add_nodal_load(load_case.id, b.id, fz=u.Quantity.of(-ANALYZE_DEMO_P, "N"))
+        if case == "viga":
+            model.set_support(a.id, fixed_restraints(), label="Empotramiento")
+            description = (
+                "Voladizo B1 de 2 m en +X, R 200×400 de acero (E = 210 000 N/mm²), "
+                "empotrado en N1, P = −10 kN en Z en N2."
+            )
+        else:
+            model.set_support(a.id, roller_restraints(), label="Rodillo 1")
+            model.set_support(b.id, roller_restraints(), label="Rodillo 2")
+            description = (
+                "Mecanismo: la misma barra sobre dos rodillos verticales, sin restricción en X."
+            )
     labels = {node.id: node.label for node in model.nodes.values()}
+    labels |= {member.id: member.label for member in model.members.values()}
+    labels |= {support.id: support.label for support in model.supports.values()}
     return model, load_case.id, labels, description
+
+
+def _portico(
+    model: StructuralModel, material: RevisionRef, section: RevisionRef, case_id: UUID
+) -> str:
+    def node(x: float, z: float, label: str) -> UUID:
+        m = u.Quantity.of
+        return model.add_node(m(x, "m"), m(0, "m"), m(z, "m"), label=label).id
+
+    n1, n2 = node(0, 0, "N1"), node(0, 3, "N2")
+    n3, n4 = node(4, 3, "N3"), node(4, 0, "N4")
+    for label, (i, j) in (("B1", (n1, n2)), ("B2", (n2, n3)), ("B3", (n3, n4))):
+        model.add_member(i, j, material=material, section=section, label=label)
+    beam = next(item for item in model.members.values() if item.label == "B2")
+    model.set_support(n1, pinned_restraints(), label="Articulación")
+    angle = math.radians(30)
+    slope = SupportBasis.inclined(
+        (math.cos(angle), 0.0, math.sin(angle)), (-math.sin(angle), 0.0, math.cos(angle))
+    )
+    roller = build_restraints(
+        fixed=(SupportDof.UZ,),
+        springs={SupportDof.RY: u.Quantity.of(PORTICO_K_RY, "N·m/rad")},
+    )
+    model.set_support(n4, roller, basis=slope, label="Rodillo 30°")
+    model.add_member_uniform_load(case_id, beam.id, qz=u.Quantity.of(-PORTICO_Q, "N/m"))
+    model.add_nodal_load(case_id, n2, fx=u.Quantity.of(PORTICO_H, "N"))
+    return (
+        "Pórtico N1-N2-N3-N4 (pilares de 3 m, dintel de 4 m), R 200×400 de acero. "
+        "Articulación en N1; en N4, rodillo sobre plano a 30° (Uz′ fijo) con resorte de giro "
+        "k = 5e7 N·m/rad. q = −20 kN/m en Z sobre B2 y H = +10 kN en X en N2."
+    )
 
 
 def _raw(value: float | None) -> str:
@@ -1060,43 +1129,188 @@ def _run_lines(run: AnalysisRun, labels: dict[UUID, str]) -> list[str]:
             f"Salvaguarda de singularidad: {run.pivot.free_dofs} GDL libres, pivote escalado "
             f"mínimo {pivot} en {node} ({run.pivot.component or '—'})"
         )
-    lines.append("Hipótesis:")
-    lines.extend(f"  - {MESSAGES_ES.get(key, key)}" for key in run.hypotheses)
     lines.append("Diagnósticos:" if run.diagnostics else "Diagnósticos: ninguno")
     lines.extend(f"  {d.severity} {d.code}: {render_message(d)}" for d in run.diagnostics)
     return lines
 
 
-def run_analyze_demo(case: str, timeout_text: str) -> tuple[str, int]:
+def _hypothesis_lines(hypotheses: Sequence[str]) -> list[str]:
+    return ["Hipótesis:", *(f"  - {MESSAGES_ES.get(key, key)}" for key in hypotheses)]
+
+
+def _raw_lines(run: AnalysisRun, labels: dict[UUID, str]) -> list[str]:
+    if run.raw is None:
+        return []
+    rows = [
+        [
+            labels.get(n.node_id, str(n.node_id)),
+            *(_raw(v) for v in n.displacement),
+            *(_raw(v) for v in n.reaction),
+        ]
+        for n in run.raw.nodes
+    ]
+    header = ["Nudo", "u₁ [m]", "u₂ [m]", "θ [rad]", "R₁ [N]", "R₂ [N]", "M [N·m]"]
+    return [
+        RAW_NOTE,
+        _table(header, rows),
+        "(— = GDL no fijado en el nudo: reacción no aplicable o en un resorte, no es cero)",
+    ]
+
+
+NOT_APPLICABLE_MARK: Final = "—"
+NOT_CALCULATED_MARK: Final = "n/c"
+RESULTS_NOTE: Final = (
+    "RESULTADOS normalizados a ADR-001 (Z arriba; reacción = acción del apoyo sobre la "
+    "estructura; pI/pJ = acción del nudo sobre la barra en base local; N > 0 tracción). "
+    "No validados frente a referencias (T-009)."
+)
+MARKS_NOTE: Final = (
+    f"({NOT_APPLICABLE_MARK} = GDL libre del apoyo: reacción no aplicable, no es cero; "
+    f"{NOT_CALCULATED_MARK} = fuera del plano XZ: no calculado por el análisis plano. "
+    "En un apoyo inclinado, RX y RZ son proyecciones de la reacción calculada: un 0 en ellas "
+    "es un valor real. RY/MY = reacción; Ry = giro.)"
+)
+_REACTION_SOURCE_LABELS: Final = {
+    ReactionSource.FIX: "fijo",
+    ReactionSource.SPRING: "resorte",
+    ReactionSource.PENALTY: "penalización",
+}
+_SI_SYMBOLS: Final = {
+    QuantityKind.DISPLACEMENT: "m",
+    QuantityKind.ANGLE: "rad",
+    QuantityKind.FORCE: "N",
+    QuantityKind.MOMENT: "N·m",
+}
+_DISPLACEMENT_KINDS: Final = (QuantityKind.DISPLACEMENT,) * 3 + (QuantityKind.ANGLE,) * 3
+_FORCE_KINDS: Final = (QuantityKind.FORCE,) * 3 + (QuantityKind.MOMENT,) * 3
+
+
+def _cells(
+    vector: Vector6, kinds: Sequence[QuantityKind], profile: PresentationProfile
+) -> list[str]:
+    cells = []
+    for component, kind in zip(vector.components, kinds, strict=True):
+        if component.value is None:
+            cells.append(
+                NOT_APPLICABLE_MARK
+                if component.status is ComponentStatus.NOT_APPLICABLE
+                else NOT_CALCULATED_MARK
+            )
+        else:
+            quantity = u.Quantity.of(component.value, _SI_SYMBOLS[kind])
+            cells.append(format_quantity(quantity, kind, profile))
+    return cells
+
+
+def _results_lines(
+    results: PlanarResults, labels: dict[UUID, str], profile: PresentationProfile
+) -> list[str]:
+    def name(entity: UUID) -> str:
+        return labels.get(entity, str(entity))
+
+    lines = [RESULTS_NOTE, f"Perfil de unidades: {profile.name}", ""]
+    rows = [
+        [name(n.node_id), *_cells(n.displacement, _DISPLACEMENT_KINDS, profile)]
+        for n in sorted(results.nodes, key=lambda n: name(n.node_id))
+    ]
+    lines += [
+        "Desplazamientos y giros de nudo (base GLOBAL):",
+        _table(["Nudo", "Ux", "Uy", "Uz", "Rx", "Ry", "Rz"], rows),
+        "",
+    ]
+    if "fem.hypothesis_penalty" in results.hypotheses:
+        lines += [
+            "Nota: en un rodillo inclinado rígido (penalización) el desplazamiento en la "
+            "dirección restringida es del orden de R/k_pen, no exactamente 0.",
+            "",
+        ]
+    rows = [
+        [name(r.support_id), name(r.node_id), *_cells(r.global_, _FORCE_KINDS, profile)]
+        for r in sorted(results.reactions, key=lambda r: name(r.node_id))
+    ]
+    lines += [
+        "Reacciones (base GLOBAL):",
+        _table(["Apoyo", "Nudo", "RX", "RY", "RZ", "MX", "MY", "MZ"], rows),
+    ]
+    rows = [
+        [
+            name(r.support_id),
+            *_cells(r.support_basis, _FORCE_KINDS, profile),
+            ", ".join(
+                f"{dof.label}′: {_REACTION_SOURCE_LABELS[source]}" for dof, source in r.sources
+            ),
+        ]
+        for r in sorted(results.reactions, key=lambda r: name(r.node_id))
+        if r.support_basis is not None
+    ]
+    if rows:
+        lines += [
+            "",
+            "Reacciones en la base del apoyo inclinado (x′, y′, z′):",
+            _table(["Apoyo", "Rx′", "Ry′", "Rz′", "Mx′", "My′", "Mz′", "Origen"], rows),
+        ]
+    rows = [
+        [name(m.member_id), end, *_cells(vector, _FORCE_KINDS, profile)]
+        for m in sorted(results.members, key=lambda m: name(m.member_id))
+        for end, vector in (("I", m.p_i), ("J", m.p_j))
+    ]
+    lines += [
+        "",
+        "Fuerzas de extremo pI/pJ (acción del nudo sobre la barra, base LOCAL):",
+        _table(["Barra", "Extremo", "Fx", "Fy", "Fz", "Mx", "My", "Mz"], rows),
+    ]
+    rows = [
+        [name(m.member_id), cut, *_cells(vector, _FORCE_KINDS, profile)]
+        for m in sorted(results.members, key=lambda m: name(m.member_id))
+        for cut, vector in (("0+", m.section_start), ("L−", m.section_end))
+    ]
+    lines += [
+        "",
+        "Esfuerzos de sección en los extremos q(0+) = −pI, q(L−) = pJ (base LOCAL):",
+        _table(["Barra", "Corte", "N", "Vy", "Vz", "T", "My", "Mz"], rows),
+        MARKS_NOTE,
+    ]
+    return lines
+
+
+def _reference_line(profile: PresentationProfile) -> str:
+    ei = ANALYZE_DEMO_E * 1e6 * 0.2 * 0.4**3 / 12
+    deflection = -ANALYZE_DEMO_P * ANALYZE_DEMO_L**3 / (3 * ei)
+    shown = format_quantity(u.Quantity.of(deflection, "m"), QuantityKind.DISPLACEMENT, profile)
+    return f"Referencia a mano: Uz punta = −PL³/(3EI) = {shown}"
+
+
+def run_analyze_demo(
+    case: str, timeout_text: str, profile_name: str = "SI", *, raw: bool = False
+) -> tuple[str, int]:
     """Demo de ``veritas analyze``: (texto, código de salida 0 o 3)."""
     timeout = _parse_number(timeout_text)
+    profile = _profile(profile_name)
     model, case_id, labels, description = _analyze_demo_model(case)
     run = analyze_planar_xz(model, AnalysisConfiguration(case_id, timeout_s=timeout))
-    lines = [description, "", *_run_lines(run, labels), ""]
-    if run.raw is None:
-        lines.append("Sin resultados: la corrida no es SUCCEEDED.")
+    lines = [description, "", *_run_lines(run, labels)]
+    code = EXIT_ANALYSIS_FAILED
+    if run.status is not RunStatus.SUCCEEDED:
+        lines += [*_hypothesis_lines(run.hypotheses), "", NO_RESULTS_FAILED]
     else:
-        rows = [
-            [
-                labels.get(n.node_id, str(n.node_id)),
-                *(_raw(v) for v in n.displacement),
-                *(_raw(v) for v in n.reaction),
+        try:
+            results = normalize_planar_xz(run, model)
+        except DiagnosticError as error:
+            lines += [
+                *_hypothesis_lines(run.hypotheses),
+                "",
+                f"ERROR {error.code}: {render_message(error.diagnostic)}",
+                NO_RESULTS_NORMALIZATION,
             ]
-            for n in run.raw.nodes
-        ]
-        header = ["Nudo", "u₁ [m]", "u₂ [m]", "θ [rad]", "R₁ [N]", "R₂ [N]", "M [N·m]"]
-        inertia = 0.2 * 0.4**3 / 12
-        expected = -ANALYZE_DEMO_P * ANALYZE_DEMO_L**3 / (3 * ANALYZE_DEMO_E * 1e6 * inertia)
-        lines.extend(
-            [
-                RAW_NOTE,
-                _table(header, rows),
-                "(— = GDL no fijado: reacción no aplicable, no es cero)",
-                f"Referencia a mano (gate G1): u₂ punta = −PL³/(3EI) = {expected:.6e} m",
-            ]
-        )
+        else:
+            code = EXIT_OK
+            lines += [*_hypothesis_lines(results.hypotheses), ""]
+            lines += _results_lines(results, labels, profile)
+            if case == "viga":
+                lines.append(_reference_line(profile))
+    if raw:
+        lines += ["", *_raw_lines(run, labels)]
     lines.extend(["", EXPERIMENTAL_WARNING])
-    code = EXIT_OK if run.status is RunStatus.SUCCEEDED else EXIT_ANALYSIS_FAILED
     return "\n".join(lines), code
 
 
@@ -1147,7 +1361,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "analyze":
-            text, code = run_analyze_demo(args.caso, args.timeout)
+            text, code = run_analyze_demo(args.caso, args.timeout, args.profile, raw=args.bruto)
             print(text)
             return code
         output = _run(args, parser)

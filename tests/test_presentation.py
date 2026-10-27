@@ -48,6 +48,20 @@ def test_format_moment(profile: PresentationProfile, expected: str) -> None:
     assert format_quantity(moment, QuantityKind.MOMENT, profile) == expected
 
 
+@pytest.mark.parametrize(
+    ("profile", "expected"),
+    [(PROFILE_SI, "-0.000119 m"), (PROFILE_KN_M, "-0.119048 mm"), (PROFILE_N_MM, "-0.119048 mm")],
+)
+def test_displacement_kind_shows_deflections_in_mm(
+    profile: PresentationProfile, expected: str
+) -> None:
+    """T-008, D5-A: flechas en mm con el perfil kN-m, aunque la longitud siga en m."""
+    deflection = u.Quantity.of(-1.190476e-4, "m")
+    assert QuantityKind.DISPLACEMENT.dimension == QuantityKind.LENGTH.dimension
+    assert format_quantity(deflection, QuantityKind.DISPLACEMENT, profile, 6) == expected
+    assert PROFILE_KN_M.unit_for(QuantityKind.LENGTH).symbol == "m"
+
+
 def test_format_does_not_change_internal_value() -> None:
     inertia = u.Quantity.of(8356, "cm⁴")
     assert format_quantity(inertia, QuantityKind.SECOND_MOMENT, PROFILE_N_MM, 0) == "83560000 mm⁴"
