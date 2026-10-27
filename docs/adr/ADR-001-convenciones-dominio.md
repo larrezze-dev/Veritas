@@ -100,6 +100,7 @@ Contrato futuro de diagnóstico: code estable (ASCII), message_key traducible, p
 | UNITS_INCOMPATIBLE | Dimensiones incompatibles |
 | UNITS_UNREPRESENTABLE | Overflow/underflow total; también división por una magnitud nula (clave `units.division_by_zero`) |
 | UNITS_UNKNOWN | Símbolo de unidad no registrado (ampliación aprobada en el plan T-002, 2026-10-27) |
+| INPUT_OUT_OF_RANGE | Valor finito fuera del rango físicamente admisible (E, G, ρ, b, h ≤ 0; ν fuera de (−1; 0,5); cambio de familia en una revisión; centroide o Iyz de una sección doblemente simétrica distintos de +0.0; propiedades de sección que no coinciden con sus parámetros). Ampliación aprobada en el plan T-004 (D7), 2026-10-27 |
 | GEOMETRY_ZERO_LENGTH | Extremos coincidentes |
 | GEOMETRY_INVALID_ORIENTATION | Referencia cero/casi paralela o base inválida |
 | REFERENCE_NOT_FOUND | Referencia no resoluble |
@@ -133,3 +134,4 @@ Implementación y validación numérica del producto: NO_IMPLEMENTADA.
 - 2026-10-27: usuario aprueba ADR-001; estado ACCEPTED. Sin implementación ni validación numérica.
 - 2026-10-27: ampliación de la tabla §5 con `UNITS_UNKNOWN` (plan T-002 aprobado). Implementación del objeto `Diagnostic` en `veritas.core.diagnostics`.
 - 2026-10-27: revisión aprobada por el usuario en el plan T-003 («Apruebo A1-a, D1–D7 = A y P1–P4»), tras revisión structural-reviewer: referencia por defecto +Z proyectada sobre ez con fallback -X (A1-a); reortogonalización y postcondición QQ^T (P2); referencia adimensional normalizada y rango de alfa (P3); nota de inversión I/J con alfa (P4); división por magnitud nula en §5 (P1). Filas +Y y -X de la tabla actualizadas.
+- 2026-10-27: ampliación de la tabla §5 con `INPUT_OUT_OF_RANGE` (plan T-004, D7, aprobado por el usuario: «Apruebo D1–D8 = A»).

@@ -40,8 +40,8 @@
 | T-CON-003 | Resorte rotacional con rigidez finita | Respuesta consistente entre límites liberado/rígido | F1C | NO INICIADO |
 | T-CON-004 | Configuración que introduce mecanismo | Diagnóstico de inestabilidad; sin cálculo válido | F1C | NO INICIADO |
 | T-CON-005 | Guardar/abrir uniones personalizadas | Coinciden seis estados, rigideces y offsets de I/J | F4 | NO INICIADO |
-| T-MAT-001 | Intentar dos materiales en una barra | Invariante impide operación | F1A | NO INICIADO |
-| T-SEC-001 | Rectángulo b×h | Área y momentos analíticos correctos | F1A | NO INICIADO |
+| T-MAT-001 | Intentar dos materiales en una barra | Invariante impide operación | F1A | SUPERADO (T-004 aceptado 2026-10-27: `tests/test_model_assignment.py`) |
+| T-SEC-001 | Rectángulo b×h | Área y momentos analíticos correctos | F1A | SUPERADO (T-004 aceptado 2026-10-27: `tests/test_sections_rectangular.py`) |
 | T-SEC-002 | Anillo con radios R,r | A=π(R²−r²), I=π(R⁴−r⁴)/4 | F3A | NO INICIADO |
 | T-SEC-003 | Polígono con hueco | Área neta y centroide correctos | F3B | NO INICIADO |
 | T-CAT-001 | CSV con unidades inválidas | Importación informada y sin corrupción | F2 | NO INICIADO |

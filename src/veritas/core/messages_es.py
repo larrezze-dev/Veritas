@@ -13,6 +13,9 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Tipo no admitido para {field}: se esperaba {expected} y se recibió {received}."
     ),
     "input.nonfinite": "Valor no finito para {field}: {value}.",
+    "input.out_of_range": (
+        "Valor de {field} fuera del rango admisible: {value} (se exige {condition})."
+    ),
     "units.incompatible": "Dimensiones incompatibles: {left} frente a {right}.",
     "units.unrepresentable": "El resultado no es representable en doble precisión ({operation}).",
     "units.division_by_zero": "División por una magnitud nula ({operation}).",
@@ -49,6 +52,21 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "(desviación {deviation}, determinante {determinant})."
     ),
     "model.reference_not_found": "No existe {kind} con identificador {entity_id}.",
+    "model.revision_conflict": (
+        "Conflicto de revisión en {kind} {entity_id}, revisión {revision}: {reason}."
+    ),
+    "model.family_change": (
+        "Una revisión no puede cambiar la familia de {kind} ({current} -> {requested}); "
+        "cree una entidad nueva."
+    ),
+    "section.properties_mismatch": (
+        "Las propiedades de la sección no coinciden con las calculadas a partir de sus parámetros."
+    ),
+    "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",
+    "section.property_unrepresentable": (
+        "La propiedad {property} no es representable como valor positivo en doble precisión "
+        "(resultado {value})."
+    ),
 }
 
 
@@ -60,6 +78,7 @@ QUANTITY_KIND_LABELS_ES: Final[dict[str, str]] = {
     "WARPING_CONSTANT": "Constante de alabeo",
     "MASS": "Masa",
     "DENSITY": "Densidad",
+    "LINEAR_MASS": "Masa lineal",
     "ACCELERATION": "Aceleración",
     "FORCE": "Fuerza",
     "FORCE_PER_LENGTH": "Fuerza por longitud",

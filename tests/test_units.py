@@ -39,6 +39,7 @@ EXACT_FACTORS: dict[str, Fraction] = {
     "kg": Fraction(1),
     "t": KILO,
     "kg/m³": Fraction(1),
+    "kg/m": Fraction(1),
     "m/s²": Fraction(1),
     "N": Fraction(1),
     "kN": KILO,

@@ -2,7 +2,7 @@
 
 Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md](references/Structural3D_SRS_v1.1.0.md)) hacia tickets, evidencias y aceptación del usuario.
 
-**Estado del proyecto:** F0 aceptada; F1A en curso (T-003 aceptado 2026-10-27). Los aportes con implementación y aceptación figuran como `PARCIAL` con su límite. Los requisitos afectados por ADR-001 (aprobado el 2026-10-27) figuran como `PARCIAL / DOCUMENTAL`; el resto, `NO INICIADO`.
+**Estado del proyecto:** F0 y F1A aceptadas (T-003 y T-004 aceptados 2026-10-27). Los aportes con implementación y aceptación figuran como `PARCIAL` con su límite. Los requisitos afectados por ADR-001 (aprobado el 2026-10-27) figuran como `PARCIAL / DOCUMENTAL`; el resto, `NO INICIADO`.
 
 ## Reglas de uso (Claude Code)
 
@@ -23,7 +23,7 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 |---|---|---|---|---|
 | GEO-001 | P0 | Crear nudos con ID estable y coordenadas XYZ en SI. | T-003 (`plans/T-003.md`): `StructuralModel.add_node` (UUID v4, revisiones, coordenadas en m); `tests/test_geometry_model.py` | PARCIAL — T-003 aceptado 2026-10-27; modelo solo en memoria, sin persistencia ni GUI |
 | GEO-002 | P0 | Crear barras entre dos nudos distintos; rechazar longitudes degeneradas. | T-003 (`plans/T-003.md`): `add_member` rechaza mismo nudo y L < 1 µm (`GEOMETRY_ZERO_LENGTH`); `tests/test_geometry_model.py`, `tests/test_local_axes.py` | PARCIAL — T-003 aceptado 2026-10-27; sin GUI |
-| GEO-003 | P0 | Asignar exactamente una revisión de material y de sección a cada barra. | — | NO INICIADO |
+| GEO-003 | P0 | Asignar exactamente una revisión de material y de sección a cada barra. | T-004 (`plans/T-004.md`): `Member.material`/`Member.section` obligatorios como `RevisionRef` (id, revisión); `assign_material`/`assign_section`; `tests/test_model_assignment.py` | PARCIAL — T-004 aceptado 2026-10-27; modelo solo en memoria; sin sustitución masiva (SEC-012) |
 | GEO-004 | P0 | Calcular ejes locales ortonormales y permitir orientar una barra alrededor de su eje longitudinal. | T-003 (`plans/T-003.md`): base local ADR-001 §1 (A1-a), giro alfa, referencia explícita, postcondición QQᵀ = I; CLI `veritas geometry axes`; `tests/test_local_axes.py`, `tests/test_geometry_cli.py` | PARCIAL — T-003 aceptado 2026-10-27; sin inversión I/J ni visualización 3D |
 | GEO-005 | P1 | Selección simple, múltiple, por ventana y por atributos. | — | NO INICIADO |
 | GEO-006 | P1 | Crear, dividir, copiar, trasladar, rotar, reflejar y replicar elementos. | — | NO INICIADO |
@@ -46,15 +46,15 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | CON-010 | P1 | Incluir parámetros de extremos en informes y tablas. | — | NO INICIADO |
 | CON-011 | P1 | Traducir configuraciones soportadas a OpenSeesPy; rechazar explícitamente las no soportadas. | — | NO INICIADO |
 | CON-012 | P1 | Historial, invalidación de resultados y pruebas de regresión para uniones. | — | NO INICIADO |
-| MAT-001 | P0 | Acero, aluminio y madera; parámetros E, G o Poisson según formulación, densidad y propiedades de resistencia diferenciadas. | — | NO INICIADO |
-| MAT-002 | P0 | ID, nombre, familia, fuente, edición normativa, unidades y versión. | — | NO INICIADO |
+| MAT-001 | P0 | Acero, aluminio y madera; parámetros E, G o Poisson según formulación, densidad y propiedades de resistencia diferenciadas. | T-004: `MaterialRevision` (STEEL/ALUMINIUM/TIMBER; E y G independientes, ν opcional, ρ); `tests/test_materials.py` | PARCIAL — T-004 aceptado 2026-10-27; sin resistencias (F7A/F7B) ni material definido solo por E y ν |
+| MAT-002 | P0 | ID, nombre, familia, fuente, edición normativa, unidades y versión. | T-004: UUID v4, revisión, nombre, familia, fuente, `standard_edition`, SI declarado; `tests/test_materials.py` | PARCIAL — T-004 aceptado 2026-10-27; sin catálogo ni persistencia (MAT-003, T-012) |
 | MAT-003 | P1 | Catálogo normalizado y materiales personalizados; clonar registros protegidos antes de editar. | — | NO INICIADO |
 | MAT-004 | P1 | Validaciones dimensionales, propiedades físicamente admisibles y avisos de datos incompletos. | — | NO INICIADO |
 | MAT-005 | P1 | Reasignar material invalida análisis dependientes; no borra históricos. | — | NO INICIADO |
 | MAT-006 | P2 | Importación/exportación de datos de materiales con trazabilidad. | — | NO INICIADO |
-| SEC-001 | P0 | Sección con ID y revisión inmutables, familia y parámetros geométricos. | ADR-001 (contrato de convenciones, aprobado 2026-10-27) | PARCIAL / DOCUMENTAL — sin implementación ni tests |
-| SEC-002 | P0 | Separar propiedades geométricas del material; masa lineal derivada de densidad y área. | — | NO INICIADO |
-| SEC-003 | P0 | Área, centroide, Iy, Iz e Iyz, sistemas de referencia y unidades explícitas. | ADR-001 (contrato de convenciones, aprobado 2026-10-27) | PARCIAL / DOCUMENTAL — sin implementación ni tests |
+| SEC-001 | P0 | Sección con ID y revisión inmutables, familia y parámetros geométricos. | ADR-001; T-004: `SectionRevision` (RECTANGULAR, b, h), `revise_rectangular_section`; `tests/test_sections_rectangular.py` | PARCIAL — T-004 aceptado 2026-10-27; solo rectángulo macizo |
+| SEC-002 | P0 | Separar propiedades geométricas del material; masa lineal derivada de densidad y área. | T-004: sección sin material; `linear_mass` = ρ·A (kg/m); `tests/test_model_assignment.py` | PARCIAL — T-004 aceptado 2026-10-27; solo rectángulo macizo |
+| SEC-003 | P0 | Área, centroide, Iy, Iz e Iyz, sistemas de referencia y unidades explícitas. | ADR-001; T-004: A, yc, zc, Iy, Iz, Iyz con unidad, origen, método y estado; J por serie de Saint-Venant; CLI `veritas section rect`; `tests/test_sections_rectangular.py` | PARCIAL — T-004 aceptado 2026-10-27; solo rectángulo; signo de Iyz pendiente de sección no simétrica |
 | SEC-004 | P1 | Radios de giro, módulos resistentes, J, Cw y otras propiedades cuando exista método validado. | — | NO INICIADO |
 | SEC-005 | P1 | Buscar por serie, nombre, dimensiones, A, inercias, masa, fabricante y material compatible. | — | NO INICIADO |
 | SEC-006 | P1 | Ficha con croquis acotado y comparación de perfiles. | — | NO INICIADO |

@@ -2,6 +2,7 @@
 
 import dataclasses
 import math
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -12,6 +13,8 @@ from veritas.core.geometry.entities import Member, Node
 from veritas.core.geometry.local_axes import MIN_MEMBER_LENGTH, ReferenceSource
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
+from veritas.core.materials.material import MaterialFamily
+from veritas.core.references import RevisionRef
 from veritas.core.units import Quantity
 
 TOL = 1e-14
@@ -25,11 +28,30 @@ def assert_vec(actual: Vec3, expected: Vec3) -> None:
     assert (actual - expected).norm() <= TOL, f"{actual} != {expected}"
 
 
+def assigned(model: StructuralModel) -> tuple[RevisionRef, RevisionRef]:
+    """Material y sección nuevos registrados en ``model`` (GEO-003, T-004)."""
+    material = model.add_material(
+        name="Acero de ensayo",
+        family=MaterialFamily.STEEL,
+        source="test",
+        elastic_modulus=Quantity.of(210, "GPa"),
+        shear_modulus=Quantity.of(81, "GPa"),
+        density=Quantity.of(7850, "kg/m³"),
+    )
+    section = model.add_rectangular_section(b=m(0.2), h=m(0.4))
+    return material.ref, section.ref
+
+
+def add_bar(model: StructuralModel, node_i: UUID, node_j: UUID, **kwargs: Any) -> Member:
+    material, section = assigned(model)
+    return model.add_member(node_i, node_j, material=material, section=section, **kwargs)
+
+
 def frame() -> tuple[StructuralModel, Node, Node, Member]:
     model = StructuralModel()
     a = model.add_node(m(0.0), m(0.0), m(0.0), label="A")
     b = model.add_node(m(2.0), m(0.0), m(0.0), label="B")
-    member = model.add_member(a.id, b.id, label="V1")
+    member = add_bar(model, a.id, b.id, label="V1")
     return model, a, b, member
 
 
@@ -116,7 +138,7 @@ def test_member_with_explicit_reference_and_alpha() -> None:
     model = StructuralModel()
     a = model.add_node(m(0.0), m(0.0), m(0.0))
     b = model.add_node(m(2.0), m(0.0), m(0.0))
-    member = model.add_member(a.id, b.id, reference=(0, 0, 3), alpha=Quantity.of(90, "deg"))
+    member = add_bar(model, a.id, b.id, reference=(0, 0, 3), alpha=Quantity.of(90, "deg"))
     assert member.orientation.source is ReferenceSource.EXPLICIT
     assert member.orientation.reference == Vec3(0.0, 0.0, 1.0)
     assert member.orientation.alpha == pytest.approx(math.pi / 2, abs=0.0)
@@ -129,7 +151,7 @@ def test_full_turn_in_degrees_is_accepted() -> None:
     model = StructuralModel()
     a = model.add_node(m(0.0), m(0.0), m(0.0))
     b = model.add_node(m(2.0), m(0.0), m(0.0))
-    member = model.add_member(a.id, b.id, alpha=Quantity.of(360, "deg"))
+    member = add_bar(model, a.id, b.id, alpha=Quantity.of(360, "deg"))
     assert member.orientation.alpha == 2 * math.pi
 
 
@@ -151,7 +173,7 @@ def test_member_rejects_invalid_orientation(
     a = model.add_node(m(0.0), m(0.0), m(0.0))
     b = model.add_node(m(0.0), m(2.0), m(0.0))
     with pytest.raises(InputValueError) as info:
-        model.add_member(a.id, b.id, **kwargs)  # type: ignore[arg-type]
+        add_bar(model, a.id, b.id, **kwargs)
     assert info.value.code is code
     assert model.model_revision == 2
     assert not model.members
@@ -162,7 +184,7 @@ def test_reference_accepts_dimensionless_quantities() -> None:
     a = model.add_node(m(0.0), m(0.0), m(0.0))
     b = model.add_node(m(2.0), m(0.0), m(0.0))
     one = Quantity.of(1, "1")
-    member = model.add_member(a.id, b.id, reference=(one * 0, one * 0, one))
+    member = add_bar(model, a.id, b.id, reference=(one * 0, one * 0, one))
     assert member.orientation.reference == Vec3(0.0, 0.0, 1.0)
 
 
@@ -172,7 +194,7 @@ def test_reference_with_wrong_shape_is_rejected() -> None:
     b = model.add_node(m(2.0), m(0.0), m(0.0))
     for bad in ((0, 1), "0,0,1"):
         with pytest.raises(InputTypeError):
-            model.add_member(a.id, b.id, reference=bad)
+            add_bar(model, a.id, b.id, reference=bad)
 
 
 def test_coincident_nodes_rejected() -> None:  # T-GEO-001
@@ -180,7 +202,7 @@ def test_coincident_nodes_rejected() -> None:  # T-GEO-001
     a = model.add_node(m(1.0), m(1.0), m(1.0))
     b = model.add_node(m(1.0), m(1.0), m(1.0))
     with pytest.raises(InputValueError) as info:
-        model.add_member(a.id, b.id)
+        add_bar(model, a.id, b.id)
     assert info.value.code is DiagnosticCode.GEOMETRY_ZERO_LENGTH
     location = info.value.diagnostic.location
     assert location is not None
@@ -194,9 +216,9 @@ def test_min_length_boundary_in_metres() -> None:
     a = model.add_node(m(0.0), m(0.0), m(0.0))
     ok = model.add_node(m(MIN_MEMBER_LENGTH), m(0.0), m(0.0))
     short = model.add_node(m(math.nextafter(MIN_MEMBER_LENGTH, 0.0)), m(0.0), m(0.0))
-    assert model.axes(model.add_member(a.id, ok.id).id).length == MIN_MEMBER_LENGTH
+    assert model.axes(add_bar(model, a.id, ok.id).id).length == MIN_MEMBER_LENGTH
     with pytest.raises(InputValueError) as info:
-        model.add_member(a.id, short.id)
+        add_bar(model, a.id, short.id)
     assert info.value.code is DiagnosticCode.GEOMETRY_ZERO_LENGTH
 
 
@@ -204,17 +226,18 @@ def test_same_node_rejected() -> None:
     model = StructuralModel()
     a = model.add_node(m(0.0), m(0.0), m(0.0))
     with pytest.raises(InputValueError) as info:
-        model.add_member(a.id, a.id)
+        add_bar(model, a.id, a.id)
     assert info.value.code is DiagnosticCode.GEOMETRY_ZERO_LENGTH
     assert info.value.diagnostic.message_key == "geometry.same_node"
+    bar = frame()[3]
     with pytest.raises(InputValueError):
-        Member(uuid4(), 1, "", a.id, a.id, frame()[3].orientation)
+        Member(uuid4(), 1, "", a.id, a.id, bar.orientation, bar.material, bar.section)
 
 
 def test_unknown_references() -> None:
     model, a, _, _ = frame()
     for call in (
-        lambda: model.add_member(a.id, uuid4()),
+        lambda: add_bar(model, a.id, uuid4()),
         lambda: model.node(uuid4()),
         lambda: model.member(uuid4()),
         lambda: model.move_node(uuid4(), m(0), m(0), m(0)),
@@ -276,7 +299,7 @@ def test_fallback_member_keeps_its_reference_after_edit() -> None:
     model = StructuralModel()
     a = model.add_node(m(0.0), m(0.0), m(0.0))
     b = model.add_node(m(0.0), m(0.0), m(3.0))
-    column = model.add_member(a.id, b.id)
+    column = add_bar(model, a.id, b.id)
     assert column.orientation.source is ReferenceSource.FALLBACK_NEG_X
     model.move_node(b.id, m(0.5), m(0.0), m(3.0))  # Ya no es vertical: no se vuelve a +Z.
     assert model.member(column.id).orientation.reference == Vec3(-1.0, 0.0, 0.0)
@@ -316,7 +339,7 @@ def test_reorientation_keeps_alpha_unless_given() -> None:
     model = StructuralModel()
     a = model.add_node(m(0.0), m(0.0), m(0.0))
     b = model.add_node(m(2.0), m(0.0), m(0.0))
-    member = model.add_member(a.id, b.id, alpha=Quantity.of(30, "deg"))
+    member = add_bar(model, a.id, b.id, alpha=Quantity.of(30, "deg"))
     updated = model.set_member_orientation(member.id, reference=(0, 1, 1))
     assert updated.orientation.alpha == member.orientation.alpha
     assert updated.orientation.source is ReferenceSource.EXPLICIT

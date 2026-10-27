@@ -39,8 +39,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "N", "SIM", "RUF", "PL", "PT"]
-# Símbolos técnicos legítimos en textos en español (producto, densidad).
-allowed-confusables = ["×", "ρ"]
+# Símbolos técnicos legítimos en textos en español (producto, densidad, Poisson).
+allowed-confusables = ["×", "ρ", "ν"]
 
 [tool.ruff.lint.per-file-ignores]
 # En los tests los valores literales son las referencias que se comprueban.

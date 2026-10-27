@@ -31,7 +31,7 @@ def test_info_reports_version_warning_and_module_status(
 
 def test_only_implemented_modules_are_declared_available() -> None:
     status = dict(cli.MODULE_STATUS)
-    implemented = {"Unidades SI", "Geometría y barras"}
+    implemented = {"Unidades SI", "Geometría y barras", "Materiales y secciones"}
     for name in implemented:
         assert status[name].startswith(cli.AVAILABLE)
     others = {value for name, value in status.items() if name not in implemented}

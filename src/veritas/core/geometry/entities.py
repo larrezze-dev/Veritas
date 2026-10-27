@@ -1,9 +1,11 @@
-"""Revisiones inmutables de nudo y barra (ADR-001 §3; plan T-003, D2).
+"""Revisiones inmutables de nudo y barra (ADR-001 §3; planes T-003, D2, y T-004, D1).
 
 Identidad: UUID v4 inmutable; etiqueta editable e independiente. Una revisión es un
 contenido inmutable; editar crea otra revisión con el mismo ``id``. La barra referencia
 sus nudos por identidad lógica (``node_id``): su geometría depende del estado del modelo,
 no solo de la revisión de barra (relevante para el hash de resultados, T-008/T-012).
+Material y sección se referencian por el par exacto (id, revisión): exactamente uno de
+cada por barra (GEO-003).
 """
 
 from dataclasses import dataclass, field
@@ -13,6 +15,7 @@ from veritas.core.connections.end import EndConnection
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError, Location
 from veritas.core.geometry.local_axes import Orientation
 from veritas.core.geometry.vector import Vec3
+from veritas.core.references import RevisionRef
 
 UUID_VERSION = 4
 
@@ -50,7 +53,7 @@ class Node:
 
 @dataclass(frozen=True, slots=True)
 class Member:
-    """Revisión de barra dirigida I -> J con orientación guardada y extremos I/J."""
+    """Revisión de barra dirigida I -> J: orientación, material, sección y extremos I/J."""
 
     id: UUID
     revision: int
@@ -58,6 +61,8 @@ class Member:
     node_i: UUID
     node_j: UUID
     orientation: Orientation
+    material: RevisionRef
+    section: RevisionRef
     end_i: EndConnection = field(default_factory=EndConnection.rigid)
     end_j: EndConnection = field(default_factory=EndConnection.rigid)
 
@@ -76,5 +81,7 @@ class Member:
             )
         if not isinstance(self.orientation, Orientation):
             raise TypeError("Member.orientation debe ser Orientation")
+        if not isinstance(self.material, RevisionRef) or not isinstance(self.section, RevisionRef):
+            raise TypeError("Member.material y Member.section deben ser RevisionRef")
         if not isinstance(self.end_i, EndConnection) or not isinstance(self.end_j, EndConnection):
             raise TypeError("Member.end_i y Member.end_j deben ser EndConnection")

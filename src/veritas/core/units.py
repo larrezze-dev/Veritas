@@ -170,6 +170,7 @@ MASS: Final = Dimension(mass=1)
 TIME: Final = Dimension(time=1)
 ANGLE: Final = Dimension(angle=1)
 DENSITY: Final = MASS / LENGTH**3
+LINEAR_MASS: Final = MASS / LENGTH
 ACCELERATION: Final = LENGTH / TIME**2
 FORCE: Final = MASS * ACCELERATION
 FORCE_PER_LENGTH: Final = FORCE / LENGTH
@@ -224,6 +225,7 @@ UNITS: Final[tuple[Unit, ...]] = (
     Unit("kg", MASS, 1.0),
     Unit("t", MASS, 1e3),
     Unit("kg/m³", DENSITY, 1.0),
+    Unit("kg/m", LINEAR_MASS, 1.0),
     Unit("m/s²", ACCELERATION, 1.0),
     Unit("N", FORCE, 1.0),
     Unit("kN", FORCE, 1e3),

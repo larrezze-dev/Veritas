@@ -35,7 +35,10 @@ ADR_001_CODES = {
 
 
 def test_codes_cover_adr_001_table_plus_documented_extensions() -> None:
-    assert {code.value for code in DiagnosticCode} == ADR_001_CODES | {"UNITS_UNKNOWN"}
+    assert {code.value for code in DiagnosticCode} == ADR_001_CODES | {
+        "UNITS_UNKNOWN",
+        "INPUT_OUT_OF_RANGE",
+    }
     assert all(code.value.isascii() for code in DiagnosticCode)
 
 
