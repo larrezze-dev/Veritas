@@ -12,7 +12,7 @@ Regla de avance: un ticket a la vez; no iniciar el siguiente sin la aceptación 
 |---|---|---|---|---|---|---|
 | T-001 | S3D-001 | F0 | Repositorio, entorno Python, test runner, lint/tipado, CI y subagentes `.claude/agents/` | NFR-001, NFR-008 | — | ACEPTADO — 2026-10-27, aceptación expresa del usuario ([plan](../plans/T-001.md)) |
 | T-002 | S3D-002 | F0 | Sistema de unidades SI y conversión de presentación | NFR-005 | T-001 | ACEPTADO — 2026-10-27, aceptación expresa del usuario ([plan](../plans/T-002.md)) |
-| T-003 | S3D-003 | F1A | Node/Member, base local y orientación; extremos I/J rígidos por defecto | GEO-001, GEO-002, GEO-004, CON-001, CON-002 | T-002, ADR-001 | NO INICIADO |
+| T-003 | S3D-003 | F1A | Node/Member, base local y orientación; extremos I/J rígidos por defecto | GEO-001, GEO-002, GEO-004, CON-001, CON-002 | T-002, ADR-001 | ACEPTADO (2026-10-27) |
 | T-004 | S3D-004 | F1A | Revisiones de material y sección rectangular; un material y una sección por barra | MAT-001, MAT-002, SEC-001, SEC-002, SEC-003, GEO-003 | T-003 | NO INICIADO |
 | T-005 | S3D-005 | F1B | Apoyos por GDL global | GEO-010 (parcial) | T-004 | NO INICIADO |
 | T-006 | S3D-006 | F1B | Casos de carga, cargas nodales y peso propio | LD-001, LD-002, LD-003 | T-005 | NO INICIADO |
@@ -27,7 +27,7 @@ Origen: revisión structural-reviewer de T-002 (ver `plans/T-002.md`). El usuari
 
 | Ticket | Propuesta |
 |---|---|
-| T-003 | Documentar en ADR-001 §5 que la división por magnitud nula usa `UNITS_UNREPRESENTABLE` (clave `units.division_by_zero`), al ampliar el uso de diagnósticos |
+| T-003 | ~~Documentar en ADR-001 §5 que la división por magnitud nula usa `UNITS_UNREPRESENTABLE` (clave `units.division_by_zero`)~~ — resuelto en T-003 (P1, aceptado 2026-10-27) |
 | T-004 | Unidad kg/m (masa lineal de perfiles) |
 | T-006 | Magnitud `SURFACE_LOAD` (kN/m², separada de tensión/módulo) y unidad kN/m³ (peso específico, DB-SE-AE Anejo C) |
 | T-008 | Magnitud `DISPLACEMENT` (flechas en mm con perfil kN-m) |

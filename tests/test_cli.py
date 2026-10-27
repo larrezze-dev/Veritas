@@ -29,10 +29,12 @@ def test_info_reports_version_warning_and_module_status(
         assert status in out
 
 
-def test_only_units_module_is_declared_available() -> None:
+def test_only_implemented_modules_are_declared_available() -> None:
     status = dict(cli.MODULE_STATUS)
-    assert status["Unidades SI"].startswith(cli.AVAILABLE)
-    others = {value for name, value in status.items() if name != "Unidades SI"}
+    implemented = {"Unidades SI", "Geometría y barras"}
+    for name in implemented:
+        assert status[name].startswith(cli.AVAILABLE)
+    others = {value for name, value in status.items() if name not in implemented}
     assert others <= {cli.PENDING, cli.NOT_CHECKED}
     assert status["Verificación normativa"] == cli.NOT_CHECKED
 

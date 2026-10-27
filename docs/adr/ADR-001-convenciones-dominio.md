@@ -23,10 +23,11 @@ Este ADR fija contratos aprobados; no implementa Node/Member, matrices de rigide
 Para extremos pI, pJ y longitud L = ||pJ-pI||:
 
 1. ex = (pJ-pI)/L. Rechazar longitud nula o no representable y coordenadas no finitas. El umbral físico para nudos casi coincidentes pertenece al ticket de geometría (F1A); no usar el umbral angular como longitud mínima.
-2. Seleccionar una referencia r de dirección local +y y normalizarla ANTES de comprobar la proyección: rhat=r/||r||. Rechazar r cero/no finita. Por defecto r = global +Y; si ||rhat-(rhat·ex)ex|| <= 1e-8, usar global +Z y normalizarla. El umbral es angular/adimensional, para evitar amplificar errores al dividir por una proyección casi nula.
-3. w = rhat - (rhat·ex)ex; ey0 = w/||w||; ez0 = ex × ey0. Referencia explícita casi paralela se rechaza usando el mismo umbral, sin sustitución silenciosa.
-4. Giro alfa alrededor de +ex: ey = cos(alfa)ey0 + sin(alfa)ez0; ez = -sin(alfa)ey0 + cos(alfa)ez0. Se almacena alfa en rad.
+2. Seleccionar una referencia r de dirección local **+z** y normalizarla ANTES de comprobar la proyección: rhat=r/||r||. r es una dirección libre ADIMENSIONAL (no una longitud) y se conserva normalizada, que es exactamente lo que interviene en el cálculo. Rechazar r cero/no finita. Por defecto r = global +Z; si ||rhat-(rhat·ex)ex|| <= 1e-8 (barra vertical), usar global -X. El umbral es angular/adimensional, para evitar amplificar errores al dividir por una proyección casi nula.
+3. w = rhat - (rhat·ex)ex, reortogonalizado con una segunda pasada (w <- w - (w·ex)ex) porque una sola pasada pierde ortogonalidad del orden de eps/||w|| cerca del umbral; ez0 = w/||w||; ey0 = ez0 × ex. Referencia explícita casi paralela se rechaza usando el mismo umbral, sin sustitución silenciosa. Con la referencia por defecto toda barra no vertical queda con ez0 hacia arriba (componente Z positiva) y, con h en z, eje fuerte en el plano vertical.
+4. Giro alfa alrededor de +ex: ey = cos(alfa)ey0 + sin(alfa)ez0; ez = -sin(alfa)ey0 + cos(alfa)ez0. Se almacena alfa en rad tal como se da, sin envolver, con |alfa| <= 2π; alfa=0 y alfa=2π describen la misma geometría pero son contenidos de revisión distintos.
 5. Conservar referencia efectiva y alfa en la revisión de barra. Al editar extremos, recalcular con esa referencia; si degenera, pedir orientación explícita. No activar otro fallback silenciosamente ni modificar una revisión histórica.
+6. Postcondición en ejecución, además de las pruebas: max|QQ^T - I| <= 1e-12 y det(Q) > 0; si no se cumple, `GEOMETRY_INVALID_ORIENTATION`.
 
 El fallback es una ayuda de creación, no una promesa de orientación continua para todas las direcciones. Cambiar I/J explícitamente requiere nueva revisión y reinterpretación controlada de orientación, cargas y extremos; queda prohibido intercambiarlos silenciosamente. El ticket de geometría (F1A) deberá rechazar la operación si aún no puede conservar correctamente esos datos.
 
@@ -54,13 +55,14 @@ Para barra horizontal I=(0,0,0), J=(L,0,0), alfa=0: ex=X, ey=Y, ez=Z.
 |---|---|
 | Tracción axial P>0 aplicada a J en +X, I fijo | RIx=-P; pIx=-P, pJx=P; N(s)=+P |
 | Voladizo con fuerza -P Z en J | RIz=+P, RIMy=-PL; Vz(s)=-P; My(s)=P(L-s) |
-| Barra vertical I=(0,0,0), J=(0,0,L), alfa=0 | ex=Z, ey=Y, ez=-X |
-| Barra en +Y, referencia por defecto | fallback +Z: ex=Y, ey=Z, ez=X |
+| Barra vertical I=(0,0,0), J=(0,0,L), alfa=0 | fallback -X: ex=Z, ey=Y, ez=-X |
+| Barra en +Y, referencia por defecto | ex=Y, ey=-X, ez=Z |
+| Barra en -X, referencia por defecto | ex=-X, ey=-Y, ez=Z |
 | Barra en +X, giro alfa=pi/2 | ex=X, ey=Z, ez=-Y |
 
 Los dos primeros casos se derivan del equilibrio de cada cuerpo libre, no de un resultado de solver. Hipótesis: estática lineal, base constante inicial, sin offsets y sin acciones concentradas adicionales aplicadas directamente al extremo de la barra (las cargas del ejemplo son nodales). Como valores de inspección: L=2 m, P=1000 N; el voladizo tiene RIz=1000 N, RIMy=-2000 N*m, Vz=-1000 N y My(0)=2000 N*m, My(L)=0. No se simulan desplazamientos ni se acredita una formulación de viga con esta tabla.
 
-Casos de frontera para implementación futura: referencia justo por debajo/en/por encima de 1e-8; referencia guardada que degenera tras editar extremos; coordenadas no finitas; longitud cero. Revertir I/J con alfa=0 y referencia +Y conserva ey y cambia signos de ex y ez, pero también cambia asociaciones de extremos y componentes locales; no es una operación automática de preservación de datos.
+Casos de frontera para implementación futura: referencia justo por debajo/en/por encima de 1e-8; referencia guardada que degenera tras editar extremos; coordenadas no finitas; longitud cero. Revertir I/J con alfa=0 y la misma referencia (incluido el fallback -X) conserva ez y cambia signos de ex y ey, pero también cambia asociaciones de extremos y componentes locales; no es una operación automática de preservación de datos. Con alfa≠0, conservar la orientación física de la sección exige además alfa -> -alfa; el ticket que implemente la inversión deberá tratarlo.
 
 ## 3. Identidad y referencias
 
@@ -96,7 +98,7 @@ Contrato futuro de diagnóstico: code estable (ASCII), message_key traducible, p
 | INPUT_INVALID_TYPE | Tipo de entrada incorrecto |
 | INPUT_NONFINITE | NaN/infinito |
 | UNITS_INCOMPATIBLE | Dimensiones incompatibles |
-| UNITS_UNREPRESENTABLE | Overflow/underflow total |
+| UNITS_UNREPRESENTABLE | Overflow/underflow total; también división por una magnitud nula (clave `units.division_by_zero`) |
 | UNITS_UNKNOWN | Símbolo de unidad no registrado (ampliación aprobada en el plan T-002, 2026-10-27) |
 | GEOMETRY_ZERO_LENGTH | Extremos coincidentes |
 | GEOMETRY_INVALID_ORIENTATION | Referencia cero/casi paralela o base inválida |
@@ -114,14 +116,14 @@ Cada frontera pública (API, CLI) declarará en su ticket las excepciones y cód
 ## Alternativas y consecuencias
 
 - Z arriba facilita lectura de gravedad y modelos de edificación. Y arriba también es posible, pero obliga a otra convención coherente: alternativa descartada al aprobar este ADR.
-- Proyectar +Y conserva xyz=XYZ para barras en +X. Fallback explícito evita división casi por cero; puede introducir discontinuidad de orientación al crear barras, por eso se conserva la referencia efectiva y se permite orientación explícita.
+- Proyectar +Z sobre ez (revisión A1-a, plan T-003) conserva xyz=XYZ para barras en +X y deja ez hacia arriba en toda barra no vertical, sea cual sea su dirección en planta. La referencia anterior (+Y sobre ey) dejaba ez=-Z en vigas hacia -X y el eje débil vertical en vigas en ±Y: descartada. Fallback explícito (-X, solo barras verticales) evita división casi por cero; puede introducir discontinuidad de orientación al crear barras, por eso se conserva la referencia efectiva y se permite orientación explícita.
 - UUID separa identidad de numeración y etiquetas; requiere mapas de solver. Numeración secuencial como identidad global dificulta importación/fusión y no se propone.
 - Revisiones inmutables aumentan almacenamiento pero hacen reproducibles referencias y resultados. Evitan mutación silenciosa de catálogos ya usados.
 - No normalizar signos del solver por intuición: la adaptación y las pruebas específicas son trabajo obligatorio futuro.
 
 ## Puerta de aprobación y seguimiento
 
-Los cinco grupos anteriores están aprobados como contrato de diseño. No se realizó una revisión crítica por structural-reviewer antes de la aprobación; se recomienda hacerla al planificar el ticket de geometría (T-003) y registrar cualquier precisión como revisión de este ADR con nueva aprobación. Esa revisión es documental, no constituye validación de un solver ni auditoría profesional externa. La trazabilidad prevista hacia tests está en [VALIDATION_PLAN.md](../VALIDATION_PLAN.md). Las implementaciones seguirán en sus tickets, con demo/tests de su API real. No cerrar GEO/FEM/DAT ni declarar F0 completa solo por aceptar este ADR.
+Los cinco grupos anteriores están aprobados como contrato de diseño. No se realizó una revisión crítica por structural-reviewer antes de la aprobación; se recomendó hacerla al planificar el ticket de geometría (T-003): realizada el 2026-10-27 y sus precisiones aprobadas (ver Historial y `plans/T-003.md`). Esa revisión es documental, no constituye validación de un solver ni auditoría profesional externa. La trazabilidad prevista hacia tests está en [VALIDATION_PLAN.md](../VALIDATION_PLAN.md). Las implementaciones seguirán en sus tickets, con demo/tests de su API real. No cerrar GEO/FEM/DAT ni declarar F0 completa solo por aceptar este ADR.
 
 Implementación y validación numérica del producto: NO_IMPLEMENTADA.
 
@@ -130,3 +132,4 @@ Implementación y validación numérica del producto: NO_IMPLEMENTADA.
 - 2026-10-27: reinicio del proyecto con Claude Code; ADR conservado como PROPUESTO, pendiente de revisión y aprobación del usuario.
 - 2026-10-27: usuario aprueba ADR-001; estado ACCEPTED. Sin implementación ni validación numérica.
 - 2026-10-27: ampliación de la tabla §5 con `UNITS_UNKNOWN` (plan T-002 aprobado). Implementación del objeto `Diagnostic` en `veritas.core.diagnostics`.
+- 2026-10-27: revisión aprobada por el usuario en el plan T-003 («Apruebo A1-a, D1–D7 = A y P1–P4»), tras revisión structural-reviewer: referencia por defecto +Z proyectada sobre ez con fallback -X (A1-a); reortogonalización y postcondición QQ^T (P2); referencia adimensional normalizada y rango de alfa (P3); nota de inversión I/J con alfa (P4); división por magnitud nula en §5 (P1). Filas +Y y -X de la tabla actualizadas.

@@ -1,6 +1,6 @@
 ﻿# Plan de validación estructural y pruebas
 
-**Estado del proyecto:** inicio desde cero. No existe código, tests ni evidencia de validación. Todos los casos de este plan están `NO INICIADO`.
+**Estado del proyecto:** F1A en curso. Los casos marcados `SUPERADO` tienen tests automatizados y aceptación del usuario (T-003, 2026-10-27); el resto sigue `NO INICIADO`.
 
 ## Pruebas escalonadas
 
@@ -34,8 +34,8 @@
 
 | Test ID | Entrada | Expectativa | Fase prevista | Estado |
 |---|---|---|---|---|
-| T-GEO-001 | Barra entre nudos coincidentes | Rechazo explicativo | F1A | NO INICIADO |
-| T-CON-001 | Crear barra y examinar I/J | Ambos extremos rígidos por defecto | F1A | NO INICIADO |
+| T-GEO-001 | Barra entre nudos coincidentes | Rechazo explicativo | F1A | SUPERADO (T-003 aceptado 2026-10-27: `tests/test_geometry_model.py`) |
+| T-CON-001 | Crear barra y examinar I/J | Ambos extremos rígidos por defecto | F1A | SUPERADO (T-003 aceptado 2026-10-27: `tests/test_geometry_model.py`) |
 | T-CON-002 | Liberar giro solo en I | J y otras barras del nudo no cambian | F1C | NO INICIADO |
 | T-CON-003 | Resorte rotacional con rigidez finita | Respuesta consistente entre límites liberado/rígido | F1C | NO INICIADO |
 | T-CON-004 | Configuración que introduce mecanismo | Diagnóstico de inestabilidad; sin cálculo válido | F1C | NO INICIADO |
@@ -78,7 +78,7 @@ Toda corrección FEM/geométrica necesita test que reproduzca el error anterior.
 
 | Contrato ADR-001 | Fase responsable | Casos de test previstos | Estado |
 |---|---|---|---|
-| Ejes, base local, GDL y transformación (sección 1) | F1A (geometría de nudos/barras); F1B (adaptación FEM y transformación de respuesta) | +X, +Y con fallback, +Z, giro de 90°, referencia explícita inválida, referencia guardada degenerada, inversión I/J, coordenadas no finitas, longitud cero; verificar base derecha y transformaciones inversas. | NO INICIADO |
+| Ejes, base local, GDL y transformación (sección 1) | F1A (geometría de nudos/barras); F1B (adaptación FEM y transformación de respuesta) | +X, +Y, −X (ez arriba), vertical con fallback −X, giro de 90°, referencia explícita inválida, umbral 1e-8 por debajo/en/encima, referencia guardada degenerada, inversión I/J, coordenadas no finitas, longitud cero; verificar base derecha, sentido de Q y transformaciones inversas. | F1A SUPERADO (T-003 aceptado 2026-10-27: `tests/test_local_axes.py`); F1B NO INICIADO |
 | Ejes centroidales e inercias de sección (sección 1, «Ejes de sección») | F1A (sección rectangular); F2/F3A (perfiles y propiedades posteriores); F1B (uso en FEM) | Rectángulo centrado con b en y y h en z; referencia independiente para centroide, A, Iy, Iz e Iyz; comprobar convención de signos y rechazo/no disponibilidad sin sustituir por cero. | NO INICIADO |
 | Signos de cargas, reacciones, fuerzas de extremo y esfuerzos de sección (sección 2) | F1B (apoyos, cargas, respuestas de elemento y pruebas de referencia); F6 (presentación de resultados) | Derivar por cuerpos libres tracción axial y voladizo con carga −Z; comprobar fuerzas y momentos de reacción, relación de esfuerzos de extremo y sección, equilibrio y discontinuidad en carga concentrada distinguiendo s- y s+. | NO INICIADO |
 | Identidad UUID, referencias y revisiones inmutables (sección 3 y tabla de sección 4) | F1A según entidad; **pendiente: ticket explícito de persistencia** (unicidad, transacciones, round-trip) | Copia crea ID nuevo; edición conserva ID y aumenta revisión; referencia antigua conserva contenido; conflicto mismo par con distinto contenido; rechazo no sobrescribe; etiqueta y tag de solver no sustituyen identidad. | NO INICIADO |

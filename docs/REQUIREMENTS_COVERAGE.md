@@ -2,7 +2,7 @@
 
 Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md](references/Structural3D_SRS_v1.1.0.md)) hacia tickets, evidencias y aceptación del usuario.
 
-**Estado del proyecto:** inicio desde cero. Ningún requisito tiene implementación, pruebas ni aceptación registradas. Los requisitos afectados por ADR-001 (aprobado el 2026-10-27) figuran como `PARCIAL / DOCUMENTAL`; el resto, `NO INICIADO`.
+**Estado del proyecto:** F0 aceptada; F1A en curso (T-003 aceptado 2026-10-27). Los aportes con implementación y aceptación figuran como `PARCIAL` con su límite. Los requisitos afectados por ADR-001 (aprobado el 2026-10-27) figuran como `PARCIAL / DOCUMENTAL`; el resto, `NO INICIADO`.
 
 ## Reglas de uso (Claude Code)
 
@@ -21,10 +21,10 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 
 | ID SRS | Prioridad / categoría | Requisito SRS | Aporte de tickets | Estado y evidencia |
 |---|---|---|---|---|
-| GEO-001 | P0 | Crear nudos con ID estable y coordenadas XYZ en SI. | ADR-001 (contrato de convenciones, aprobado 2026-10-27) | PARCIAL / DOCUMENTAL — sin implementación ni tests |
-| GEO-002 | P0 | Crear barras entre dos nudos distintos; rechazar longitudes degeneradas. | — | NO INICIADO |
+| GEO-001 | P0 | Crear nudos con ID estable y coordenadas XYZ en SI. | T-003 (`plans/T-003.md`): `StructuralModel.add_node` (UUID v4, revisiones, coordenadas en m); `tests/test_geometry_model.py` | PARCIAL — T-003 aceptado 2026-10-27; modelo solo en memoria, sin persistencia ni GUI |
+| GEO-002 | P0 | Crear barras entre dos nudos distintos; rechazar longitudes degeneradas. | T-003 (`plans/T-003.md`): `add_member` rechaza mismo nudo y L < 1 µm (`GEOMETRY_ZERO_LENGTH`); `tests/test_geometry_model.py`, `tests/test_local_axes.py` | PARCIAL — T-003 aceptado 2026-10-27; sin GUI |
 | GEO-003 | P0 | Asignar exactamente una revisión de material y de sección a cada barra. | — | NO INICIADO |
-| GEO-004 | P0 | Calcular ejes locales ortonormales y permitir orientar una barra alrededor de su eje longitudinal. | ADR-001 (contrato de convenciones, aprobado 2026-10-27) | PARCIAL / DOCUMENTAL — sin implementación ni tests |
+| GEO-004 | P0 | Calcular ejes locales ortonormales y permitir orientar una barra alrededor de su eje longitudinal. | T-003 (`plans/T-003.md`): base local ADR-001 §1 (A1-a), giro alfa, referencia explícita, postcondición QQᵀ = I; CLI `veritas geometry axes`; `tests/test_local_axes.py`, `tests/test_geometry_cli.py` | PARCIAL — T-003 aceptado 2026-10-27; sin inversión I/J ni visualización 3D |
 | GEO-005 | P1 | Selección simple, múltiple, por ventana y por atributos. | — | NO INICIADO |
 | GEO-006 | P1 | Crear, dividir, copiar, trasladar, rotar, reflejar y replicar elementos. | — | NO INICIADO |
 | GEO-007 | P1 | Captura geométrica, rejilla 3D, niveles, planos, cotas, etiquetas y capas. | — | NO INICIADO |
@@ -34,8 +34,8 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | GEO-011 | P1 | Detectar barras duplicadas, nudos coincidentes y posibles mecanismos. | — | NO INICIADO |
 | GEO-012 | P1 | Filtrar, ocultar, aislar y colorear barras por grupo, material y sección. | — | NO INICIADO |
 | GEO-013 | P2 | Intercambio geométrico DXF con pérdidas y convenciones declaradas. | — | NO INICIADO |
-| CON-001 | P0 | Rigidez predeterminada de los dos extremos I/J de cada barra nueva. | — | NO INICIADO |
-| CON-002 | P0 | Configuraciones de los extremos I y J independientes y persistentes. | — | NO INICIADO |
+| CON-001 | P0 | Rigidez predeterminada de los dos extremos I/J de cada barra nueva. | T-003 (`plans/T-003.md`): `EndConnection.rigid()` en I y J para los seis GDL; `tests/test_geometry_model.py` | PARCIAL — T-003 aceptado 2026-10-27; sin persistencia ni GUI |
+| CON-002 | P0 | Configuraciones de los extremos I y J independientes y persistentes. | T-003 (`plans/T-003.md`): `end_i`/`end_j` independientes en `Member` | PARCIAL — T-003 aceptado 2026-10-27; solo estado RIGID, sin persistencia |
 | CON-003 | P1 | GDL locales Ux, Uy, Uz, Rx, Ry, Rz con estados rígido, liberado o resorte, cuando sean compatibles con el tipo de elemento. | ADR-001 (contrato de convenciones, aprobado 2026-10-27) | PARCIAL / DOCUMENTAL — sin implementación ni tests |
 | CON-004 | P1 | Rigidez traslacional N/m y rotacional Nm/rad, con conversión de unidades y validación. | — | NO INICIADO |
 | CON-005 | P1 | Presets rígido, articulado, semirrígido y personalizado, con definición precisa por GDL. | — | NO INICIADO |

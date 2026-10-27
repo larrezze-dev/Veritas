@@ -26,6 +26,29 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "presentation.invalid_name": "Nombre de perfil no válido: «{profile}».",
     "presentation.duplicate_kind": "El perfil «{profile}» define dos veces la misma magnitud.",
     "presentation.invalid_decimals": "Número de decimales no válido: {decimals}.",
+    "geometry.same_node": "La barra no puede unir el nudo {node} consigo mismo.",
+    "geometry.zero_length": (
+        "Longitud de barra {length} m inferior al mínimo {minimum} m "
+        "(nudos coincidentes o casi coincidentes)."
+    ),
+    "geometry.length_unrepresentable": (
+        "La longitud de la barra no es representable en doble precisión."
+    ),
+    "geometry.reference_invalid": "Referencia de orientación nula o no válida.",
+    "geometry.reference_parallel": (
+        "La referencia de orientación es paralela al eje de la barra "
+        "(proyección {projection} ≤ {tolerance})."
+    ),
+    "geometry.stored_reference_degenerate": (
+        "Con la nueva geometría, la referencia guardada de la barra queda paralela a su eje "
+        "(proyección {projection} ≤ {tolerance}). Asigne antes una orientación explícita."
+    ),
+    "geometry.alpha_out_of_range": "Giro alfa {alpha} rad fuera del rango |alfa| ≤ 2π.",
+    "geometry.basis_not_orthonormal": (
+        "La base local calculada no es ortonormal dextrógira "
+        "(desviación {deviation}, determinante {determinant})."
+    ),
+    "model.reference_not_found": "No existe {kind} con identificador {entity_id}.",
 }
 
 
