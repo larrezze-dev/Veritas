@@ -9,7 +9,11 @@ Una revisión de material o sección entra en el modelo analítico solo cuando u
 referencia: crearla o revisarla no incrementa ``model_revision``; reasignarla a una barra
 sí. Revisar un material o una sección no altera las barras, que conservan su par exacto.
 ``revise_*`` no recibe la revisión base: no detecta ediciones concurrentes (un usuario,
-en memoria; se revisará con la persistencia, T-012). Sin borrado, deshacer ni persistencia.
+en memoria; se revisará con la persistencia, T-012). Sin deshacer ni persistencia.
+
+Apoyos (plan T-005): como máximo uno por nudo, gestionado por nudo. Crear, cambiar o
+retirar un apoyo incrementa ``model_revision``; cambiar solo su etiqueta, no. Retirar un
+apoyo es el único borrado del modelo: su id no se recicla.
 """
 
 from collections.abc import Sequence
@@ -38,6 +42,7 @@ from veritas.core.materials.material import MaterialFamily, MaterialRevision, bu
 from veritas.core.references import RevisionRef, RevisionRegistry, require_ref
 from veritas.core.sections.mass import linear_mass
 from veritas.core.sections.section import SectionRevision, build_rectangular_section
+from veritas.core.supports.support import Support, SupportBasis, check_restraints
 from veritas.core.units import ANGLE, DENSITY, LENGTH, STRESS, Quantity
 from veritas.core.validation import invalid_type as _invalid_type
 
@@ -53,7 +58,7 @@ class Keep(Enum):
 KEEP: Final = Keep.KEEP
 
 
-def _not_found(kind: Literal["nudo", "barra"], entity_id: object) -> InputValueError:
+def _not_found(kind: Literal["nudo", "barra", "apoyo"], entity_id: object) -> InputValueError:
     return InputValueError(
         Diagnostic.create(
             DiagnosticCode.REFERENCE_NOT_FOUND,
@@ -86,6 +91,8 @@ class StructuralModel:
         self._members: dict[UUID, Member] = {}
         self._materials: RevisionRegistry[MaterialRevision] = RevisionRegistry("material")
         self._sections: RevisionRegistry[SectionRevision] = RevisionRegistry("sección")
+        self._supports: dict[UUID, Support] = {}
+        self._support_by_node: dict[UUID, UUID] = {}
         self._model_revision = 0
 
     @property
@@ -416,3 +423,79 @@ class StructuralModel:
             self.section(member.section),
             Location(entity_id=member.id, revision=member.revision),
         )
+
+    # --- Apoyos (T-005) -----------------------------------------------------------------
+
+    @property
+    def supports(self) -> MappingProxyType[UUID, Support]:
+        """Revisión actual de cada apoyo por ``Support.id`` (vista de solo lectura)."""
+        return MappingProxyType(self._supports)
+
+    def support_at(self, node_id: UUID) -> Support | None:
+        """Apoyo actual del nudo, o ``None``; nudo inexistente: ``REFERENCE_NOT_FOUND``."""
+        self.node(node_id)
+        support_id = self._support_by_node.get(node_id)
+        return None if support_id is None else self._supports[support_id]
+
+    def _require_support(self, node_id: UUID) -> Support:
+        support = self.support_at(node_id)
+        if support is None:
+            raise _not_found("apoyo", node_id)
+        return support
+
+    def set_support(
+        self,
+        node_id: UUID,
+        restraints: object,
+        *,
+        basis: SupportBasis = SupportBasis.GLOBAL,
+        label: str | Keep = KEEP,
+    ) -> Support:
+        """Crea o revisa el apoyo del nudo (seis estados en la base ``basis``).
+
+        Sin apoyo previo: revisión 1 con id nuevo. Con apoyo: revisión n+1 del mismo id;
+        ``KEEP`` conserva la etiqueta. Contenido idéntico: sin cambio. Solo la etiqueta
+        distinta: nueva revisión sin incrementar ``model_revision``.
+        """
+        self.node(node_id)
+        current = self.support_at(node_id)
+        if current is None:
+            support_id, revision, old_label = new_entity_id(), 1, ""
+        else:
+            support_id, revision, old_label = current.id, current.revision + 1, current.label
+        location = Location(entity_id=support_id, revision=revision)
+        checked = check_restraints(restraints, location)
+        if not isinstance(basis, SupportBasis):
+            raise _invalid_type("basis", "SupportBasis", basis, location)
+        new_label = old_label if label is KEEP else label
+        candidate = Support(support_id, revision, new_label, node_id, basis, checked)
+        if current is None:
+            self._supports[support_id] = candidate
+            self._support_by_node[node_id] = support_id
+            self._model_revision += 1
+            return candidate
+        if replace(candidate, revision=current.revision) == current:
+            return current
+        self._supports[support_id] = candidate
+        if (candidate.basis, candidate.restraints) != (current.basis, current.restraints):
+            self._model_revision += 1
+        return candidate
+
+    def relabel_support(self, node_id: UUID, label: str) -> Support:
+        """Nueva revisión con otra etiqueta; no altera ``model_revision``."""
+        current = self._require_support(node_id)
+        if not isinstance(label, str):
+            raise _invalid_type("label", "texto", label)
+        if label == current.label:
+            return current
+        relabeled = replace(current, revision=current.revision + 1, label=label)
+        self._supports[current.id] = relabeled
+        return relabeled
+
+    def remove_support(self, node_id: UUID) -> Support:
+        """Retira el apoyo del nudo (``model_revision`` +1) y devuelve su última revisión."""
+        current = self._require_support(node_id)
+        del self._supports[current.id]
+        del self._support_by_node[node_id]
+        self._model_revision += 1
+        return current

@@ -62,6 +62,26 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "section.properties_mismatch": (
         "Las propiedades de la sección no coinciden con las calculadas a partir de sus parámetros."
     ),
+    "support.invalid_states": (
+        "Estados de apoyo no válidos: se esperaban seis DofRestraint en el orden "
+        "Ux, Uy, Uz, Rx, Ry, Rz y se recibió {received}."
+    ),
+    "support.no_restraint": (
+        "Un apoyo debe restringir al menos un GDL (FIXED o SPRING); para quitarlo, retírelo."
+    ),
+    "support.spring_nonpositive": (
+        "Rigidez de resorte no admitida: {value} (se exige > 0 y normal; use FREE en su lugar)."
+    ),
+    "support.basis_direction_invalid": "Dirección {field} de la base de apoyo nula o subnormal.",
+    "support.basis_reference_parallel": (
+        "La referencia z_ref es casi paralela a x_dir (proyección {projection} <= {tolerance})."
+    ),
+    "support.roller_axis": "El eje de un rodillo debe ser una traslación (Ux, Uy, Uz): {axis}.",
+    "support.duplicate_dof": "El GDL {dof} se define más de una vez.",
+    "support.unknown_dof": "GDL desconocido: «{dof}» (se admiten Ux, Uy, Uz, Rx, Ry, Rz).",
+    "support.unsupported_basis": (
+        "Base de apoyo no soportada: «{basis}» (se admiten global e inclinada)."
+    ),
     "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",
     "section.property_unrepresentable": (
         "La propiedad {property} no es representable como valor positivo en doble precisión "

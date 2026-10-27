@@ -30,7 +30,7 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | GEO-007 | P1 | Captura geométrica, rejilla 3D, niveles, planos, cotas, etiquetas y capas. | — | NO INICIADO |
 | GEO-008 | P1 | Edición gráfica y tabular sincronizada sobre el mismo dominio. | — | NO INICIADO |
 | GEO-009 | P1 | Deshacer/rehacer operaciones atómicas y mantener integridad del modelo. | — | NO INICIADO |
-| GEO-010 | P1 | Apoyos por GDL, articulaciones/liberaciones, resortes y excentricidades soportadas. | — | NO INICIADO |
+| GEO-010 | P1 | Apoyos por GDL, articulaciones/liberaciones, resortes y excentricidades soportadas. | T-005 (`plans/T-005.md`): `veritas.core.supports` (`Support`, `DofRestraint` FREE/FIXED/SPRING, `SupportBasis` GLOBAL/INCLINADA, presets empotramiento/articulación/rodillo); `StructuralModel.set_support/relabel_support/remove_support`; CLI `veritas support dofs|demo`; `tests/test_supports.py`, `test_model_supports.py`, `test_support_cli.py` | PARCIAL — T-005 aceptado 2026-10-27; sin liberaciones/resortes de extremo I/J (T-010), excentricidades, resortes acoplados/unilaterales, asientos impuestos ni efecto en análisis (T-007) |
 | GEO-011 | P1 | Detectar barras duplicadas, nudos coincidentes y posibles mecanismos. | — | NO INICIADO |
 | GEO-012 | P1 | Filtrar, ocultar, aislar y colorear barras por grupo, material y sección. | — | NO INICIADO |
 | GEO-013 | P2 | Intercambio geométrico DXF con pérdidas y convenciones declaradas. | — | NO INICIADO |

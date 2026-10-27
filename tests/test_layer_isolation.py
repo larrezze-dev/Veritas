@@ -82,6 +82,17 @@ def test_core_does_not_import_gui_or_fem() -> None:
     assert violations == {}
 
 
+def test_supports_module_is_scanned_and_isolated() -> None:
+    core_files = sorted((PACKAGE_ROOT / "core").rglob("*.py"))
+    support_file = PACKAGE_ROOT / "core" / "supports" / "support.py"
+    assert support_file in core_files
+    assert (PACKAGE_ROOT / "core" / "supports" / "__init__.py") in core_files
+    assert forbidden_imports(support_file, PACKAGE_ROOT) == set()
+    assert "veritas.core.supports.support" in imported_modules(
+        PACKAGE_ROOT / "core" / "geometry" / "model.py", PACKAGE_ROOT
+    )
+
+
 @pytest.mark.parametrize(
     ("source", "expected"),
     [

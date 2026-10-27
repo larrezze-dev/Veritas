@@ -33,6 +33,17 @@ El fallback es una ayuda de creación, no una promesa de orientación continua p
 
 Q contiene ex, ey, ez como filas. Para un vector libre: v_local = Q v_global y v_global = Q^T v_local. Comprobar QQ^T=I y det(Q)=+1. Fuerzas y momentos usan la misma rotación solo si están referidos al mismo punto; con offsets se necesita además el transporte del momento y una formulación validada posterior.
 
+### Base de apoyo inclinada
+
+Ampliación aprobada en el plan T-005 (R3), 2026-10-27. Un apoyo declara su base: GLOBAL o INCLINADA. La base inclinada es absoluta (fija en el espacio, sin relación con las barras) y se construye a partir de dos direcciones libres adimensionales x_dir (eje x′) y z_ref (referencia de z′) con el algoritmo de esta sección, sin fallback:
+
+1. ex′ = x_dir/||x_dir||; rechazar x_dir cero, subnormal o no finita.
+2. ẑ = z_ref/||z_ref||; w = ẑ − (ẑ·ex′)ex′ con segunda pasada de Gram-Schmidt; si ||w|| <= 1e-8, rechazar (sin sustitución); ez′ = w/||w||.
+3. ey′ = ez′ × ex′.
+4. Postcondición: max|QQ^T − I| <= 1e-12 y det(Q) > 0; si no, `GEOMETRY_INVALID_ORIENTATION`. La misma comprobación se aplica a una base registrada desde fuera.
+
+Q tiene ex′, ey′, ez′ como filas y se guarda en la revisión del apoyo. Los seis GDL del apoyo (Ux′, Uy′, Uz′, Rx′, Ry′, Rz′) se expresan en esa base. Una base INCLINADA con Q = I es contenido distinto de GLOBAL. Mover el nudo no altera la base. La reacción se da en base global por defecto (§2); en un apoyo inclinado se dará además en la base del apoyo (ticket de resultados).
+
 ### Ejes de sección
 
 Plano transversal yz con origen en el CENTROIDE de la sección para las propiedades Iy/Iz/Iyz. Para un rectángulo centrado, b en y y h en z: A=bh, Iy=∫z²dA=bh³/12, Iz=∫y²dA=hb³/12; Iyz=∫yz dA, con este signo explícito (cero para el rectángulo centrado). El tensor geométrico usa -Iyz fuera de la diagonal. Ejes no centroidales deben etiquetarse y requieren transporte de inercias; no reutilizar estas fórmulas sin ese ajuste. El tratamiento de flexión acoplada de secciones no simétricas queda para su ticket. J no se deduce de Iy+Iz. Los ejes principales no sustituyen silenciosamente a y/z. A se expresa en m2, Iy/Iz/Iyz/J en m4; una propiedad no disponible no se representa como cero.
@@ -100,7 +111,7 @@ Contrato futuro de diagnóstico: code estable (ASCII), message_key traducible, p
 | UNITS_INCOMPATIBLE | Dimensiones incompatibles |
 | UNITS_UNREPRESENTABLE | Overflow/underflow total; también división por una magnitud nula (clave `units.division_by_zero`) |
 | UNITS_UNKNOWN | Símbolo de unidad no registrado (ampliación aprobada en el plan T-002, 2026-10-27) |
-| INPUT_OUT_OF_RANGE | Valor finito fuera del rango físicamente admisible (E, G, ρ, b, h ≤ 0; ν fuera de (−1; 0,5); cambio de familia en una revisión; centroide o Iyz de una sección doblemente simétrica distintos de +0.0; propiedades de sección que no coinciden con sus parámetros). Ampliación aprobada en el plan T-004 (D7), 2026-10-27 |
+| INPUT_OUT_OF_RANGE | Valor finito fuera del rango físicamente admisible (E, G, ρ, b, h ≤ 0; ν fuera de (−1; 0,5); cambio de familia en una revisión; centroide o Iyz de una sección doblemente simétrica distintos de +0.0; propiedades de sección que no coinciden con sus parámetros; apoyo sin ningún GDL restringido; rigidez de resorte de apoyo <= 0). Ampliación aprobada en los planes T-004 (D7) y T-005 (D4, R1), 2026-10-27 |
 | GEOMETRY_ZERO_LENGTH | Extremos coincidentes |
 | GEOMETRY_INVALID_ORIENTATION | Referencia cero/casi paralela o base inválida |
 | REFERENCE_NOT_FOUND | Referencia no resoluble |
@@ -135,3 +146,4 @@ Implementación y validación numérica del producto: NO_IMPLEMENTADA.
 - 2026-10-27: ampliación de la tabla §5 con `UNITS_UNKNOWN` (plan T-002 aprobado). Implementación del objeto `Diagnostic` en `veritas.core.diagnostics`.
 - 2026-10-27: revisión aprobada por el usuario en el plan T-003 («Apruebo A1-a, D1–D7 = A y P1–P4»), tras revisión structural-reviewer: referencia por defecto +Z proyectada sobre ez con fallback -X (A1-a); reortogonalización y postcondición QQ^T (P2); referencia adimensional normalizada y rango de alfa (P3); nota de inversión I/J con alfa (P4); división por magnitud nula en §5 (P1). Filas +Y y -X de la tabla actualizadas.
 - 2026-10-27: ampliación de la tabla §5 con `INPUT_OUT_OF_RANGE` (plan T-004, D7, aprobado por el usuario: «Apruebo D1–D8 = A»).
+- 2026-10-27: plan T-005 aprobado: §1 añade «Base de apoyo inclinada» (R3); §5 amplía los usos de `INPUT_OUT_OF_RANGE` (apoyo sin GDL restringido, rigidez ≤ 0).

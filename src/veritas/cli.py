@@ -12,6 +12,11 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   código 0 (plan T-004).
 - ``veritas model demo``: modelo fijo de tres barras con materiales distintos, una
   sección por barra, masa lineal y extremos I/J en stdout, código 0 (plan T-004).
+- ``veritas support dofs``: seis GDL de un apoyo (preset, fijos, resortes; base global o
+  inclinada) en stdout, código 0 (plan T-005).
+- ``veritas support demo``: barra con apoyo articulado con resorte en Ry y rodillo
+  inclinado, traza de ``model_revision``, código 0 (plan T-005). La estabilidad y los
+  mecanismos no se comprueban y se dice expresamente.
 - Subcomando u opción desconocidos: uso en stderr, stdout vacío, código 2.
 - Error de dominio (diagnóstico): ``CÓDIGO: mensaje`` en stderr, stdout vacío, código 2.
 
@@ -30,7 +35,13 @@ from typing import Final
 from veritas import PRODUCT_NAME, __version__
 from veritas.core import units as u
 from veritas.core.connections.end import Dof, EndConnection
-from veritas.core.diagnostics import Diagnostic, DiagnosticCode, DiagnosticError, InputTypeError
+from veritas.core.diagnostics import (
+    Diagnostic,
+    DiagnosticCode,
+    DiagnosticError,
+    InputTypeError,
+    InputValueError,
+)
 from veritas.core.geometry.entities import Member
 from veritas.core.geometry.local_axes import ReferenceSource, compute_local_axes
 from veritas.core.geometry.model import StructuralModel
@@ -45,6 +56,17 @@ from veritas.core.presentation import (
 )
 from veritas.core.sections.properties import SectionProperty
 from veritas.core.sections.section import SectionRevision
+from veritas.core.supports.support import (
+    BasisKind,
+    Restraints,
+    Support,
+    SupportBasis,
+    SupportDof,
+    build_restraints,
+    fixed_restraints,
+    pinned_restraints,
+    roller_restraints,
+)
 
 EXPERIMENTAL_WARNING: Final = (
     "AVISO: aplicación experimental. No apta para justificar obras reales "
@@ -64,6 +86,7 @@ MODULE_STATUS: Final[tuple[tuple[str, str], ...]] = (
     ("Unidades SI", f"{AVAILABLE} (T-002)"),
     ("Geometría y barras", f"{AVAILABLE} (T-003)"),
     ("Materiales y secciones", f"{AVAILABLE} (T-004)"),
+    ("Apoyos", f"{AVAILABLE} (T-005)"),
     ("Análisis FEM", PENDING),
     ("Interfaz gráfica", PENDING),
     ("Verificación normativa", NOT_CHECKED),
@@ -129,6 +152,33 @@ def build_parser() -> argparse.ArgumentParser:
         "demo", help="Tres barras con materiales distintos y una sección por barra (sin cargas)."
     )
     demo.add_argument("--profile", default="SI", choices=profile_names, help="Perfil de unidades.")
+
+    support_parser = subparsers.add_parser("support", help="Apoyos de nudo por GDL.")
+    support_sub = support_parser.add_subparsers(
+        dest="support_command", metavar="ACCIÓN", required=True
+    )
+    dofs = support_sub.add_parser("dofs", help="Seis GDL de un apoyo (sin juicio de estabilidad).")
+    dofs.add_argument(
+        "--preset", choices=("empotramiento", "articulacion", "rodillo"), help="Preset."
+    )
+    dofs.add_argument("--axis", default=None, help="Eje del rodillo: Ux, Uy o Uz (por defecto Uz).")
+    dofs.add_argument("--fixed", default=None, help="GDL fijos separados por comas: Ux,Uz,Ry.")
+    dofs.add_argument(
+        "--spring",
+        action="append",
+        default=[],
+        help='Resorte GDL=valor unidad, repetible: "Uz=5000 kN/m", "Ry=2000 kN*m/rad".',
+    )
+    dofs.add_argument("--base", default="global", help="Base del apoyo: global o inclinada.")
+    dofs.add_argument("--x-dir", default=None, help="Base inclinada: dirección x' (X,Y,Z).")
+    dofs.add_argument("--z-ref", default=None, help="Base inclinada: referencia de z' (X,Y,Z).")
+    dofs.add_argument("--profile", default="SI", choices=profile_names, help="Perfil de unidades.")
+    support_demo = support_sub.add_parser(
+        "demo", help="Barra con apoyo articulado con resorte y rodillo inclinado (sin cargas)."
+    )
+    support_demo.add_argument(
+        "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
+    )
     return parser
 
 
@@ -482,6 +532,209 @@ def format_model_demo(profile_name: str) -> str:
     return "\n".join(lines)
 
 
+STABILITY_NOT_CHECKED: Final = "Estabilidad y mecanismos: NO COMPROBADOS (T-010)."
+_SPRING_PATTERN: Final = re.compile(
+    r"^\s*([A-Za-z]{2})\s*=\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|[-+]?(?:nan|inf))"
+    r"\s*([^\d\s.+-].*?)\s*$",  # La unidad no empieza por cifra: sin retroceso.
+    re.IGNORECASE,
+)
+_DOF_BY_NAME: Final = {dof.label.lower(): dof for dof in SupportDof}
+
+
+def _parse_dof(text: str) -> SupportDof:
+    try:
+        return _DOF_BY_NAME[text.strip().lower()]
+    except KeyError:
+        raise InputValueError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_OUT_OF_RANGE, "support.unknown_dof", {"dof": text.strip()}
+            )
+        ) from None
+
+
+def _parse_spring(text: str) -> tuple[SupportDof, u.Quantity]:
+    match = _SPRING_PATTERN.match(text)
+    if match is None:
+        raise InputTypeError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_INVALID_TYPE,
+                "input.invalid_type",
+                {"field": "--spring", "expected": "GDL=valor unidad", "received": repr(text)},
+            )
+        )
+    dof = _parse_dof(match.group(1))
+    return dof, u.Quantity.of(_parse_number(match.group(2)), match.group(3))
+
+
+def _parse_basis(base: str, x_dir: str | None, z_ref: str | None) -> SupportBasis:
+    name = base.strip().lower()
+    if name == "global":
+        return SupportBasis.GLOBAL
+    if name == "inclinada" and x_dir is not None and z_ref is not None:
+        return SupportBasis.inclined(_parse_triple(x_dir, "x_dir"), _parse_triple(z_ref, "z_ref"))
+    raise InputValueError(
+        Diagnostic.create(
+            DiagnosticCode.UNSUPPORTED_CONFIGURATION, "support.unsupported_basis", {"basis": base}
+        )
+    )
+
+
+def _dof_label(dof: SupportDof, basis: SupportBasis) -> str:
+    return dof.label + ("'" if basis.kind is BasisKind.INCLINED else "")
+
+
+def _basis_lines(basis: SupportBasis) -> list[str]:
+    if basis.kind is BasisKind.GLOBAL:
+        return ["Base: GLOBAL"]
+    names = ("ex'", "ey'", "ez'")
+    return [
+        "Base: INCLINADA (filas de Q en base global; v_apoyo = Q v_global)",
+        *(
+            f"  {name} = (" + ", ".join(_fmt(c) for c in row) + ")"
+            for name, row in zip(names, basis.matrix(), strict=True)
+        ),
+    ]
+
+
+def _support_lines(
+    restraints: Restraints, basis: SupportBasis, profile: PresentationProfile
+) -> list[str]:
+    rows = []
+    for dof, restraint in zip(SupportDof, restraints, strict=True):
+        stiffness = restraint.quantity(dof)
+        kind = (
+            QuantityKind.TRANSLATIONAL_STIFFNESS
+            if dof.is_translation
+            else QuantityKind.ROTATIONAL_STIFFNESS
+        )
+        shown = "-" if stiffness is None else format_quantity(stiffness, kind, profile)
+        rows.append((_dof_label(dof, basis), str(restraint.kind), shown))
+    return [*_basis_lines(basis), _table(("GDL", "Estado", "Rigidez"), rows)]
+
+
+def _preset_restraints(preset: str, axis: str | None) -> Restraints:
+    if preset == "empotramiento":
+        return fixed_restraints()
+    if preset == "articulacion":
+        return pinned_restraints()
+    return roller_restraints(SupportDof.UZ if axis is None else _parse_dof(axis))
+
+
+def _custom_restraints(fixed_text: str | None, spring_texts: Sequence[str]) -> Restraints:
+    names = [] if fixed_text is None else [n for n in fixed_text.split(",") if n.strip()]
+    fixed = [_parse_dof(name) for name in names]
+    springs: dict[SupportDof, u.Quantity] = {}
+    for text in spring_texts:
+        dof, stiffness = _parse_spring(text)
+        if dof in springs:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE, "support.duplicate_dof", {"dof": dof.label}
+                )
+            )
+        springs[dof] = stiffness
+    return build_restraints(fixed, springs)
+
+
+def format_support_dofs(args: argparse.Namespace) -> str:
+    """Seis GDL de un apoyo con su base; sin juicio de estabilidad."""
+    profile = _profile(args.profile)
+    if args.preset is not None:
+        restraints = _preset_restraints(args.preset, args.axis)
+    else:
+        restraints = _custom_restraints(args.fixed, args.spring)
+    basis = _parse_basis(args.base, args.x_dir, args.z_ref)
+    return "\n".join([*_support_lines(restraints, basis, profile), "", STABILITY_NOT_CHECKED])
+
+
+def _check_support_usage(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if args.preset is not None and (args.fixed is not None or args.spring):
+        parser.error("--preset no se combina con --fixed ni con --spring")
+    if args.preset is None and args.fixed is None and not args.spring:
+        parser.error("indique --preset, --fixed o --spring")
+    if args.axis is not None and args.preset != "rodillo":
+        parser.error("--axis solo se usa con --preset rodillo")
+    inclined = args.base.strip().lower() == "inclinada"
+    if inclined and (args.x_dir is None or args.z_ref is None):
+        parser.error("--base inclinada exige --x-dir y --z-ref")
+    if not inclined and (args.x_dir is not None or args.z_ref is not None):
+        parser.error("--x-dir y --z-ref solo se usan con --base inclinada")
+
+
+_DEMO_ROLLER_ANGLE: Final = math.radians(30.0)
+
+
+def _demo_hinge(stiffness_knm_per_rad: float) -> Restraints:
+    return build_restraints(
+        [SupportDof.UX, SupportDof.UY, SupportDof.UZ],
+        {SupportDof.RY: u.Quantity.of(stiffness_knm_per_rad, "kN·m/rad")},
+    )
+
+
+def format_support_demo(profile_name: str) -> str:
+    """Barra de 6 m: articulación con resorte en Ry (N1) y rodillo inclinado 30° (N2)."""
+    profile = _profile(profile_name)
+    model = StructuralModel()
+
+    def m(value: float) -> u.Quantity:
+        return u.Quantity.of(value, "m")
+
+    steel = model.add_material(  # Mismo acero de ejemplo que ``veritas model demo``.
+        name="Acero estructural (ejemplo)",
+        family=MaterialFamily.STEEL,
+        source="CTE DB-SE-A §4.2",
+        standard_edition=_DEMO_EDITION,
+        elastic_modulus=u.Quantity.of(210_000, "N/mm²"),
+        shear_modulus=u.Quantity.of(81_000, "N/mm²"),
+        poisson_ratio=0.3,
+        density=u.Quantity.of(7850, "kg/m³"),
+    )
+    section = model.add_rectangular_section(b=m(0.2), h=m(0.4), name="R 200×400")
+    node_i = model.add_node(m(0), m(0), m(0), label="N1")
+    node_j = model.add_node(m(6), m(0), m(0), label="N2")
+    model.add_member(node_i.id, node_j.id, material=steel.ref, section=section.ref, label="B1")
+    trace = [f"Nudos y barra: model_revision = {model.model_revision}"]
+    support_i = model.set_support(node_i.id, _demo_hinge(5000), label="A1")
+    slope = SupportBasis.inclined(
+        (math.cos(_DEMO_ROLLER_ANGLE), 0.0, math.sin(_DEMO_ROLLER_ANGLE)), (0.0, 0.0, 1.0)
+    )
+    support_j = model.set_support(node_j.id, roller_restraints(), basis=slope, label="A2")
+    trace.append(f"Dos apoyos: model_revision = {model.model_revision}")
+    lines = [
+        _DEMO_NOTE,
+        "",
+        "Barra B1: N1 (0, 0, 0) m -> N2 (6, 0, 0) m, sin cargas.",
+        "",
+        f"Apoyo {support_i.label} en N1 (articulación con resorte rotacional en Ry):",
+        *_support_lines(support_i.restraints, support_i.basis, profile),
+        "",
+        f"Apoyo {support_j.label} en N2 (rodillo: solo Uz' fijo, normal al plano de rodadura"
+        " inclinado 30° en XZ):",
+        *_support_lines(support_j.restraints, support_j.basis, profile),
+        "",
+    ]
+    revised = model.set_support(node_i.id, _demo_hinge(8000))
+    trace.append(
+        f"Rigidez Ry de {revised.label} a 8000 kN·m/rad: revisión {revised.revision}, "
+        f"model_revision = {model.model_revision}"
+    )
+    relabeled = model.relabel_support(node_i.id, "A1 resorte")
+    trace.append(
+        f"Solo etiqueta «{relabeled.label}»: revisión {relabeled.revision}, "
+        f"model_revision = {model.model_revision}"
+    )
+    removed = model.remove_support(node_j.id)
+    trace.append(f"Retirar {removed.label}: model_revision = {model.model_revision}")
+    again: Support = model.set_support(node_j.id, roller_restraints(), basis=slope, label="A2")
+    same_id = "mismo id" if again.id == removed.id else "id nuevo"
+    trace.append(
+        f"Volver a poner el rodillo: {same_id}, revisión {again.revision}, "
+        f"model_revision = {model.model_revision}"
+    )
+    lines.extend(["Traza:", *(f"  {line}" for line in trace), "", STABILITY_NOT_CHECKED])
+    return "\n".join(lines)
+
+
 def _tolerant_streams() -> None:
     # Una salida canalizada en Windows usa la codificación local (p. ej. cp1252), sin
     # símbolos como «⁴». Se sustituyen en lugar de abortar con UnicodeEncodeError.
@@ -507,6 +760,11 @@ def _run(  # noqa: PLR0911 (un retorno por subcomando)
         return format_section_rect(args.b, args.h, args.unit, args.profile)
     if args.command == "model":
         return format_model_demo(args.profile)
+    if args.command == "support":
+        if args.support_command == "dofs":
+            _check_support_usage(args, parser)
+            return format_support_dofs(args)
+        return format_support_demo(args.profile)
     parser.print_help(sys.stdout)
     return None
 
