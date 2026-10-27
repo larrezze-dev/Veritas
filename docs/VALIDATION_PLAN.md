@@ -20,7 +20,9 @@
 |---|---|---|---|---|
 | rectangle_section | b, h | A=bh, segundo momento analítico según ejes (ADR-001: b en y, h en z) | F1A | NO INICIADO |
 | ring_section | radio exterior R, interior r | A=π(R²−r²), I=π(R⁴−r⁴)/4 | F3A | NO INICIADO |
-| self_weight_prismatic (propuesto) | Barra I=(0,0,0) m, J=(2,0,0) m; b=0,2 m, h=0,4 m, ρ=1000 kg/m³, g=10 m/s² sintética hacia −Z | qz=−800 N/m; resultante Fz=−1600 N (acción prescrita, no resultado de análisis) | F1B | NO INICIADO |
+| self_weight_prismatic | Barra I=(0,0,0) m, J=(2,0,0) m; b=0,2 m, h=0,4 m, ρ=1000 kg/m³, g=10 m/s² sintética hacia −Z | qz=−800 N/m; resultante Fz=−1600 N (acción prescrita, no resultado de análisis) | F1B (T-006) | IMPLEMENTADO — `tests/test_self_weight.py`, `tests/test_load_cli.py`; T-006 aceptado 2026-10-27 |
+| self_weight_inclined | Barra (0,0,0)→(3,0,4) m (L=5 m), mismos datos | Fz=−4000 N por longitud real (la proyectada daría −2400 N); M respecto al origen (0, +6000, 0) N·m | F1B (T-006) | IMPLEMENTADO — `tests/test_self_weight.py`; T-006 aceptado 2026-10-27 |
+| load_demo_resultants | Demo `veritas load demo` (plan T-006, D9) | G1: ΣF=(0,0,−7200) N, ΣM=(0,+28 400,0) N·m; Q1: ΣF=(8000,0,−24 000) N, ΣM=(0,+105 000,0) N·m (cuerpo libre a mano) | F1B (T-006) | IMPLEMENTADO — `tests/test_load_resultant.py`, `tests/test_load_cli.py`; T-006 aceptado 2026-10-27 |
 | beam_simple_center | L, P, E, I, biapoyada | R1=R2=P/2, Mmax=PL/4 | F1B | NO INICIADO |
 | cantilever_uniform | viga Euler-Bernoulli, q uniforme | δ=qL⁴/(8EI) en extremo | F1B | NO INICIADO |
 | release_rotation | misma viga con/sin liberación | respuesta esperada y momento liberado | F1C | NO INICIADO |

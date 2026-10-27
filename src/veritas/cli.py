@@ -17,6 +17,12 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
 - ``veritas support demo``: barra con apoyo articulado con resorte en Ry y rodillo
   inclinado, traza de ``model_revision``, código 0 (plan T-005). La estabilidad y los
   mecanismos no se comprueban y se dice expresamente.
+- ``veritas load selfweight``: peso propio q = ρ·A·g de una barra prismática rectangular
+  y su resultante, código 0 (plan T-006).
+- ``veritas load demo``: dos barras, caso G1 con peso propio y caso Q1 con carga nodal y
+  cargas uniformes locales; resultantes ΣF/ΣM de las acciones prescritas respecto al
+  origen y traza de ``model_revision``, código 0 (plan T-006). No son resultados de
+  análisis y se dice expresamente.
 - Subcomando u opción desconocidos: uso en stderr, stdout vacío, código 2.
 - Error de dominio (diagnóstico): ``CÓDIGO: mensaje`` en stderr, stdout vacío, código 2.
 
@@ -31,6 +37,7 @@ import re
 import sys
 from collections.abc import Sequence
 from typing import Final
+from uuid import UUID
 
 from veritas import PRODUCT_NAME, __version__
 from veritas.core import units as u
@@ -46,6 +53,15 @@ from veritas.core.geometry.entities import Member
 from veritas.core.geometry.local_axes import ReferenceSource, compute_local_axes
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
+from veritas.core.loads.load_case import LoadCategory
+from veritas.core.loads.loads import (
+    STANDARD_GRAVITY,
+    LoadBasis,
+    MemberUniformLoad,
+    NodalLoad,
+    self_weight_intensity,
+    vector_quantities,
+)
 from veritas.core.materials.material import MaterialFamily, MaterialRevision
 from veritas.core.messages_es import render_message
 from veritas.core.presentation import (
@@ -67,6 +83,7 @@ from veritas.core.supports.support import (
     pinned_restraints,
     roller_restraints,
 )
+from veritas.core.validation import positive_si
 
 EXPERIMENTAL_WARNING: Final = (
     "AVISO: aplicación experimental. No apta para justificar obras reales "
@@ -87,6 +104,7 @@ MODULE_STATUS: Final[tuple[tuple[str, str], ...]] = (
     ("Geometría y barras", f"{AVAILABLE} (T-003)"),
     ("Materiales y secciones", f"{AVAILABLE} (T-004)"),
     ("Apoyos", f"{AVAILABLE} (T-005)"),
+    ("Cargas", f"{AVAILABLE} (T-006)"),
     ("Análisis FEM", PENDING),
     ("Interfaz gráfica", PENDING),
     ("Verificación normativa", NOT_CHECKED),
@@ -179,7 +197,35 @@ def build_parser() -> argparse.ArgumentParser:
     support_demo.add_argument(
         "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
     )
+    _add_load_parser(subparsers, profile_names)
     return parser
+
+
+def _add_load_parser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]", profile_names: list[str]
+) -> None:
+    load_parser = subparsers.add_parser("load", help="Casos de carga y acciones prescritas.")
+    load_sub = load_parser.add_subparsers(dest="load_command", metavar="ACCIÓN", required=True)
+    selfweight = load_sub.add_parser(
+        "selfweight", help="Peso propio de una barra prismática rectangular."
+    )
+    selfweight.add_argument("--b", required=True, help="Ancho b, según y local.")
+    selfweight.add_argument("--h", required=True, help="Canto h, según z local.")
+    selfweight.add_argument("--unit", default="m", help="Unidad de b y h (m, cm, mm).")
+    selfweight.add_argument("--rho", required=True, help='Densidad con unidad: "7850 kg/m3".')
+    selfweight.add_argument("--length", required=True, help='Longitud real: "2 m".')
+    selfweight.add_argument(
+        "--g", default=None, help='Gravedad con unidad (por defecto 9.80665 m/s2): "10 m/s2".'
+    )
+    selfweight.add_argument(
+        "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
+    )
+    load_demo = load_sub.add_parser(
+        "demo", help="Casos G1 (peso propio) y Q1 con resultantes (sin análisis)."
+    )
+    load_demo.add_argument(
+        "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
+    )
 
 
 def format_info() -> str:
@@ -735,6 +781,195 @@ def format_support_demo(profile_name: str) -> str:
     return "\n".join(lines)
 
 
+PRESCRIBED_NOT_ANALYSIS: Final = (
+    "Resultantes de acciones PRESCRITAS (comprobación de entrada): no son resultados de "
+    "análisis; reacciones y esfuerzos quedan para T-007 a T-009."
+)
+_QUANTITY_PATTERN: Final = re.compile(
+    r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|[-+]?(?:nan|inf))"
+    r"\s*([^\d\s.+-].*?)\s*$",  # La unidad no empieza por cifra: sin retroceso.
+    re.IGNORECASE,
+)
+
+
+def _parse_quantity(text: str, field: str) -> u.Quantity:
+    match = _QUANTITY_PATTERN.match(text)
+    if match is None:
+        raise InputTypeError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_INVALID_TYPE,
+                "input.invalid_type",
+                {"field": field, "expected": "valor con unidad", "received": repr(text)},
+            )
+        )
+    return u.Quantity.of(_parse_number(match.group(1)), match.group(2))
+
+
+def _fq(quantity: u.Quantity, kind: QuantityKind, profile: PresentationProfile) -> str:
+    return format_quantity(quantity, kind, profile)
+
+
+def _fq3(
+    values: tuple[u.Quantity, u.Quantity, u.Quantity],
+    kind: QuantityKind,
+    profile: PresentationProfile,
+) -> str:
+    return "(" + "; ".join(_fq(value, kind, profile) for value in values) + ")"
+
+
+def format_load_selfweight(  # noqa: PLR0913, PLR0917 (datos del prisma)
+    b: str, h: str, unit: str, rho: str, length: str, gravity: str | None, profile_name: str
+) -> str:
+    """Peso propio de una barra prismática rectangular: q = ρ·A·g y resultante q·L."""
+    profile = _profile(profile_name)
+    length_unit = u.get_unit(unit)
+    section = StructuralModel().add_rectangular_section(
+        b=u.Quantity.of(_parse_number(b), length_unit),
+        h=u.Quantity.of(_parse_number(h), length_unit),
+    )
+    density = _parse_quantity(rho, "--rho")
+    positive_si(density, u.DENSITY, "--rho")
+    span = _parse_quantity(length, "--length")
+    positive_si(span, u.LENGTH, "--length")
+    g = STANDARD_GRAVITY if gravity is None else _parse_quantity(gravity, "--g")
+    area = section.properties.area.quantity
+    if area is None:  # pragma: no cover (el rectángulo siempre tiene A)
+        raise TypeError("sección rectangular sin área")
+    q = self_weight_intensity((density * area).require(u.LINEAR_MASS), g)
+    total = q * span
+    return "\n".join(
+        [
+            "Peso propio de una barra prismática rectangular (dirección -Z global, por metro "
+            "de longitud real de la barra; ADR-001 §1):",
+            f"  A = {_fq(area, QuantityKind.AREA, profile)}",
+            f"  rho = {_fq(density, QuantityKind.DENSITY, profile)}",
+            f"  g = {_fq(g, QuantityKind.ACCELERATION, profile)}"
+            + (" (por defecto: gravedad normal convencional)" if gravity is None else ""),
+            f"  L = {_fq(span, QuantityKind.LENGTH, profile)}",
+            f"  q = rho·A·g = {_fq(q, QuantityKind.FORCE_PER_LENGTH, profile)}"
+            f"  ->  qz = {_fq(-q, QuantityKind.FORCE_PER_LENGTH, profile)}",
+            f"  Resultante Fz = -q·L = {_fq(-total, QuantityKind.FORCE, profile)}",
+            "",
+            "Acción prescrita, no resultado de análisis.",
+        ]
+    )
+
+
+_DEMO_GRAVITY: Final = u.Quantity.of(10.0, "m/s²")
+
+
+def _load_rows(
+    model: StructuralModel, case_id: UUID, names: dict[UUID, str], profile: PresentationProfile
+) -> list[tuple[str, str, str, str]]:
+    rows = []
+    for load in model.loads_in_case(case_id):
+        if isinstance(load, NodalLoad):
+            rows.append(
+                (
+                    "nodal",
+                    names[load.node_id],
+                    "GLOBAL",
+                    "F = "
+                    + _fq3(vector_quantities(load.force, u.FORCE), QuantityKind.FORCE, profile)
+                    + "  M = "
+                    + _fq3(vector_quantities(load.moment, u.MOMENT), QuantityKind.MOMENT, profile),
+                )
+            )
+        elif isinstance(load, MemberUniformLoad):
+            q = vector_quantities(load.intensity, u.FORCE_PER_LENGTH)
+            rows.append(
+                (
+                    "uniforme de barra",
+                    names[load.member_id],
+                    str(load.basis),
+                    "q = " + _fq3(q, QuantityKind.FORCE_PER_LENGTH, profile),
+                )
+            )
+        else:
+            g = u.Quantity(load.gravity, u.ACCELERATION)
+            rows.append(
+                (
+                    "peso propio",
+                    "todas las barras",
+                    "GLOBAL (-Z)",
+                    f"g = {_fq(g, QuantityKind.ACCELERATION, profile)}",
+                )
+            )
+    return rows
+
+
+def format_load_demo(profile_name: str) -> str:
+    """Dos barras, caso G1 (peso propio) y caso Q1 (carga nodal y cargas locales)."""
+    profile = _profile(profile_name)
+    model = StructuralModel()
+
+    def m(value: float) -> u.Quantity:
+        return u.Quantity.of(value, "m")
+
+    material = model.add_material(
+        name="Material sintético de demostración",
+        family=MaterialFamily.STEEL,
+        source="Sintético (plan T-006); sin valor normativo",
+        elastic_modulus=u.Quantity.of(210, "GPa"),
+        shear_modulus=u.Quantity.of(81, "GPa"),
+        density=u.Quantity.of(1000, "kg/m³"),
+    )
+    section = model.add_rectangular_section(b=m(0.2), h=m(0.4), name="R 200×400")
+    n1 = model.add_node(m(0), m(0), m(0), label="N1")
+    n2 = model.add_node(m(4), m(0), m(0), label="N2")
+    n3 = model.add_node(m(7), m(0), m(4), label="N3")
+    b1 = model.add_member(n1.id, n2.id, material=material.ref, section=section.ref, label="B1")
+    b2 = model.add_member(n2.id, n3.id, material=material.ref, section=section.ref, label="B2")
+    trace = [f"Nudos, material, sección y barras: model_revision = {model.model_revision}"]
+    g1 = model.add_load_case("G1", LoadCategory.PERMANENT, description="Peso propio")
+    model.set_self_weight(g1.id, gravity=_DEMO_GRAVITY)
+    trace.append(f"Caso G1 y peso propio: model_revision = {model.model_revision}")
+    q1 = model.add_load_case("Q1", LoadCategory.VARIABLE, description="Sobrecarga de ejemplo")
+    model.add_nodal_load(q1.id, n2.id, fz=u.Quantity.of(-10, "kN"))
+    for member in (b1, b2):
+        model.add_member_uniform_load(
+            q1.id, member.id, basis=LoadBasis.LOCAL, qz=u.Quantity.of(-2, "kN/m")
+        )
+    trace.append(f"Caso Q1 y tres cargas: model_revision = {model.model_revision}")
+    renamed = model.revise_load_case(q1.id, description="Sobrecarga de uso (ejemplo)")
+    trace.append(
+        f"Solo descripción de Q1: revisión {renamed.revision}, "
+        f"model_revision = {model.model_revision}"
+    )
+    names = {n1.id: "N1", n2.id: "N2", n3.id: "N3", b1.id: "B1", b2.id: "B2"}
+    lines = [
+        "Material SINTÉTICO de demostración (rho = 1000 kg/m³) y g = 10 m/s² explícita, "
+        "para obtener valores redondos; sin valor normativo.",
+        "",
+        "B1: N1 (0, 0, 0) m -> N2 (4, 0, 0) m;  B2: N2 -> N3 (7, 0, 4) m (L = 5 m).",
+        f"Sección {section.name}; base local de B2: ez = "
+        f"{_fmt_vec(model.axes(b2.id).ez)} (ADR-001 §1).",
+    ]
+    for case in model.load_cases.values():
+        lines.extend(["", f"Caso {case.name} [{case.category}] - {case.description}"])
+        lines.append(
+            _table(("Carga", "Sobre", "Base", "Valor"), _load_rows(model, case.id, names, profile))
+        )
+    lines.extend(["", "Peso propio derivado (q = rho·A·g por metro de longitud real, global):"])
+    for member in (b1, b2):
+        sw = model.self_weight_load(member.id)
+        lines.append(
+            f"  {names[member.id]}: q = {_fq3(sw, QuantityKind.FORCE_PER_LENGTH, profile)}"
+        )
+    lines.extend(["", "Resultantes respecto al origen global:"])
+    for case in model.load_cases.values():
+        resultant = model.case_resultant(case.id)
+        if resultant.load_count == 0:
+            lines.append(f"  {case.name}: sin cargas")
+            continue
+        lines.append(
+            f"  {case.name}: F total = {_fq3(resultant.force, QuantityKind.FORCE, profile)}"
+            f"  M total = {_fq3(resultant.moment, QuantityKind.MOMENT, profile)}"
+        )
+    lines.extend(["", "Traza:", *(f"  {line}" for line in trace), "", PRESCRIBED_NOT_ANALYSIS])
+    return "\n".join(lines)
+
+
 def _tolerant_streams() -> None:
     # Una salida canalizada en Windows usa la codificación local (p. ej. cp1252), sin
     # símbolos como «⁴». Se sustituyen en lugar de abortar con UnicodeEncodeError.
@@ -765,6 +1000,12 @@ def _run(  # noqa: PLR0911 (un retorno por subcomando)
             _check_support_usage(args, parser)
             return format_support_dofs(args)
         return format_support_demo(args.profile)
+    if args.command == "load":
+        if args.load_command == "selfweight":
+            return format_load_selfweight(
+                args.b, args.h, args.unit, args.rho, args.length, args.g, args.profile
+            )
+        return format_load_demo(args.profile)
     parser.print_help(sys.stdout)
     return None
 

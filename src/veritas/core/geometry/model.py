@@ -13,7 +13,13 @@ en memoria; se revisará con la persistencia, T-012). Sin deshacer ni persistenc
 
 Apoyos (plan T-005): como máximo uno por nudo, gestionado por nudo. Crear, cambiar o
 retirar un apoyo incrementa ``model_revision``; cambiar solo su etiqueta, no. Retirar un
-apoyo es el único borrado del modelo: su id no se recicla.
+apoyo es un borrado: su id no se recicla.
+
+Cargas (plan T-006): casos de carga, cargas nodales, cargas uniformes de barra y un único
+peso propio en el modelo, en un caso permanente. Crear, cambiar la categoría o retirar un
+caso, y crear, revisar o retirar una carga incrementan ``model_revision``; cambiar solo el
+nombre o la descripción de un caso, no. Retirar un caso retira sus cargas (una sola vez
++1). Contenido idéntico: sin cambio. El peso propio de cada barra se deriva bajo demanda.
 """
 
 from collections.abc import Sequence
@@ -38,12 +44,36 @@ from veritas.core.geometry.local_axes import (
     validate_alpha,
 )
 from veritas.core.geometry.vector import Vec3
+from veritas.core.loads.load_case import LoadCase, LoadCategory
+from veritas.core.loads.loads import (
+    STANDARD_GRAVITY,
+    Load,
+    LoadBasis,
+    LoadResultant,
+    MemberUniformLoad,
+    NodalLoad,
+    SelfWeight,
+    point_contribution,
+    self_weight_intensity,
+    uniform_contribution,
+)
 from veritas.core.materials.material import MaterialFamily, MaterialRevision, build_material
 from veritas.core.references import RevisionRef, RevisionRegistry, require_ref
 from veritas.core.sections.mass import linear_mass
 from veritas.core.sections.section import SectionRevision, build_rectangular_section
 from veritas.core.supports.support import Support, SupportBasis, check_restraints
-from veritas.core.units import ANGLE, DENSITY, LENGTH, STRESS, Quantity
+from veritas.core.units import (
+    ACCELERATION,
+    ANGLE,
+    DENSITY,
+    FORCE,
+    FORCE_PER_LENGTH,
+    LENGTH,
+    MOMENT,
+    STRESS,
+    Dimension,
+    Quantity,
+)
 from veritas.core.validation import invalid_type as _invalid_type
 
 type Direction = Vec3 | Sequence[object]
@@ -58,7 +88,10 @@ class Keep(Enum):
 KEEP: Final = Keep.KEEP
 
 
-def _not_found(kind: Literal["nudo", "barra", "apoyo"], entity_id: object) -> InputValueError:
+type _Kind = Literal["nudo", "barra", "apoyo", "caso de carga", "carga"]
+
+
+def _not_found(kind: _Kind, entity_id: object) -> InputValueError:
     return InputValueError(
         Diagnostic.create(
             DiagnosticCode.REFERENCE_NOT_FOUND,
@@ -93,6 +126,9 @@ class StructuralModel:
         self._sections: RevisionRegistry[SectionRevision] = RevisionRegistry("sección")
         self._supports: dict[UUID, Support] = {}
         self._support_by_node: dict[UUID, UUID] = {}
+        self._load_cases: dict[UUID, LoadCase] = {}
+        self._loads: dict[UUID, Load] = {}  # Orden de creación.
+        self._self_weight_id: UUID | None = None
         self._model_revision = 0
 
     @property
@@ -499,3 +535,260 @@ class StructuralModel:
         del self._support_by_node[node_id]
         self._model_revision += 1
         return current
+
+    # --- Casos de carga y cargas (T-006) ------------------------------------------------
+
+    @property
+    def load_cases(self) -> MappingProxyType[UUID, LoadCase]:
+        """Revisión actual de cada caso de carga (vista de solo lectura)."""
+        return MappingProxyType(self._load_cases)
+
+    def load_case(self, case_id: UUID) -> LoadCase:
+        """Revisión actual de un caso o ``REFERENCE_NOT_FOUND``."""
+        try:
+            return self._load_cases[case_id]
+        except (KeyError, TypeError):
+            raise _not_found("caso de carga", case_id) from None
+
+    def add_load_case(
+        self, name: str, category: LoadCategory, *, description: str = ""
+    ) -> LoadCase:
+        """Crea un caso de carga (revisión 1); ``model_revision`` +1."""
+        case = LoadCase(new_entity_id(), 1, name, category, description)
+        self._load_cases[case.id] = case
+        self._model_revision += 1
+        return case
+
+    def revise_load_case(
+        self,
+        case_id: UUID,
+        *,
+        name: str | Keep = KEEP,
+        category: LoadCategory | Keep = KEEP,
+        description: str | Keep = KEEP,
+    ) -> LoadCase:
+        """Nueva revisión del caso; solo un cambio de categoría incrementa ``model_revision``.
+
+        Un caso con el peso propio no puede dejar de ser permanente.
+        """
+        current = self.load_case(case_id)
+        candidate = LoadCase(
+            current.id,
+            current.revision + 1,
+            current.name if name is KEEP else name,
+            current.category if category is KEEP else category,
+            current.description if description is KEEP else description,
+        )
+        if replace(candidate, revision=current.revision) == current:
+            return current
+        if candidate.category is not LoadCategory.PERMANENT and self._self_weight_case() == case_id:
+            raise _self_weight_category(candidate)
+        self._load_cases[case_id] = candidate
+        if candidate.category is not current.category:
+            self._model_revision += 1
+        return candidate
+
+    def remove_load_case(self, case_id: UUID) -> tuple[LoadCase, tuple[Load, ...]]:
+        """Retira el caso y todas sus cargas; ``model_revision`` +1 una sola vez."""
+        case = self.load_case(case_id)
+        removed = self.loads_in_case(case_id)
+        for load in removed:
+            del self._loads[load.id]
+            if load.id == self._self_weight_id:
+                self._self_weight_id = None
+        del self._load_cases[case_id]
+        self._model_revision += 1
+        return case, removed
+
+    @property
+    def loads(self) -> MappingProxyType[UUID, Load]:
+        """Revisión actual de cada carga, en orden de creación (vista de solo lectura)."""
+        return MappingProxyType(self._loads)
+
+    def loads_in_case(self, case_id: UUID) -> tuple[Load, ...]:
+        """Cargas del caso en orden de creación."""
+        self.load_case(case_id)
+        return tuple(load for load in self._loads.values() if load.case_id == case_id)
+
+    def add_nodal_load(  # noqa: PLR0913 (seis componentes opcionales por nombre)
+        self,
+        case_id: UUID,
+        node_id: UUID,
+        *,
+        fx: Quantity | None = None,
+        fy: Quantity | None = None,
+        fz: Quantity | None = None,
+        mx: Quantity | None = None,
+        my: Quantity | None = None,
+        mz: Quantity | None = None,
+    ) -> NodalLoad:
+        """Fuerza y momento globales en un nudo (componente omitida = 0); +1."""
+        self.load_case(case_id)
+        self.node(node_id)
+        load_id = new_entity_id()
+        location = Location(entity_id=load_id, revision=1)
+        force = _vector({"fx": fx, "fy": fy, "fz": fz}, FORCE, location)
+        moment = _vector({"mx": mx, "my": my, "mz": mz}, MOMENT, location)
+        load = NodalLoad(load_id, 1, case_id, node_id, force, moment)
+        self._loads[load.id] = load
+        self._model_revision += 1
+        return load
+
+    def add_member_uniform_load(  # noqa: PLR0913 (tres componentes opcionales por nombre)
+        self,
+        case_id: UUID,
+        member_id: UUID,
+        *,
+        basis: LoadBasis = LoadBasis.GLOBAL,
+        qx: Quantity | None = None,
+        qy: Quantity | None = None,
+        qz: Quantity | None = None,
+    ) -> MemberUniformLoad:
+        """Carga uniforme en toda la barra, por metro de longitud real; +1."""
+        self.load_case(case_id)
+        self.member(member_id)
+        load_id = new_entity_id()
+        location = Location(entity_id=load_id, revision=1)
+        intensity = _vector({"qx": qx, "qy": qy, "qz": qz}, FORCE_PER_LENGTH, location)
+        load = MemberUniformLoad(load_id, 1, case_id, member_id, basis, intensity)
+        self._loads[load.id] = load
+        self._model_revision += 1
+        return load
+
+    @property
+    def self_weight(self) -> SelfWeight | None:
+        """Peso propio del modelo, o ``None``."""
+        if self._self_weight_id is None:
+            return None
+        load = self._loads[self._self_weight_id]
+        if not isinstance(load, SelfWeight):  # pragma: no cover (invariante interna)
+            raise TypeError("el peso propio registrado no es SelfWeight")
+        return load
+
+    def _self_weight_case(self) -> UUID | None:
+        current = self.self_weight
+        return None if current is None else current.case_id
+
+    def set_self_weight(self, case_id: UUID, *, gravity: Quantity = STANDARD_GRAVITY) -> SelfWeight:
+        """Define o revisa el peso propio (uno por modelo, en un caso permanente); +1.
+
+        Sin peso propio: revisión 1 con id nuevo. En el mismo caso: revisión n+1; contenido
+        idéntico: sin cambio. En otro caso: ``INPUT_OUT_OF_RANGE``.
+        """
+        case = self.load_case(case_id)
+        current = self.self_weight
+        if current is None:
+            load_id, revision = new_entity_id(), 1
+        else:
+            load_id, revision = current.id, current.revision + 1
+        location = Location(entity_id=load_id, revision=revision, field="gravity")
+        if not isinstance(gravity, Quantity):
+            raise _invalid_type("gravity", "Quantity", gravity, location)
+        g = gravity.require(ACCELERATION).si_value
+        if current is not None and current.case_id != case_id:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "load.self_weight_duplicate",
+                    {"case_id": str(current.case_id)},
+                    location=Location(entity_id=load_id, revision=revision),
+                )
+            )
+        if case.category is not LoadCategory.PERMANENT:
+            raise _self_weight_category(case)
+        candidate = SelfWeight(load_id, revision, case_id, g)
+        if current is not None and replace(candidate, revision=current.revision) == current:
+            return current
+        self._loads[load_id] = candidate
+        self._self_weight_id = load_id
+        self._model_revision += 1
+        return candidate
+
+    def self_weight_load(self, member_id: UUID) -> tuple[Quantity, Quantity, Quantity]:
+        """Peso propio de la barra en base global (N/m): (+0, +0, -ρ·A·g)."""
+        member = self.member(member_id)
+        current = self.self_weight
+        if current is None:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.REFERENCE_NOT_FOUND,
+                    "load.self_weight_missing",
+                    {},
+                    location=Location(entity_id=member.id, revision=member.revision),
+                )
+            )
+        q = self_weight_intensity(
+            self.linear_mass(member_id), Quantity(current.gravity, ACCELERATION)
+        )
+        zero = Quantity(0.0, FORCE_PER_LENGTH)
+        return (zero, zero, -q)
+
+    def remove_load(self, load_id: UUID) -> Load:
+        """Retira una carga (nodal, de barra o peso propio); ``model_revision`` +1."""
+        try:
+            load = self._loads.pop(load_id)
+        except (KeyError, TypeError):
+            raise _not_found("carga", load_id) from None
+        if load_id == self._self_weight_id:
+            self._self_weight_id = None
+        self._model_revision += 1
+        return load
+
+    def _member_load_global(self, load: MemberUniformLoad) -> Vec3:
+        if load.basis is LoadBasis.GLOBAL:
+            return load.intensity
+        return self.axes(load.member_id).to_global(load.intensity)
+
+    def _uniform_part(self, member_id: UUID, q_global: Vec3) -> tuple[Vec3, Vec3]:
+        member = self._members[member_id]
+        return uniform_contribution(
+            self._nodes[member.node_i].position, self._nodes[member.node_j].position, q_global
+        )
+
+    def case_resultant(self, case_id: UUID) -> LoadResultant:
+        """ΣF y ΣM respecto al origen global de las acciones prescritas del caso.
+
+        Comprobación de la entrada, no un resultado de análisis. Una barra cuyo peso
+        propio no se pueda derivar hace fallar la suma; nunca se omite.
+        """
+        loads = self.loads_in_case(case_id)
+        force = moment = Vec3(0.0, 0.0, 0.0)
+        for load in loads:
+            if isinstance(load, NodalLoad):
+                position = self._nodes[load.node_id].position
+                parts = [point_contribution(position, load.force, load.moment)]
+            elif isinstance(load, MemberUniformLoad):
+                parts = [self._uniform_part(load.member_id, self._member_load_global(load))]
+            else:
+                parts = [
+                    self._uniform_part(
+                        member_id, Vec3(0.0, 0.0, self.self_weight_load(member_id)[2].si_value)
+                    )
+                    for member_id in self._members
+                ]
+            for f, m in parts:
+                force, moment = force + f, moment + m
+        return LoadResultant.from_vectors(force, moment, len(loads))
+
+
+def _vector(values: dict[str, Quantity | None], dimension: Dimension, location: Location) -> Vec3:
+    components: list[float] = []
+    for field, value in values.items():
+        if value is None:
+            components.append(0.0)
+            continue
+        if not isinstance(value, Quantity):
+            raise _invalid_type(field, "Quantity", value, location)
+        components.append(value.require(dimension).si_value)
+    return Vec3(*components)
+
+
+def _self_weight_category(case: LoadCase) -> InputValueError:
+    return InputValueError(
+        Diagnostic.create(
+            DiagnosticCode.INPUT_OUT_OF_RANGE,
+            "load.self_weight_category",
+            {"case": case.name, "category": str(case.category)},
+            location=Location(entity_id=case.id, revision=case.revision, field="category"),
+        )
+    )

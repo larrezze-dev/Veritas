@@ -82,6 +82,15 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "support.unsupported_basis": (
         "Base de apoyo no soportada: «{basis}» (se admiten global e inclinada)."
     ),
+    "load.all_zero": "Una carga debe tener alguna componente no nula ({fields}).",
+    "load.self_weight_duplicate": (
+        "El modelo ya tiene un peso propio (caso {case_id}); solo se admite uno. "
+        "Retírelo antes de definirlo en otro caso."
+    ),
+    "load.self_weight_category": (
+        "El peso propio solo puede estar en un caso permanente; el caso «{case}» sería {category}."
+    ),
+    "load.self_weight_missing": "El modelo no tiene peso propio definido.",
     "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",
     "section.property_unrepresentable": (
         "La propiedad {property} no es representable como valor positivo en doble precisión "

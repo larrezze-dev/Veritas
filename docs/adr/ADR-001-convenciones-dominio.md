@@ -44,6 +44,17 @@ Ampliación aprobada en el plan T-005 (R3), 2026-10-27. Un apoyo declara su base
 
 Q tiene ex′, ey′, ez′ como filas y se guarda en la revisión del apoyo. Los seis GDL del apoyo (Ux′, Uy′, Uz′, Rx′, Ry′, Rz′) se expresan en esa base. Una base INCLINADA con Q = I es contenido distinto de GLOBAL. Mover el nudo no altera la base. La reacción se da en base global por defecto (§2); en un apoyo inclinado se dará además en la base del apoyo (ticket de resultados).
 
+### Peso propio y gravedad
+
+Ampliación aprobada en el plan T-006 (D4, D5), 2026-10-27. Concreta el «valor de g y peso propio» que este apartado dejaba al ticket de cargas:
+
+- Dirección −Z global. Intensidad q = ρ·A·g por metro de **longitud real** de la barra (no proyectada), con ρ y A de las revisiones de material y sección que la barra referencia en cada momento; resultante ρ·A·g·L en el punto medio.
+- g se declara en la definición del peso propio y se guarda en su revisión; valor por defecto 9,80665 m/s² (gravedad normal convencional, CGPM 1901), mostrado siempre. ρ·g puede no reproducir los pesos específicos tabulados (kN/m³) de DB-SE-AE (por verificar con la edición vigente); no se corrige en silencio.
+- Derivación bajo demanda: el valor no se guarda; reasignar material o sección cambia el peso propio derivado.
+- Sin duplicidad (interpretación del proyecto de LD-003): como máximo un peso propio en el modelo, solo en un caso permanente.
+
+Carga uniforme de barra en base LOCAL: las componentes siguen a la base local **actual** de la barra, q_global = Qᵀ·q_local.
+
 ### Ejes de sección
 
 Plano transversal yz con origen en el CENTROIDE de la sección para las propiedades Iy/Iz/Iyz. Para un rectángulo centrado, b en y y h en z: A=bh, Iy=∫z²dA=bh³/12, Iz=∫y²dA=hb³/12; Iyz=∫yz dA, con este signo explícito (cero para el rectángulo centrado). El tensor geométrico usa -Iyz fuera de la diagonal. Ejes no centroidales deben etiquetarse y requieren transporte de inercias; no reutilizar estas fórmulas sin ese ajuste. El tratamiento de flexión acoplada de secciones no simétricas queda para su ticket. J no se deduce de Iy+Iz. Los ejes principales no sustituyen silenciosamente a y/z. A se expresa en m2, Iy/Iz/Iyz/J en m4; una propiedad no disponible no se representa como cero.
@@ -111,7 +122,7 @@ Contrato futuro de diagnóstico: code estable (ASCII), message_key traducible, p
 | UNITS_INCOMPATIBLE | Dimensiones incompatibles |
 | UNITS_UNREPRESENTABLE | Overflow/underflow total; también división por una magnitud nula (clave `units.division_by_zero`) |
 | UNITS_UNKNOWN | Símbolo de unidad no registrado (ampliación aprobada en el plan T-002, 2026-10-27) |
-| INPUT_OUT_OF_RANGE | Valor finito fuera del rango físicamente admisible (E, G, ρ, b, h ≤ 0; ν fuera de (−1; 0,5); cambio de familia en una revisión; centroide o Iyz de una sección doblemente simétrica distintos de +0.0; propiedades de sección que no coinciden con sus parámetros; apoyo sin ningún GDL restringido; rigidez de resorte de apoyo <= 0). Ampliación aprobada en los planes T-004 (D7) y T-005 (D4, R1), 2026-10-27 |
+| INPUT_OUT_OF_RANGE | Valor finito fuera del rango físicamente admisible (E, G, ρ, b, h ≤ 0; ν fuera de (−1; 0,5); cambio de familia en una revisión; centroide o Iyz de una sección doblemente simétrica distintos de +0.0; propiedades de sección que no coinciden con sus parámetros; apoyo sin ningún GDL restringido; rigidez de resorte de apoyo <= 0; carga con todas las componentes nulas; g <= 0; segundo peso propio en el modelo; peso propio en un caso no permanente). Ampliación aprobada en los planes T-004 (D7), T-005 (D4, R1) y T-006, 2026-10-27 |
 | GEOMETRY_ZERO_LENGTH | Extremos coincidentes |
 | GEOMETRY_INVALID_ORIENTATION | Referencia cero/casi paralela o base inválida |
 | REFERENCE_NOT_FOUND | Referencia no resoluble |
@@ -147,3 +158,4 @@ Implementación y validación numérica del producto: NO_IMPLEMENTADA.
 - 2026-10-27: revisión aprobada por el usuario en el plan T-003 («Apruebo A1-a, D1–D7 = A y P1–P4»), tras revisión structural-reviewer: referencia por defecto +Z proyectada sobre ez con fallback -X (A1-a); reortogonalización y postcondición QQ^T (P2); referencia adimensional normalizada y rango de alfa (P3); nota de inversión I/J con alfa (P4); división por magnitud nula en §5 (P1). Filas +Y y -X de la tabla actualizadas.
 - 2026-10-27: ampliación de la tabla §5 con `INPUT_OUT_OF_RANGE` (plan T-004, D7, aprobado por el usuario: «Apruebo D1–D8 = A»).
 - 2026-10-27: plan T-005 aprobado: §1 añade «Base de apoyo inclinada» (R3); §5 amplía los usos de `INPUT_OUT_OF_RANGE` (apoyo sin GDL restringido, rigidez ≤ 0).
+- 2026-10-27: plan T-006 aprobado («Aprobado, adelante»): §1 añade «Peso propio y gravedad» y la base LOCAL de cargas de barra; §5 amplía los usos de `INPUT_OUT_OF_RANGE` (carga nula, g ≤ 0, segundo peso propio, peso propio en caso no permanente).

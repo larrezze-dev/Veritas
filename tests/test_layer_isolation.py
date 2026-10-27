@@ -123,3 +123,37 @@ def test_detector_accepts_allowed_imports(tmp_path: Path, source: str) -> None:
     module.parent.mkdir(parents=True)
     module.write_text(source, encoding="utf-8")
     assert forbidden_imports(module, package_root) == set()
+
+
+LOADS_ALLOWED_INTERNAL = (
+    "veritas.core.diagnostics",
+    "veritas.core.units",
+    "veritas.core.validation",
+    "veritas.core.references",
+    "veritas.core.geometry.vector",
+    "veritas.core.geometry.local_axes",
+    "veritas.core.loads",
+)
+
+
+def test_loads_module_is_scanned_and_isolated() -> None:
+    """``core/loads`` no importa el modelo, materiales ni secciones (plan T-006, D8)."""
+    loads_dir = PACKAGE_ROOT / "core" / "loads"
+    files = sorted(loads_dir.glob("*.py"))
+    core_files = sorted((PACKAGE_ROOT / "core").rglob("*.py"))
+    assert {loads_dir / "__init__.py", loads_dir / "load_case.py", loads_dir / "loads.py"} <= set(
+        files
+    )
+    for path in files:
+        assert path in core_files
+        assert forbidden_imports(path, PACKAGE_ROOT) == set()
+        internal = {
+            name for name in imported_modules(path, PACKAGE_ROOT) if name.startswith("veritas")
+        }
+        assert all(
+            any(
+                name == allowed or name.startswith(f"{allowed}.")
+                for allowed in LOADS_ALLOWED_INTERNAL
+            )
+            for name in internal
+        ), internal
