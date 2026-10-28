@@ -17,7 +17,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 PROTOCOL_ID = "veritas.opensees.planar"
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 
 
 def _version(package: str) -> str | None:
@@ -41,6 +41,7 @@ def _response(status: str, message: str = "", analyze_code: int | None = None) -
         },
         "nodes": [],
         "aux": [],
+        "end_aux": [],
         "beams": [],
     }
 
@@ -52,11 +53,27 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
     for tag, _entity, x1, x2 in request["nodes"]:
         ops.node(tag, x1, x2)
         coordinates[tag] = (x1, x2)
-    for node, fixity in request["fixes"]:
+    # Un único fix por nudo: el giro huérfano (T-010, D3) se fusiona con el del apoyo.
+    fixity_by_node: dict[int, list[int]] = {node: list(f) for node, f in request["fixes"]}
+    for node in request["orphan_fixes"]:
+        fixity_by_node.setdefault(node, [0, 0, 0])[2] = 1
+    for node, fixity in fixity_by_node.items():
         ops.fix(node, *fixity)
+    # Extremos no rígidos (T-010, D2): aux en el nudo, equalDOF en u1, u2 y giro propio.
+    element_node: dict[tuple[int, str], int] = {}
+    for _tag, _member, beam, end, master, aux, _stiffness in request["end_links"]:
+        ops.node(aux, *coordinates[master])
+        ops.equalDOF(master, aux, 1, 2)
+        element_node[(beam, end)] = aux
     ops.geomTransf("Linear", 1)
     for tag, _entity, node_i, node_j, area, modulus, inertia, _axis in request["beams"]:
-        ops.element("elasticBeamColumn", tag, node_i, node_j, area, modulus, inertia, 1)
+        start = element_node.get((tag, "I"), node_i)
+        stop = element_node.get((tag, "J"), node_j)
+        ops.element("elasticBeamColumn", tag, start, stop, area, modulus, inertia, 1)
+    for tag, _member, _beam, _end, master, aux, stiffness in request["end_links"]:
+        if stiffness is not None:
+            ops.uniaxialMaterial("Elastic", tag, stiffness)
+            ops.element("zeroLength", tag, master, aux, "-mat", tag, "-dir", 3)
     for tag, _support, node, aux, dof, stiffness, axis1, axis2, _penalty in request["springs"]:
         ops.node(aux, *coordinates[node])
         ops.fix(aux, 1, 1, 1)
@@ -111,6 +128,10 @@ def _solve(request: dict[str, Any]) -> dict[str, Any]:
         ]
         response["aux"] = [
             [spring[3], list(ops.nodeReaction(spring[3]))] for spring in request["springs"]
+        ]
+        response["end_aux"] = [
+            [link[5], list(ops.nodeDisp(link[5])), list(ops.nodeReaction(link[5]))]
+            for link in request["end_links"]
         ]
         response["beams"] = [
             [beam[0], list(ops.eleResponse(beam[0], "localForce"))] for beam in request["beams"]

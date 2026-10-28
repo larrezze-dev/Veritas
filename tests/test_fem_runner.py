@@ -24,13 +24,14 @@ path = sys.argv[1]
 
 def respond(status="OK", code=0, nodes=None, aux=None, beams=None):
     data = {
-        "protocol": "veritas.opensees.planar", "version": 1, "status": status,
+        "protocol": "veritas.opensees.planar", "version": 2, "status": status,
         "analyze_code": code, "message": "simulado",
         "versions": {"python": "x", "openseespy": "y", "openseespywin": None},
         "nodes": nodes if nodes is not None else [
             [n[0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] for n in request["nodes"]],
         "aux": aux if aux is not None else [[s[3], [0.0, 0.0, 0.0]] for s in request["springs"]],
         "beams": beams if beams is not None else [[b[0], [0.0] * 6] for b in request["beams"]],
+        "end_aux": [[k[5], [0.0] * 3, [0.0] * 3] for k in request["end_links"]],
     }
     with open(path, "w", encoding="utf-8") as stream:
         json.dump(data, stream)
@@ -133,7 +134,8 @@ def test_balanced_response_succeeds_with_provenance(tmp_path: Path) -> None:
     assert first.model_revision == frame.model.model_revision
     assert first.case_id == frame.case_id
     assert first.configuration["timeout_s"] == 60.0
-    assert first.versions["adapter"] == "veritas.fem.planar_xz/1"
+    assert first.versions["adapter"] == "veritas.fem.planar_xz/2"  # T-010
+    assert first.versions["protocol"] == "2"
     assert first.pivot is not None
     assert first.pivot.free_dofs == 3
     reactions = {n.reaction for n in first.raw.nodes}

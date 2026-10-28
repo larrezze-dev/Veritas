@@ -5,7 +5,7 @@ import math
 import pytest
 
 from fem_support import AREA, E_PA, IY, IZ, Frame, inclined
-from veritas.core.connections.end import Dof, EndConnection, MemberEnd
+from veritas.core.connections.end import EndConnection, MemberEnd
 from veritas.core.diagnostics import DiagnosticCode, InputValueError, Severity
 from veritas.core.loads.loads import LoadBasis
 from veritas.core.materials.material import MaterialFamily
@@ -369,16 +369,9 @@ def test_tags_follow_uuid_order() -> None:
 
 
 @pytest.mark.parametrize("end", list(MemberEnd))
-@pytest.mark.parametrize(
-    "connection",
-    [
-        EndConnection.pinned(),
-        EndConnection.semi_rigid(Dof.RY, Quantity.of(5000, "kN·m/rad")),
-    ],
-)
-def test_non_rigid_member_end_rejected_until_e2(end: MemberEnd, connection: EndConnection) -> None:
-    # T-010 E1: el dominio admite liberaciones y resortes; el adaptador aún no (D9-A).
+def test_pinned_preset_rejected_out_of_plane(end: MemberEnd) -> None:
+    # T-010, D2-A: el preset articulado libera también Rz (fuera del plano en la rama Iy).
     frame = cantilever(Frame())
     (member_id,) = frame.model.members
-    frame.model.set_member_end(member_id, end, connection)
-    rejected(frame, "fem.member_end_not_rigid")
+    frame.model.set_member_end(member_id, end, EndConnection.pinned())
+    rejected(frame, "fem.member_end_out_of_plane_unsupported")

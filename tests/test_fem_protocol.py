@@ -12,6 +12,7 @@ from veritas.fem.adapters.protocol import (
     NonFiniteValueError,
     PlanarBeam,
     PlanarBeamLoad,
+    PlanarEndLink,
     PlanarFix,
     PlanarNodalLoad,
     PlanarNode,
@@ -35,6 +36,11 @@ def request() -> PlanarRequest:
         springs=(PlanarSpring(2, str(uuid4()), 2, 3, 2, 1e6, (0.6, 0.8), (-0.8, 0.6), False),),
         nodal_loads=(PlanarNodalLoad(2, 0.0, -1000.0, 5.0),),
         beam_loads=(PlanarBeamLoad(1, -10.0, 2.5),),
+        end_links=(
+            PlanarEndLink(3, str(uuid4()), 1, "I", 1, 4, 5.0e6),
+            PlanarEndLink(4, str(uuid4()), 1, "J", 2, 5, None),
+        ),
+        orphan_fixes=(2,),
     )
 
 
@@ -48,6 +54,7 @@ def response(**overrides: object) -> dict[str, object]:
         "versions": {"python": "3.12.9", "openseespy": "3.8.0.0", "openseespywin": None},
         "nodes": [[1, [0.0, 0.0, 0.0], [1.0, 2.0, 3.0]]],
         "aux": [[3, [0.0, 1.0, 0.0]]],
+        "end_aux": [[4, [0.0, 0.0, 0.5], [7.0, 8.0, 0.0]]],
         "beams": [[1, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]]],
     }
     data.update(overrides)
@@ -66,7 +73,7 @@ def test_request_round_trip_is_exact() -> None:
     ("path", "value"),
     [
         (("protocol",), "otro"),
-        (("version",), 2),
+        (("version",), 1),
         (("extra",), 1),
         (("model_revision",), 1.5),
         (("model_revision",), True),

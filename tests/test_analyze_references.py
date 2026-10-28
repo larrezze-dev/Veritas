@@ -1,4 +1,4 @@
-"""CLI ``veritas analyze referencias`` y módulo ``fem.benchmarks`` (plan T-009, D1-A).
+"""CLI ``veritas analyze referencias`` y módulo ``fem.benchmarks`` (T-009, D1-A; T-010, D6).
 
 Las referencias que imprime la demo se comparan con los literales del plan, para que la demo
 no pueda mostrar una referencia errónea. Los tests de referencia frente al solver están en
@@ -63,6 +63,47 @@ PLAN_LITERALS: dict[str, dict[str, float]] = {
         "Uz N3": -3.96825e-7,
         "Uz N2": -5.97222e-5,
     },
+    # Plan T-010, D6: E = 210 GPa, R 200×400 (EI = 2,24e8 N·m², EA = 1,68e10 N), L = 4 m,
+    # w = 10 kN/m, P = 10 kN, k = 3·EI/L = 1,68e8 N·m/rad; cercha con sen a = 0,6.
+    "T-CON-REF-01 a": {
+        "R_Z N1": 20_000.0,
+        "R_Z N2": 20_000.0,
+        "R_My N1": 0.0,
+        "|M| extremo I B1": 0.0,
+        "Ry N2": -1.190476e-4,
+    },
+    "T-CON-REF-01 b": {
+        "R_Z N1": 22_500.0,
+        "R_Z N2": 17_500.0,
+        "R_My N1": -10_000.0,
+        "|M| extremo I B1": 10_000.0,
+        "Ry N2": -8.928571e-5,
+    },
+    "T-CON-REF-02": {
+        "R_Z N1": 10_000.0,
+        "R_My N1": -40_000.0,
+        "Uz N2": -1.904762e-3,
+        "Ry N2": 5.952381e-4,
+    },
+    "T-CON-REF-03": {
+        "R_Z N1": 10_000.0,
+        "R_Z N3": 0.0,
+        "R_My N1": -40_000.0,
+        "M extremo J B1 (rótula)": 0.0,
+        "M extremo I B2": 0.0,
+        "Uz N2": -9.523810e-4,
+        "Ry N3": -2.380952e-4,
+    },
+    "T-CON-REF-04": {
+        "R_Z N1": 5000.0,
+        "R_Z N2": 5000.0,
+        "R_X N1": 0.0,
+        "N B1": 6666.667,
+        "N B2": -8333.333,
+        "N B3": -8333.333,
+        "Uz N3": -3.125e-6,
+        **{f"M extremo {end} {member}": 0.0 for member in ("B1", "B2", "B3") for end in "IJ"},
+    },
 }
 
 
@@ -94,7 +135,7 @@ def test_cli_references_all_match(capsys: pytest.CaptureFixture[str]) -> None:
         assert f"== {case_id} " in out
     assert cli.REFERENCE_MISMATCH not in out
     assert cli.REFERENCE_NO_RESULTS not in out
-    assert "Las 5 variantes coinciden" in out
+    assert "Las 10 variantes coinciden" in out
     assert cli.REFERENCES_NOTE in out
     assert cli.EXPERIMENTAL_WARNING in out
     assert "-10 kN·m" in out  # My central de T-FEM-001

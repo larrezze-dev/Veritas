@@ -1,24 +1,27 @@
-"""Referencias analíticas T-FEM-001…004 para la demostración (plan T-009, D1-A).
+"""Referencias analíticas T-FEM-001…004 (plan T-009, D1-A) y T-CON-REF-01…04 (T-010, D6).
 
 Cada caso construye su modelo plano XZ, lo analiza, normaliza los resultados (T-008) y los
 compara con fórmulas cerradas de Euler-Bernoulli derivadas por cuerpo libre en el plan.
 Las fórmulas usan E, b y h del caso, no las propiedades de sección del código.
 
 Criterio por magnitud (revisión M1 del plan): |calculado − referencia| ≤ tol·max(|ref|,
-S_dim), con S_dim el mayor |ref| de la misma magnitud dentro del caso. «Coincide» significa
-solo eso: no valida la aplicación ni un modelo de usuario.
+S_dim), con S_dim el mayor |ref| de la misma magnitud dentro del caso, o la escala declarada por el
+caso si es mayor (T-010, revisión M4: un momento de referencia nulo en un extremo liberado
+se compara con P·L o qL²/8, nunca con 0 exacto). «Coincide» significa solo eso: no valida
+la aplicación ni un modelo de usuario.
 
 Los tests de referencia (``tests/test_fem_reference.py``) no usan este módulo; un test aparte
 comprueba que sus referencias coinciden con los literales del plan.
 """
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 from uuid import UUID
 
 from veritas.core import units as u
+from veritas.core.connections.end import Dof, DofState, EndConnection, MemberEnd
 from veritas.core.diagnostics import DiagnosticError, ParamValue
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.loads.load_case import LoadCategory
@@ -59,7 +62,19 @@ ANGLE_DEG: Final = 30.0  # plano del rodillo y del resorte inclinados
 TOL_EXACT: Final = 1e-9
 TOL_PENALTY: Final = 1e-6
 
-CASES: Final = ("T-FEM-001", "T-FEM-002", "T-FEM-003", "T-FEM-004")
+TRUSS_RISE: Final = 1.5  # m, T-CON-REF-04 (barras inclinadas de 2,5 m)
+SPRING_RATIO: Final = 3.0  # k·L/(EI) de T-CON-REF-01 b y T-CON-REF-02
+
+CASES: Final = (
+    "T-FEM-001",
+    "T-FEM-002",
+    "T-FEM-003",
+    "T-FEM-004",
+    "T-CON-REF-01",
+    "T-CON-REF-02",
+    "T-CON-REF-03",
+    "T-CON-REF-04",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,9 +132,16 @@ class ReferenceCheck:
 Row = tuple[str, str, QuantityKind, float, float | None]
 
 
-def evaluate(rows: Sequence[Row], tolerance: float) -> tuple[ReferenceCheck, ...]:
-    """Contrasta filas (magnitud, fórmula, tipo, referencia, calculado) con S_dim por tipo."""
-    largest: dict[QuantityKind, float] = {}
+def evaluate(
+    rows: Sequence[Row],
+    tolerance: float,
+    scales: Mapping[QuantityKind, float] | None = None,
+) -> tuple[ReferenceCheck, ...]:
+    """Contrasta filas (magnitud, fórmula, tipo, referencia, calculado) con S_dim por tipo.
+
+    ``scales`` declara una escala mínima por tipo (T-010, revisión M4).
+    """
+    largest: dict[QuantityKind, float] = dict(scales or {})
     for _name, _formula, kind, reference, _computed in rows:
         largest[kind] = max(largest.get(kind, 0.0), abs(reference))
     checks = []
@@ -174,9 +196,9 @@ class _Case:
         self.ids: dict[str, UUID] = {}
         self.results: PlanarResults | None = None
 
-    def node(self, label: str, x: float) -> UUID:
+    def node(self, label: str, x: float, z: float = 0.0) -> UUID:
         m = u.Quantity.of
-        node = self.model.add_node(m(x, "m"), m(0, "m"), m(0, "m"), label=label)
+        node = self.model.add_node(m(x, "m"), m(0, "m"), m(z, "m"), label=label)
         self.ids[label] = node.id
         return node.id
 
@@ -273,6 +295,7 @@ class _Spec:
     build: Callable[[_Case], None]
     rows: Callable[[_Case], list[Row]]
     notes: Callable[[_Case], list[Text]]
+    scales: Mapping[QuantityKind, float] | None = None
 
 
 def _no_notes(_case: _Case) -> list[Text]:
@@ -438,7 +461,170 @@ def _rows_004(c: _Case) -> list[Row]:
     ]
 
 
+# --- T-CON-REF (T-010, D6) -----------------------------------------------------------
+# Giro del plano liberado (RELEASED) o con resorte k en el extremo indicado; k = 3·EI/L.
+
+_K: Final = SPRING_RATIO * EI / SPAN
+_RELEASED: Final = EndConnection.rigid().with_dof(Dof.RY, DofState.RELEASED)
+_SPRING: Final = EndConnection.semi_rigid(Dof.RY, u.Quantity(_K, Dof.RY.stiffness_dimension))
+_SLIDER: Final = build_restraints([SupportDof.UZ])
+
+
+def _end(case: _Case, member: str, end: MemberEnd, connection: EndConnection) -> None:
+    case.model.set_member_end(case.ids[member], end, connection)
+
+
+def _end_moment(c: _Case, member: str, end: MemberEnd) -> float | None:
+    item = next(m for m in c._res().members if m.member_id == c.ids[member])
+    return (item.p_i if end is MemberEnd.I else item.p_j).components[MY].value
+
+
+def _propped(case: _Case, connection: EndConnection) -> None:
+    case.node("N1", 0.0)
+    case.node("N2", SPAN)
+    case.member("B1", "N1", "N2")
+    case.support("N1", fixed_restraints(), "Empotramiento")
+    case.support("N2", _SLIDER, "Deslizadera Uz")
+    case.model.add_member_uniform_load(
+        case.load_case.id, case.ids["B1"], qz=u.Quantity.of(-W, "N/m")
+    )
+    _end(case, "B1", MemberEnd.I, connection)
+
+
+def _rows_ref01(c: _Case, m_i: float) -> list[Row]:
+    return [
+        ("R_Z N1", "wL/2 + M_I/L", FORCE, W * SPAN / 2 + m_i / SPAN, c.reaction("N1", FZ)),
+        ("R_Z N2", "wL/2 − M_I/L", FORCE, W * SPAN / 2 - m_i / SPAN, c.reaction("N2", FZ)),
+        ("R_My N1", "−M_I", MOMENT, -m_i, c.reaction("N1", MY)),
+        ("|M| extremo I B1", "M_I", MOMENT, m_i, _abs(_end_moment(c, "B1", MemberEnd.I))),
+        (
+            "Ry N2",
+            "−wL³/(24EI) + M_I·L/(6EI)",
+            ROT,
+            -W * SPAN**3 / (24 * EI) + m_i * SPAN / (6 * EI),
+            c.disp("N2", RY),
+        ),
+    ]
+
+
+def _abs(value: float | None) -> float | None:
+    return None if value is None else abs(value)
+
+
+def _rows_ref01a(c: _Case) -> list[Row]:
+    return _rows_ref01(c, 0.0)
+
+
+def _rows_ref01b(c: _Case) -> list[Row]:
+    return _rows_ref01(c, (W * SPAN**2 / 8) / (1 + 3 / SPRING_RATIO))
+
+
+def _build_ref02(case: _Case) -> None:
+    case.node("N1", 0.0)
+    case.node("N2", SPAN)
+    case.member("B1", "N1", "N2")
+    case.support("N1", fixed_restraints(), "Empotramiento")
+    case.model.add_nodal_load(case.load_case.id, case.ids["N2"], fz=u.Quantity.of(-P, "N"))
+    _end(case, "B1", MemberEnd.I, _SPRING)
+
+
+def _rows_ref02(c: _Case) -> list[Row]:
+    return [
+        ("R_Z N1", "+P", FORCE, P, c.reaction("N1", FZ)),
+        ("R_My N1", "−PL", MOMENT, -P * SPAN, c.reaction("N1", MY)),
+        (
+            "Uz N2",
+            "−(PL³/(3EI) + PL²/k)",
+            DISP,
+            -(P * SPAN**3 / (3 * EI) + P * SPAN**2 / _K),
+            c.disp("N2", UZ),
+        ),
+        (
+            "Ry N2",
+            "+(PL²/(2EI) + PL/k)",
+            ROT,
+            P * SPAN**2 / (2 * EI) + P * SPAN / _K,
+            c.disp("N2", RY),
+        ),
+    ]
+
+
+def _build_ref03(case: _Case) -> None:
+    case.node("N1", 0.0)
+    case.node("N2", SPAN)
+    case.node("N3", 2 * SPAN)
+    case.member("B1", "N1", "N2")
+    case.member("B2", "N2", "N3")
+    case.support("N1", fixed_restraints(), "Empotramiento")
+    case.support("N3", _SLIDER, "Deslizadera Uz")
+    case.model.add_nodal_load(case.load_case.id, case.ids["N2"], fz=u.Quantity.of(-P, "N"))
+    _end(case, "B1", MemberEnd.J, _RELEASED)
+
+
+def _rows_ref03(c: _Case) -> list[Row]:
+    tip = P * SPAN**3 / (3 * EI)
+    return [
+        ("R_Z N1", "+P", FORCE, P, c.reaction("N1", FZ)),
+        ("R_Z N3", "0", FORCE, 0.0, c.reaction("N3", FZ)),
+        ("R_My N1", "−PL", MOMENT, -P * SPAN, c.reaction("N1", MY)),
+        ("M extremo J B1 (rótula)", "0", MOMENT, 0.0, _end_moment(c, "B1", MemberEnd.J)),
+        ("M extremo I B2", "0", MOMENT, 0.0, _end_moment(c, "B2", MemberEnd.I)),
+        ("Uz N2", "−PL³/(3EI)", DISP, -tip, c.disp("N2", UZ)),
+        ("Ry N3", "−PL²/(3EI)", ROT, -tip / SPAN, c.disp("N3", RY)),
+    ]
+
+
+_DIAGONAL: Final = math.hypot(SPAN / 2, TRUSS_RISE)
+_SIN_T: Final = TRUSS_RISE / _DIAGONAL
+_COS_T: Final = (SPAN / 2) / _DIAGONAL
+
+
+def _build_ref04(case: _Case) -> None:
+    case.node("N1", 0.0)
+    case.node("N2", SPAN)
+    case.node("N3", SPAN / 2, TRUSS_RISE)
+    for label, i, j in (("B1", "N1", "N2"), ("B2", "N1", "N3"), ("B3", "N2", "N3")):
+        case.member(label, i, j)
+        _end(case, label, MemberEnd.I, _RELEASED)
+        _end(case, label, MemberEnd.J, _RELEASED)
+    case.support("N1", pinned_restraints(), "Articulación")
+    case.support("N2", roller_restraints(), "Rodillo")
+    case.model.add_nodal_load(case.load_case.id, case.ids["N3"], fz=u.Quantity.of(-P, "N"))
+
+
+def _rows_ref04(c: _Case) -> list[Row]:
+    diagonal = -P / (2 * _SIN_T)  # Compresión.
+    chord = -diagonal * _COS_T  # Tracción.
+    work = chord**2 * SPAN + 2 * diagonal**2 * _DIAGONAL
+    rows: list[Row] = [
+        ("R_Z N1", "+P/2", FORCE, P / 2, c.reaction("N1", FZ)),
+        ("R_Z N2", "+P/2", FORCE, P / 2, c.reaction("N2", FZ)),
+        ("R_X N1", "0", FORCE, 0.0, c.reaction("N1", FX)),
+        ("N B1", "+P/(2·tan a)", FORCE, chord, c.cut("B1", N, at_end=False)),
+        ("N B2", "−P/(2·sin a)", FORCE, diagonal, c.cut("B2", N, at_end=False)),
+        ("N B3", "−P/(2·sin a)", FORCE, diagonal, c.cut("B3", N, at_end=False)),
+        ("Uz N3", "−Σ N²L/(P·EA)", DISP, -work / (P * EA), c.disp("N3", UZ)),
+    ]
+    for member in ("B1", "B2", "B3"):
+        for end in MemberEnd:
+            rows.append(
+                (f"M extremo {end} {member}", "0", MOMENT, 0.0, _end_moment(c, member, end))
+            )
+    return rows
+
+
+def _notes_orphans(c: _Case) -> list[Text]:
+    nodes = sum(
+        1
+        for n in c._res().nodes
+        if n.displacement.components[RY].status is ComponentStatus.NOT_APPLICABLE
+    )
+    return [Text.of("benchmark.note_orphan_rotations", nodes=nodes)]
+
+
 _BEAM: Final = {"span": SPAN, "load_kn": P / 1000}
+_MOMENT_SCALE_Q: Final = {MOMENT: W * SPAN**2 / 8}
+_MOMENT_SCALE_P: Final = {MOMENT: P * SPAN}
 
 SPECS: Final[dict[str, tuple[_Spec, ...]]] = {
     "T-FEM-001": (
@@ -499,6 +685,68 @@ SPECS: Final[dict[str, tuple[_Spec, ...]]] = {
             _notes_inclined,
         ),
     ),
+    "T-CON-REF-01": (
+        _Spec(
+            "T-CON-REF-01 a",
+            Text.of("benchmark.title_propped_released"),
+            Text.of("benchmark.description_propped_released", span=SPAN, load_kn_m=W / 1000),
+            TOL_EXACT,
+            lambda case: _propped(case, _RELEASED),
+            _rows_ref01a,
+            _no_notes,
+            _MOMENT_SCALE_Q,
+        ),
+        _Spec(
+            "T-CON-REF-01 b",
+            Text.of("benchmark.title_propped_spring"),
+            Text.of(
+                "benchmark.description_propped_spring",
+                span=SPAN,
+                load_kn_m=W / 1000,
+                ratio=SPRING_RATIO,
+            ),
+            TOL_EXACT,
+            lambda case: _propped(case, _SPRING),
+            _rows_ref01b,
+            _no_notes,
+            _MOMENT_SCALE_Q,
+        ),
+    ),
+    "T-CON-REF-02": (
+        _Spec(
+            "T-CON-REF-02",
+            Text.of("benchmark.title_cantilever_spring"),
+            Text.of("benchmark.description_cantilever_spring", **_BEAM, ratio=SPRING_RATIO),
+            TOL_EXACT,
+            _build_ref02,
+            _rows_ref02,
+            _no_notes,
+        ),
+    ),
+    "T-CON-REF-03": (
+        _Spec(
+            "T-CON-REF-03",
+            Text.of("benchmark.title_internal_hinge"),
+            Text.of("benchmark.description_internal_hinge", **_BEAM),
+            TOL_EXACT,
+            _build_ref03,
+            _rows_ref03,
+            _no_notes,
+            _MOMENT_SCALE_P,
+        ),
+    ),
+    "T-CON-REF-04": (
+        _Spec(
+            "T-CON-REF-04",
+            Text.of("benchmark.title_truss"),
+            Text.of("benchmark.description_truss", **_BEAM, rise=TRUSS_RISE),
+            TOL_EXACT,
+            _build_ref04,
+            _rows_ref04,
+            _notes_orphans,
+            _MOMENT_SCALE_P,
+        ),
+    ),
 }
 
 
@@ -519,7 +767,7 @@ def _run_spec(spec: _Spec, timeout_s: float | None) -> ReferenceOutcome:
     notes: tuple[Text, ...] = ()
     if results is not None:
         case.results = results
-        checks = evaluate(spec.rows(case), spec.tolerance)
+        checks = evaluate(spec.rows(case), spec.tolerance, spec.scales)
         notes = tuple(spec.notes(case))
     return ReferenceOutcome(
         spec.case_id,

@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from typing import Final
 from uuid import UUID
 
-from veritas.core.connections.end import DofState
+from veritas.core.connections.end import Dof, DofState, EndConnection, MemberEnd
 from veritas.core.diagnostics import (
     Diagnostic,
     DiagnosticCode,
@@ -34,6 +34,7 @@ from veritas.fem.adapters.protocol import (
     Pair,
     PlanarBeam,
     PlanarBeamLoad,
+    PlanarEndLink,
     PlanarFix,
     PlanarNodalLoad,
     PlanarNode,
@@ -50,6 +51,13 @@ HYPOTHESIS_PLANAR: Final = "fem.hypothesis_planar"
 HYPOTHESIS_BEAM: Final = "fem.hypothesis_euler_bernoulli"
 HYPOTHESIS_OUT_OF_PLANE: Final = "fem.hypothesis_implicit_out_of_plane"
 HYPOTHESIS_PENALTY: Final = "fem.hypothesis_penalty"
+HYPOTHESIS_END_LINKS: Final = "fem.hypothesis_member_end_links"
+HYPOTHESIS_ORPHAN: Final = "fem.hypothesis_orphan_rotation"
+
+# Giro de flexión en el plano según la rama de inercia (T-010, D2): Iy → Ry, Iz → Rz.
+IN_PLANE_ROTATION: Final = {"Iy": Dof.RY, "Iz": Dof.RZ}
+# D8: un resorte de extremo con k·L/(E·I) mayor que esto degrada el condicionamiento.
+NEAR_RIGID_RATIO: Final = 1e8
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +67,17 @@ class Translation:
     request: PlanarRequest
     warnings: tuple[Diagnostic, ...]
     hypotheses: tuple[str, ...]
+    # Nudos con giro huérfano y momento aplicado: mecanismo (T-010, D3); no se restringen.
+    orphan_loaded: tuple[UUID, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingLink:
+    member_id: UUID
+    beam: int
+    end: MemberEnd
+    master: int
+    stiffness: float | None
 
 
 def _unsupported(
@@ -89,6 +108,8 @@ class _Builder:
         self.springs: list[PlanarSpring] = []
         self.fixes: list[PlanarFix] = []
         self.uses_penalty = False
+        self.pending_links: list[_PendingLink] = []
+        self.link_warnings: list[Diagnostic] = []
 
     def nodes(self) -> list[PlanarNode]:
         if not self.model.members:
@@ -123,11 +144,6 @@ class _Builder:
         for tag, (member_id, member) in enumerate(_ordered(self.model.members), start=1):
             location = Location(entity_id=member_id, revision=member.revision)
             label = member.label or str(member_id)
-            for end, connection in (("I", member.end_i), ("J", member.end_j)):
-                if any(state is not DofState.RIGID for state in connection.states):
-                    raise _unsupported(
-                        "fem.member_end_not_rigid", {"member": label, "end": end}, location
-                    )
             material = self.model.material(member.material)
             if material.family not in SUPPORTED_FAMILIES:
                 raise _unsupported(
@@ -161,6 +177,10 @@ class _Builder:
                     "fem.section_coupled_bending", {"member": label, "iyz": iyz}, location
                 )
             self.beam_tags[member_id] = tag
+            for end, connection in ((MemberEnd.I, member.end_i), (MemberEnd.J, member.end_j)):
+                self._end(
+                    member_id, label, tag, end, connection, branch=inertia_axis, location=location
+                )
             result.append(
                 PlanarBeam(
                     tag,
@@ -174,6 +194,85 @@ class _Builder:
                 )
             )
         return result
+
+    def _end(  # noqa: PLR0913 (identificación del extremo, por nombre)
+        self,
+        member_id: UUID,
+        label: str,
+        beam: int,
+        end: MemberEnd,
+        connection: EndConnection,
+        *,
+        branch: str,
+        location: Location,
+    ) -> None:
+        """Extremo I/J: solo el giro en el plano puede no ser rígido (D2-A)."""
+        if connection.is_rigid:
+            return
+        rotation = IN_PLANE_ROTATION[branch]
+        params: dict[str, ParamValue] = {"member": label, "end": str(end)}
+        for dof in Dof:
+            state = connection.state(dof)
+            if state is DofState.RIGID or dof is rotation:
+                continue
+            key = (
+                "fem.member_end_translation_unsupported"
+                if dof.is_translation
+                else "fem.member_end_out_of_plane_unsupported"
+            )
+            raise _unsupported(key, {**params, "dof": str(dof), "state": str(state)}, location)
+        member = self.model.member(member_id)
+        node = member.node_i if end is MemberEnd.I else member.node_j
+        stiffness = connection.stiffness[rotation.position]
+        self.pending_links.append(
+            _PendingLink(member_id, beam, end, self.node_tags[node], stiffness)
+        )
+
+    def finish_links(self, beams: list[PlanarBeam]) -> list[PlanarEndLink]:
+        """Etiquetas de enlaces tras los resortes de apoyo: elementos B+S+k, aux N+S+k."""
+        by_tag = {beam.tag: beam for beam in beams}
+        first_element = len(self.beam_tags) + len(self.springs) + 1
+        first_aux = len(self.node_tags) + len(self.springs) + 1
+        links = []
+        ordered = sorted(self.pending_links, key=lambda p: (p.beam, str(p.end)))
+        for k, pending in enumerate(ordered):
+            links.append(
+                PlanarEndLink(
+                    first_element + k,
+                    str(pending.member_id),
+                    pending.beam,
+                    str(pending.end),
+                    pending.master,
+                    first_aux + k,
+                    pending.stiffness,
+                )
+            )
+            if pending.stiffness is not None:
+                self._near_rigid(pending, by_tag[pending.beam])
+        return links
+
+    def _near_rigid(self, pending: _PendingLink, beam: PlanarBeam) -> None:
+        xi, xj = self.coordinates[beam.node_i], self.coordinates[beam.node_j]
+        length = math.hypot(xj[0] - xi[0], xj[1] - xi[1])
+        assert pending.stiffness is not None
+        ratio = pending.stiffness * length / (beam.elastic_modulus * beam.inertia)
+        if ratio <= NEAR_RIGID_RATIO:
+            return
+        member = self.model.member(pending.member_id)
+        self.link_warnings.append(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                "fem.end_spring_near_rigid",
+                {
+                    "member": member.label or str(member.id),
+                    "end": str(pending.end),
+                    "ratio": ratio,
+                    "limit": NEAR_RIGID_RATIO,
+                },
+                severity=Severity.WARNING,
+                location=Location(entity_id=member.id, revision=member.revision),
+            )
+        )
 
     def _add_spring(  # noqa: PLR0913 (campos del resorte, por nombre)
         self,
@@ -307,6 +406,26 @@ class _Builder:
         return Vec3(q.x, 0.0, q.z)
 
 
+def _orphans(request: PlanarRequest) -> tuple[list[int], list[int]]:
+    """Giros huérfanos (D3): ni extremo rígido ni resorte, ni giro fijo o resorte de apoyo.
+
+    Criterio estructural sobre la petición. Devuelve (restringibles, con momento aplicado).
+    """
+    links = {(link.beam, link.end): link for link in request.end_links}
+    stiffened: set[int] = {fix.node for fix in request.fixes if fix.fixity[2]}
+    stiffened |= {s.node for s in request.springs if s.dof == 3}  # noqa: PLR2004 (giro)
+    incident: set[int] = set()
+    for beam in request.beams:
+        for end, node in (("I", beam.node_i), ("J", beam.node_j)):
+            incident.add(node)
+            link = links.get((beam.tag, end))
+            if link is None or link.stiffness is not None:
+                stiffened.add(node)
+    loaded = {load.node for load in request.nodal_loads if load.m != 0.0}
+    orphans = sorted(incident - stiffened)
+    return [t for t in orphans if t not in loaded], [t for t in orphans if t in loaded]
+
+
 def _global_index(axis: Pair) -> int | None:
     if axis[1] == 0.0 and abs(axis[0]) == 1.0:
         return 0
@@ -347,6 +466,7 @@ def translate_planar_xz(model: StructuralModel, config: AnalysisConfiguration) -
     nodes = builder.nodes()
     beams = builder.beams()
     builder.supports()
+    links = builder.finish_links(beams)
     nodal, beam_loads = builder.loads(case.id)
     request = PlanarRequest(
         model.model_revision,
@@ -358,7 +478,21 @@ def translate_planar_xz(model: StructuralModel, config: AnalysisConfiguration) -
         tuple(builder.springs),
         tuple(nodal),
         tuple(beam_loads),
+        tuple(links),
     )
+    node_ids = {tag: node_id for node_id, tag in builder.node_tags.items()}
+    restrained, loaded = _orphans(request)
+    request = replace(request, orphan_fixes=tuple(restrained))
+    orphan_warnings = [
+        Diagnostic.create(
+            DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+            "fem.orphan_rotation_restrained",
+            {"node": model.node(node_ids[tag]).label or str(node_ids[tag])},
+            severity=Severity.WARNING,
+            location=Location(entity_id=node_ids[tag], revision=model.node(node_ids[tag]).revision),
+        )
+        for tag in restrained
+    ]
     if builder.uses_penalty:
         local = translational_diagonal(request)
         request = replace(
@@ -371,4 +505,9 @@ def translate_planar_xz(model: StructuralModel, config: AnalysisConfiguration) -
     hypotheses = [HYPOTHESIS_PLANAR, HYPOTHESIS_BEAM, HYPOTHESIS_OUT_OF_PLANE]
     if builder.uses_penalty:
         hypotheses.append(HYPOTHESIS_PENALTY)
-    return Translation(request, _out_of_plane_warnings(model), tuple(hypotheses))
+    if links:
+        hypotheses.append(HYPOTHESIS_END_LINKS)
+    if restrained:
+        hypotheses.append(HYPOTHESIS_ORPHAN)
+    warnings = (*_out_of_plane_warnings(model), *builder.link_warnings, *orphan_warnings)
+    return Translation(request, warnings, tuple(hypotheses), tuple(node_ids[t] for t in loaded))

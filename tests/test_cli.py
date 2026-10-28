@@ -36,6 +36,7 @@ def test_only_implemented_modules_are_declared_available() -> None:
         "Geometría y barras",
         "Materiales y secciones",
         "Apoyos",
+        "Uniones de extremo I/J",
         "Cargas",
         "Análisis FEM",
     }

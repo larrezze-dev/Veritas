@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 PROTOCOL_ID: Final = "veritas.opensees.planar"
-PROTOCOL_VERSION: Final = 1
+PROTOCOL_VERSION: Final = 2  # 2: extremos de barra liberados/resorte (T-010)
 
 type Pair = tuple[float, float]
 type Triple = tuple[float, float, float]
@@ -140,6 +140,25 @@ class PlanarSpring:
 
 
 @dataclass(frozen=True, slots=True)
+class PlanarEndLink:
+    """Extremo de barra no rígido en el giro del plano (plan T-010, D2).
+
+    El elemento ``beam`` se conecta en ese extremo al nudo ``aux`` (mismas coordenadas que
+    ``master``), unido al maestro por ``equalDOF`` en u₁, u₂. ``stiffness`` None = giro
+    liberado; si no, ``zeroLength`` rotacional relativo de etiqueta ``tag`` (elemento y
+    material). El aux nunca lleva ``fix``.
+    """
+
+    tag: int
+    member_id: str
+    beam: int
+    end: str
+    master: int
+    aux: int
+    stiffness: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class PlanarNodalLoad:
     """Carga nodal en la base del solver: (P₁, P₂, M) = (Fx, Fz, −My)."""
 
@@ -171,6 +190,15 @@ class PlanarRequest:
     springs: tuple[PlanarSpring, ...]
     nodal_loads: tuple[PlanarNodalLoad, ...]
     beam_loads: tuple[PlanarBeamLoad, ...]
+    end_links: tuple[PlanarEndLink, ...] = ()
+    orphan_fixes: tuple[int, ...] = ()
+
+    def element_node(self, beam: PlanarBeam, end: str) -> int:
+        """Nudo al que se conecta el elemento en ese extremo: aux si hay enlace, si no el nudo."""
+        for link in self.end_links:
+            if link.beam == beam.tag and link.end == end:
+                return link.aux
+        return beam.node_i if end == "I" else beam.node_j
 
     def to_dict(self) -> dict[str, Any]:
         """Diccionario JSON del protocolo."""
@@ -211,6 +239,11 @@ class PlanarRequest:
             ],
             "nodal_loads": [[p.node, p.p1, p.p2, p.m] for p in self.nodal_loads],
             "beam_loads": [[w.beam, w.wy, w.wx] for w in self.beam_loads],
+            "end_links": [
+                [k.tag, k.member_id, k.beam, k.end, k.master, k.aux, k.stiffness]
+                for k in self.end_links
+            ],
+            "orphan_fixes": list(self.orphan_fixes),
         }
 
     def to_json(self) -> str:
@@ -268,6 +301,19 @@ class PlanarRequest:
             PlanarBeamLoad(_int(w[0], "beam"), *_floats(w[1:], "beam_load", 2))
             for w in (_list(item, "beam_load", 3) for item in _list(data["beam_loads"], "bl"))
         )
+        links = tuple(
+            PlanarEndLink(
+                _int(k[0], "link"),
+                _str(k[1], "member"),
+                _int(k[2], "beam"),
+                _str(k[3], "end"),
+                _int(k[4], "master"),
+                _int(k[5], "aux"),
+                None if k[6] is None else _finite(k[6], "k"),
+            )
+            for k in (_list(item, "link", 7) for item in _list(data["end_links"], "end_links"))
+        )
+        orphans = tuple(_int(t, "orphan") for t in _list(data["orphan_fixes"], "orphan_fixes"))
         return cls(
             _int(data["model_revision"], "model_revision"),
             _str(data["case_id"], "case_id"),
@@ -278,6 +324,8 @@ class PlanarRequest:
             springs,
             nodal,
             beam_loads,
+            links,
+            orphans,
         )
 
 
@@ -300,6 +348,8 @@ _REQUEST_KEYS: Final = frozenset(
         "springs",
         "nodal_loads",
         "beam_loads",
+        "end_links",
+        "orphan_fixes",
     }
 )
 _RESPONSE_KEYS: Final = frozenset(
@@ -312,6 +362,7 @@ _RESPONSE_KEYS: Final = frozenset(
         "versions",
         "nodes",
         "aux",
+        "end_aux",
         "beams",
     }
 )
@@ -339,6 +390,7 @@ class WorkerResponse:
     node_results: tuple[tuple[int, Triple, Triple], ...]
     aux_reactions: tuple[tuple[int, Triple], ...]
     beam_forces: tuple[tuple[int, tuple[float, ...]], ...]
+    end_aux: tuple[tuple[int, Triple, Triple], ...] = ()
 
     @classmethod
     def from_json(cls, text: str) -> "WorkerResponse":
@@ -366,6 +418,10 @@ class WorkerResponse:
             (_int(b[0], "beam"), _floats(b[1], "local_force", 6))
             for b in (_list(item, "beam", 2) for item in _list(data["beams"], "beams"))
         )
+        end_aux = tuple(
+            (_int(a[0], "end_aux"), _floats(a[1], "end_disp", 3), _floats(a[2], "end_reaction", 3))
+            for a in (_list(item, "end_aux", 3) for item in _list(data["end_aux"], "end_aux"))
+        )
         return cls(
             status,
             analyze_code,
@@ -374,4 +430,5 @@ class WorkerResponse:
             node_results,  # type: ignore[arg-type]
             aux,  # type: ignore[arg-type]
             beams,
+            end_aux,  # type: ignore[arg-type]
         )

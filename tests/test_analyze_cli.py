@@ -113,3 +113,40 @@ def test_info_declares_fem_normalized_but_not_validated() -> None:
     assert "normalizados (T-008)" in status
     assert "contrastados solo con T-FEM-001…004 (T-009)" in status
     assert status.endswith("no validados")
+
+
+# --- T-010, D7: uniones, tres materiales y biempotrada --------------------------------
+
+
+@pytest.mark.solver
+def test_unions_compares_three_ends_and_diagnoses_mechanism(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(["analyze", "uniones", "--profile", "kN-m"]) == cli.EXIT_OK
+    out = capsys.readouterr().out
+    for name in ("Rígida", "Liberada", "Resorte", "Ref. Rígida", "Ref. Liberada"):
+        assert name in out
+    assert out.count("Estado: SUCCEEDED") == 3
+    assert "[Mecanismo] Estado: FAILED" in out
+    assert "ANALYSIS_SINGULAR" in out
+    assert "Ubicación (orientativa):" in out
+    assert "6.875 kN" in out  # 11P/16 de la variante liberada.
+    assert cli.COMPARISON_NOTE in out
+    assert cli.EXPERIMENTAL_WARNING in out
+
+
+@pytest.mark.solver
+def test_three_materials_demo(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["analyze", "demo", "--caso", "tres-materiales"]) == cli.EXIT_OK
+    out = capsys.readouterr().out
+    for text in ("Acero S235", "Acero S355", "Aluminio", "[ALUMINIUM]", "J de B2 liberado"):
+        assert text in out
+    assert out.count("Estado: SUCCEEDED") == 2
+    assert "Los dos aceros tienen el mismo E" in out
+
+
+def test_fixed_fixed_demo_is_rejected_before_solver(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["analyze", "demo", "--caso", "biempotrada"]) == cli.EXIT_DIAGNOSTIC
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err.startswith("UNSUPPORTED_CONFIGURATION:")

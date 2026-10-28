@@ -40,6 +40,7 @@ from veritas.fem.adapters.singularity import (
     PivotReport,
     beam_stiffness,
     check_singularity,
+    element_displacement,
     reduced_coordinates,
 )
 from veritas.fem.config import AnalysisConfiguration
@@ -62,6 +63,7 @@ from veritas.fem.results.run import (
     RAW_BASIS,
     AnalysisRun,
     PivotSummary,
+    RawEndRotation,
     RawMemberForces,
     RawNodeResult,
     RawPlanarResults,
@@ -164,6 +166,17 @@ class _Run:
 
 def _pivot_summary(request: PlanarRequest, report: PivotReport) -> PivotSummary:
     node_ids = {node.tag: UUID(node.entity_id) for node in request.nodes}
+    links = {link.aux: link for link in request.end_links}
+    if report.dof is not None and report.dof.node in links:
+        link = links[report.dof.node]
+        return PivotSummary(
+            free_dofs=report.free_dofs,
+            min_pivot=report.min_pivot,
+            node_id=node_ids[link.master],
+            component=report.dof.component,
+            member_id=UUID(link.member_id),
+            end=link.end,
+        )
     return PivotSummary(
         free_dofs=report.free_dofs,
         min_pivot=report.min_pivot,
@@ -172,33 +185,58 @@ def _pivot_summary(request: PlanarRequest, report: PivotReport) -> PivotSummary:
     )
 
 
-def _raw_results(request: PlanarRequest, response: WorkerResponse) -> RawPlanarResults:
+def _fixed_reactions(
+    request: PlanarRequest, response: WorkerResponse
+) -> dict[int, tuple[float | None, float | None, float | None]]:
+    """Reacción por nudo en sus GDL con ``fix`` (T-010, D2; revisión M3).
+
+    En traslación se suma la de los aux de extremo de ese nudo: con Transformation, la
+    fuerza transmitida por ``equalDOF`` aparece en ``nodeReaction(aux)``. En un GDL sin
+    ``fix`` esa fuerza es interna y no se suma. El giro del aux nunca se suma: el momento
+    de un resorte de extremo ya llega al maestro por el ``zeroLength``.
+    """
     fixity = {fix.node: fix.fixity for fix in request.fixes}
+    extra: dict[int, list[float]] = {}
+    aux_reaction = {tag: reaction for tag, _disp, reaction in response.end_aux}
+    for link in request.end_links:
+        entry = extra.setdefault(link.master, [0.0, 0.0])
+        entry[0] += aux_reaction[link.aux][0]
+        entry[1] += aux_reaction[link.aux][1]
+    result: dict[int, tuple[float | None, float | None, float | None]] = {}
+    for tag, _disp, reaction in response.node_results:
+        fixed = fixity.get(tag, (0, 0, 0))
+        add = extra.get(tag, [0.0, 0.0])
+        result[tag] = (
+            reaction[0] + add[0] if fixed[0] else None,
+            reaction[1] + add[1] if fixed[1] else None,
+            reaction[2] if fixed[2] else None,
+        )
+    return result
+
+
+def _raw_results(request: PlanarRequest, response: WorkerResponse) -> RawPlanarResults:
     node_ids = {node.tag: UUID(node.entity_id) for node in request.nodes}
-    by_node = {tag: (disp, reaction) for tag, disp, reaction in response.node_results}
+    by_node = {tag: disp for tag, disp, _reaction in response.node_results}
     by_aux = dict(response.aux_reactions)
     by_beam = dict(response.beam_forces)
+    by_end = {tag: disp for tag, disp, _reaction in response.end_aux}
     if (
         set(by_node) != set(node_ids)
         or set(by_aux) != {s.aux_node for s in request.springs}
         or set(by_beam) != {b.tag for b in request.beams}
+        or set(by_end) != {link.aux for link in request.end_links}
+        or len(by_end) != len(response.end_aux)
     ):
         raise ProtocolError("la respuesta no corresponde a la petición")
-    nodes = []
-    for node in request.nodes:
-        disp, reaction = by_node[node.tag]
-        fixed = fixity.get(node.tag, (0, 0, 0))
-        nodes.append(
-            RawNodeResult(
-                node_ids[node.tag],
-                (disp[0], disp[1], disp[2]),
-                (
-                    reaction[0] if fixed[0] else None,
-                    reaction[1] if fixed[1] else None,
-                    reaction[2] if fixed[2] else None,
-                ),
-            )
+    reactions = _fixed_reactions(request, response)
+    nodes = [
+        RawNodeResult(
+            node_ids[node.tag],
+            (by_node[node.tag][0], by_node[node.tag][1], by_node[node.tag][2]),
+            reactions[node.tag],
         )
+        for node in request.nodes
+    ]
     springs = tuple(
         RawSpringReaction(
             UUID(s.support_id),
@@ -213,7 +251,11 @@ def _raw_results(request: PlanarRequest, response: WorkerResponse) -> RawPlanarR
         RawMemberForces(UUID(b.entity_id), tuple(by_beam[b.tag]))  # type: ignore[arg-type]
         for b in request.beams
     )
-    return RawPlanarResults(RAW_BASIS, tuple(nodes), springs, members)
+    rotations = tuple(
+        RawEndRotation(UUID(link.member_id), link.end, by_end[link.aux][2])
+        for link in request.end_links
+    )
+    return RawPlanarResults(RAW_BASIS, tuple(nodes), springs, members, rotations)
 
 
 def equilibrium_residual(
@@ -237,12 +279,10 @@ def equilibrium_residual(
         q2 = beam_load.wx * uz + beam_load.wy * ux
         forces.append(((xi + xj) / 2, (zi + zj) / 2, q1 * length, q2 * length, 0.0))
     # Solo reacciones de GDL fijados: en un GDL libre, nodeReaction es el residuo de la
-    # propia solución e incluirlo haría el control tautológico.
-    fixity = {fix.node: fix.fixity for fix in request.fixes}
-    for tag, _disp, reaction in response.node_results:
-        fixed = fixity.get(tag, (0, 0, 0))
+    # propia solución e incluirlo haría el control tautológico. Incluye los aux de extremo.
+    for tag, reaction in _fixed_reactions(request, response).items():
         x1, x2 = coords[tag]
-        r1, r2, r3 = (value if fixed[k] else 0.0 for k, value in enumerate(reaction))
+        r1, r2, r3 = (0.0 if value is None else value for value in reaction)
         forces.append((x1, x2, r1, r2, r3))
     aux_node = {s.aux_node: s.node for s in request.springs}
     for tag, reaction in response.aux_reactions:
@@ -279,6 +319,7 @@ def _rounding_bound(request: PlanarRequest, response: WorkerResponse) -> tuple[f
     fuerza (N) y de momento (N·m) se acotan por separado para no mezclar unidades.
     """
     displacement = {tag: disp for tag, disp, _reaction in response.node_results}
+    displacement |= {tag: disp for tag, disp, _reaction in response.end_aux}
     coords = {node.tag: (node.x1, node.x2) for node in request.nodes}
     force = moment = 0.0
     for beam in request.beams:
@@ -289,7 +330,7 @@ def _rounding_bound(request: PlanarRequest, response: WorkerResponse) -> tuple[f
             beam.elastic_modulus,
             beam.inertia,
         )
-        u = (*displacement[beam.node_i], *displacement[beam.node_j])
+        u = element_displacement(request, beam, displacement)
         for row, values in enumerate(element):
             bound = sum(abs(k * v) for k, v in zip(values, u, strict=True))
             if row % 3 == 2:  # noqa: PLR2004 (filas de giro)
@@ -302,6 +343,11 @@ def _rounding_bound(request: PlanarRequest, response: WorkerResponse) -> tuple[f
             moment += spring.stiffness * abs(node_u[2])
         else:
             force += spring.stiffness * math.hypot(node_u[0], node_u[1])
+    for link in request.end_links:
+        if link.stiffness is not None:
+            # Σ|k_ij·u_j| de las dos filas de k·[[1, −1], [−1, 1]] (revisión E2, hallazgo 1).
+            rotations = abs(displacement[link.master][2]) + abs(displacement[link.aux][2])
+            moment += 2.0 * link.stiffness * rotations
     scale = PENALTY_EQUILIBRIUM_FACTOR * sys.float_info.epsilon
     return scale * force, scale * moment
 
@@ -363,6 +409,18 @@ def analyze_planar_xz(  # noqa: PLR0911 (un retorno por causa de fallo)
     run.translation = translation = translate_planar_xz(model, config)
     request = translation.request
     run.case_revision = request.case_revision
+    if translation.orphan_loaded:
+        nodes = [model.node(node_id) for node_id in translation.orphan_loaded]
+        node = nodes[0]
+        return run.finish(
+            _Failure(
+                DiagnosticCode.ANALYSIS_SINGULAR,
+                "fem.mechanism_orphan_rotation",
+                {"node": ", ".join(n.label or str(n.id) for n in nodes)},
+                Location(entity_id=node.id, revision=node.revision),
+            ),
+            None,
+        )
     free = len(reduced_coordinates(request))
     if free == 0:
         raise _no_free_dofs()
@@ -376,6 +434,22 @@ def analyze_planar_xz(  # noqa: PLR0911 (un retorno por causa de fallo)
             None,
         )
     run.pivot = _pivot_summary(request, report)
+    if report.singular and run.pivot.member_id is not None:
+        member = model.member(run.pivot.member_id)
+        return run.finish(
+            _Failure(
+                DiagnosticCode.ANALYSIS_SINGULAR,
+                "fem.mechanism_member_end",
+                {
+                    "member": member.label or str(member.id),
+                    "end": run.pivot.end or "",
+                    "pivot": report.min_pivot if report.min_pivot is not None else 0.0,
+                    "tolerance": config.tol_pivot,
+                },
+                Location(entity_id=member.id, revision=member.revision),
+            ),
+            None,
+        )
     if report.singular:
         location = None if run.pivot.node_id is None else Location(entity_id=run.pivot.node_id)
         return run.finish(

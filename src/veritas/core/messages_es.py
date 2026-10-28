@@ -109,9 +109,31 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "(Y = {y} m; se exige |Y| ≤ {tolerance} m)."
     ),
     "fem.isolated_node": "El nudo {node} no pertenece a ninguna barra.",
-    "fem.member_end_not_rigid": (
-        "El extremo {end} de la barra {member} no es rígido; el análisis plano aún no admite "
-        "liberaciones (T-010)."
+    "fem.member_end_translation_unsupported": (
+        "El extremo {end} de la barra {member} tiene {dof} en estado {state}: el análisis plano "
+        "solo admite liberación o resorte en el giro de flexión del plano, no en traslaciones."
+    ),
+    "fem.member_end_out_of_plane_unsupported": (
+        "El extremo {end} de la barra {member} tiene {dof} en estado {state}: es un GDL fuera "
+        "del plano XZ y el análisis plano no puede representarlo. Libere solo el giro del plano."
+    ),
+    "fem.end_spring_near_rigid": (
+        "El resorte del extremo {end} de la barra {member} es casi rígido (k·L/(E·I) = {ratio} "
+        "> {limit}); degrada el condicionamiento. Considere el estado RIGID."
+    ),
+    "fem.orphan_rotation_restrained": (
+        "En el nudo {node} todas las barras tienen el giro liberado y ningún apoyo lo restringe: "
+        "ese giro no tiene rigidez ni carga y se restringe para el cálculo. No es una reacción "
+        "y el giro del nudo no se publica."
+    ),
+    "fem.mechanism_orphan_rotation": (
+        "Mecanismo en el nudo o nudos {node}: todas las barras tienen el giro liberado, ningún "
+        "apoyo lo restringe y el caso aplica un momento en ese nudo. No se calcula."
+    ),
+    "fem.mechanism_member_end": (
+        "Rigidez singular (pivote escalado {pivot} ≤ {tolerance}): mecanismo que afecta, al "
+        "menos, al giro del extremo {end} de la barra {member}. La ubicación es orientativa (un "
+        "GDL del mecanismo, no el mecanismo completo). No se calcula."
     ),
     "fem.material_family_unsupported": (
         "La barra {member} usa material {family}; el análisis plano solo admite acero y aluminio "
@@ -187,10 +209,18 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Al menos un apoyo inclinado rígido se representa por penalización (error relativo del "
         "orden de 1e-8 en la dirección restringida)."
     ),
+    "fem.hypothesis_member_end_links": (
+        "Extremos de barra con giro liberado o resorte: nudo auxiliar con las traslaciones del "
+        "nudo (equalDOF) y giro propio; resorte rotacional lineal, elástico y bilateral."
+    ),
+    "fem.hypothesis_orphan_rotation": (
+        "Giros de nudo sin rigidez ni carga (todas las barras liberadas) restringidos para el "
+        "cálculo; no son reacciones."
+    ),
     "fem.hypothesis_normalized": (
         "Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación "
-        "plana contrastada solo con T-FEM-001…004 (T-009); este resultado no está validado; "
-        "aplicación experimental."
+        "plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este "
+        "resultado no está validado; aplicación experimental."
     ),
     "fem.hypothesis_support_projection": (
         "Reacción en base del apoyo inclinado: Q_apoyo·R con Y, Mx y Mz tomados como 0 (no "
@@ -251,6 +281,37 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "benchmark.note_in_plane_not_applicable": (
         "R_x′ en N3: no aplicable (GDL libre); la reacción no tiene componente en el plano de "
         "rodadura."
+    ),
+    "benchmark.title_propped_released": "Empotrada-deslizadera con extremo I liberado",
+    "benchmark.title_propped_spring": "Empotrada-deslizadera con resorte en el extremo I",
+    "benchmark.title_cantilever_spring": "Voladizo con resorte en el extremo I",
+    "benchmark.title_internal_hinge": "Rótula interior (extremo J liberado)",
+    "benchmark.title_truss": "Cercha triangular articulada",
+    "benchmark.description_propped_released": (
+        "Barra de {span} m, empotramiento en N1 y deslizadera Uz en N2, carga {load_kn_m} kN/m "
+        "hacia −Z; giro Ry del extremo I liberado (equivale a biapoyada). T-CON-002/003."
+    ),
+    "benchmark.description_propped_spring": (
+        "Barra de {span} m, empotramiento en N1 y deslizadera Uz en N2, carga {load_kn_m} kN/m "
+        "hacia −Z; resorte rotacional en el extremo I con k·L/(EI) = {ratio}: "
+        "M_I = (wL²/8)/(1 + 3EI/(kL)). T-CON-003."
+    ),
+    "benchmark.description_cantilever_spring": (
+        "Voladizo de {span} m empotrado en N1 con resorte rotacional en el extremo I "
+        "(k·L/(EI) = {ratio}) y P = {load_kn} kN hacia −Z en N2: δ = PL³/(3EI) + PL²/k."
+    ),
+    "benchmark.description_internal_hinge": (
+        "Dos barras de {span} m; empotramiento en N1, rótula en N2 (extremo J de B1 liberado), "
+        "deslizadera Uz en N3; P = {load_kn} kN hacia −Z en N2. Isostática."
+    ),
+    "benchmark.description_truss": (
+        "Cercha N1–N2–N3 de {span} m de luz y {rise} m de flecha, todos los extremos con el "
+        "giro liberado; articulación en N1, rodillo en N2 y P = {load_kn} kN hacia −Z en N3. "
+        "Axiles por equilibrio de nudos; flecha por trabajos virtuales."
+    ),
+    "benchmark.note_orphan_rotations": (
+        "Giros de nudo sin rigidez restringidos para el cálculo en {nodes} nudos (D3-A del plan "
+        "T-010); su giro se publica como no aplicable."
     ),
     "benchmark.note_in_plane_status": "R_x′ en N3: estado {status} (se esperaba no aplicable).",
     "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",

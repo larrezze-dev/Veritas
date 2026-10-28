@@ -15,7 +15,7 @@ from veritas.core.diagnostics import Diagnostic
 
 RAW_BASIS: Final = "SOLVER_XZ_RAW"
 ADAPTER_ID: Final = "veritas.fem.planar_xz"
-ADAPTER_VERSION: Final = "1"
+ADAPTER_VERSION: Final = "2"  # 2: extremos liberados/resorte (T-010)
 
 type Triple = tuple[float, float, float]
 
@@ -61,13 +61,27 @@ class RawMemberForces:
 
 
 @dataclass(frozen=True, slots=True)
+class RawEndRotation:
+    """Giro θ del extremo no rígido de una barra (nudo auxiliar; T-010). No se publica."""
+
+    member_id: UUID
+    end: str
+    theta: float
+
+
+@dataclass(frozen=True, slots=True)
 class RawPlanarResults:
-    """Salida bruta del solver, no normalizada."""
+    """Salida bruta del solver, no normalizada.
+
+    La reacción de un nudo con extremos no rígidos ya suma, en los GDL de traslación con
+    ``fix``, la de sus nudos auxiliares (T-010, D2: ``equalDOF`` la lleva al aux).
+    """
 
     basis: str
     nodes: tuple[RawNodeResult, ...]
     springs: tuple[RawSpringReaction, ...]
     members: tuple[RawMemberForces, ...]
+    end_rotations: tuple[RawEndRotation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +92,9 @@ class PivotSummary:
     min_pivot: float | None
     node_id: UUID | None
     component: str | None
+    # T-010: el GDL del pivote es el giro propio del extremo ``end`` de ``member_id``.
+    member_id: UUID | None = None
+    end: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

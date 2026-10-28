@@ -7,13 +7,17 @@ seis componentes con ejes y signos de ADR-001:
 2. ``localForce`` = (N_I, V_I, M_I, N_J, V_J, M_J): acciones del nudo sobre el elemento en
    la base 2D (x̂ de I a J, ŷ = x̂ girado +90°), con las fuerzas de empotramiento de
    ``-beamUniform`` (gates G-N1…G-N3). Se elevan y se rotan con la Q de la barra.
-3. Reacción de apoyo = ``nodeReaction`` en los GDL con ``fix`` + reacciones de sus nudos
-   auxiliares; en base inclinada, además Q_apoyo·R.
+3. Reacción de apoyo = ``nodeReaction`` en los GDL con ``fix`` (con la de los aux de
+   extremo de barra en traslación, T-010) + reacciones de sus nudos auxiliares de resorte;
+   en base inclinada, además Q_apoyo·R.
+4. Extremos no rígidos (T-010): las fuerzas de extremo actúan sobre el nudo (el aux solo
+   comparte traslaciones y transmite el momento del resorte, o ninguno si está liberado).
+   El giro de un nudo huérfano restringido para el cálculo es NOT_APPLICABLE.
 
 El estado de cada componente se decide por la estructura, nunca por su valor. Postcondiciones
 (D7, B1): equilibrio de nudos, barras y global, y coherencia de Q. Si fallan, no hay
-resultados. La formulación plana solo se ha contrastado con T-FEM-001…004 (T-009); los
-valores no están validados.
+resultados. La formulación plana solo se ha contrastado con T-FEM-001…004 (T-009) y
+T-CON-REF-01…04 (T-010); los valores no están validados.
 """
 
 import math
@@ -37,7 +41,7 @@ from veritas.core.loads.loads import LoadBasis, MemberUniformLoad, NodalLoad, Se
 from veritas.core.supports.support import BasisKind, RestraintKind, Support, SupportDof
 from veritas.fem.adapters.planar_xz import translate_planar_xz
 from veritas.fem.adapters.protocol import PlanarRequest
-from veritas.fem.adapters.singularity import beam_stiffness
+from veritas.fem.adapters.singularity import beam_stiffness, element_displacement
 from veritas.fem.config import AnalysisConfiguration
 from veritas.fem.results.run import AnalysisRun, RunStatus
 
@@ -138,8 +142,10 @@ class MemberEndForces:
     """Fuerzas de extremo pI/pJ (acción del nudo sobre la barra) en base local.
 
     ``section_start`` = q(0+) = −pI y ``section_end`` = q(L−) = pJ, en el orden
-    (N, Vy, Vz, T, My, Mz); válidos porque no hay cargas puntuales, offsets ni liberaciones
-    (T-007 los rechaza). ``axes`` son las filas de la Q usada (D8, trazabilidad).
+    (N, Vy, Vz, T, My, Mz); válidos porque no hay cargas puntuales ni offsets (se
+    rechazan). Con extremos liberados o con resorte (T-010) siguen siendo las acciones del
+    extremo de la barra; en un giro liberado el momento es nulo salvo redondeo. ``axes`` son
+    las filas de la Q usada (D8, trazabilidad).
     """
 
     member_id: UUID
@@ -303,13 +309,16 @@ class _Normalizer:
     # Desplazamientos (D3-A: fuera del plano NOT_CALCULATED).
     def nodes(self) -> tuple[NodeDisplacement, ...]:
         result = []
+        orphan_tags = set(self.request.orphan_fixes)
+        orphans = {node_id for node_id, tag in self.tag_of.items() if tag in orphan_tags}
         for raw in self.raw.nodes:
             u1, u2, theta = raw.displacement
-            ry = _elevate_moment(theta).y
+            # Giro huérfano (T-010, D3): restringido para el cálculo, sin valor propio.
+            ry = _NA if raw.node_id in orphans else _calc(_elevate_moment(theta).y)
             result.append(
                 NodeDisplacement(
                     raw.node_id,
-                    _vector(ResultBasis.GLOBAL, (_calc(u1), _NC, _calc(u2), _NC, _calc(ry), _NC)),
+                    _vector(ResultBasis.GLOBAL, (_calc(u1), _NC, _calc(u2), _NC, ry, _NC)),
                 )
             )
         return tuple(result)
@@ -553,7 +562,12 @@ class _Normalizer:
 
     def _rounding_bounds(self) -> dict[int, tuple[float, float]]:
         """Cota c·eps·Σ|k_ij·u_j| por nudo, en filas de fuerza y de momento (M2)."""
-        displacement = {self.tag_of[k]: v for k, v in self.displacement.items()}
+        displacement: dict[int, tuple[float, ...]] = {
+            self.tag_of[k]: v for k, v in self.displacement.items()
+        }
+        theta = {(str(r.member_id), r.end): r.theta for r in self.raw.end_rotations}
+        for link in self.request.end_links:
+            displacement[link.aux] = (0.0, 0.0, theta[(link.member_id, link.end)])
         bounds: dict[int, list[float]] = {}
         for beam in self.request.beams:
             element = beam_stiffness(
@@ -563,7 +577,7 @@ class _Normalizer:
                 beam.elastic_modulus,
                 beam.inertia,
             )
-            u = (*displacement[beam.node_i], *displacement[beam.node_j])
+            u = element_displacement(self.request, beam, displacement)
             for row, values in enumerate(element):
                 tag = beam.node_i if row < 3 else beam.node_j  # noqa: PLR2004
                 entry = bounds.setdefault(tag, [0.0, 0.0])
@@ -577,6 +591,12 @@ class _Normalizer:
                 entry[1] += spring.stiffness * abs(node_u[2])
             else:
                 entry[0] += spring.stiffness * math.hypot(node_u[0], node_u[1])
+        for link in self.request.end_links:
+            if link.stiffness is not None:
+                # Σ|k_ij·u_j| de las dos filas del resorte, en el nudo maestro.
+                rotations = abs(displacement[link.master][2]) + abs(displacement[link.aux][2])
+                entry = bounds.setdefault(link.master, [0.0, 0.0])
+                entry[1] += 2.0 * link.stiffness * rotations
         scale = ROUNDING_FACTOR * _EPS
         return {tag: (scale * f, scale * m) for tag, (f, m) in bounds.items()}
 

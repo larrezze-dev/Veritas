@@ -23,14 +23,20 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   cargas uniformes locales; resultantes ΣF/ΣM de las acciones prescritas respecto al
   origen y traza de ``model_revision``, código 0 (plan T-006). No son resultados de
   análisis y se dice expresamente.
-- ``veritas analyze demo [--caso viga|mecanismo|portico] [--timeout S] [--profile P]
-  [--bruto]``: análisis plano XZ con OpenSeesPy en un proceso aislado (plan T-007).
+- ``veritas analyze demo [--caso viga|mecanismo|portico|tres-materiales|biempotrada]
+  [--timeout S] [--profile P] [--bruto]``: análisis plano XZ con OpenSeesPy en un proceso
+  aislado (plan T-007). ``tres-materiales`` compara uniones rígidas y un extremo liberado
+  (T-010); ``biempotrada`` se rechaza sin GDL libres (código 2, T-009 D3).
   Imprime estado, procedencia, diagnósticos y, solo si la corrida es SUCCEEDED, tablas
   normalizadas a ADR-001 (plan T-008): desplazamientos, reacciones y fuerzas/esfuerzos de
   extremo; ``--bruto`` añade la tabla BRUTA del solver. Código 0 si SUCCEEDED; 3 si FAILED
   o si la normalización no supera sus postcondiciones (sin resultados).
-- ``veritas analyze referencias [--caso T-FEM-001|…|T-FEM-004|todos] [--timeout S]
-  [--profile P]``: contraste con las referencias analíticas T-FEM-001…004 (plan T-009):
+- ``veritas analyze uniones [--timeout S] [--profile P]``: el mismo modelo con un extremo
+  rígido, liberado y con resorte, y un mecanismo diagnosticado (T-010, D7). Código 0 si las
+  tres variantes calculan y el mecanismo se rechaza; si no, 3.
+- ``veritas analyze referencias [--caso T-FEM-001|…|T-CON-REF-04|todos] [--timeout S]
+  [--profile P]``: contraste con las referencias T-FEM-001…004 (T-009) y T-CON-REF-01…04
+  (T-010):
   referencia, calculado, error relativo y tolerancia por magnitud. Código 0 si todas
   coinciden; 3 si alguna corrida falla, la normalización falla o alguna magnitud no
   coincide. «Coincide» no valida la aplicación.
@@ -38,8 +44,9 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
 - Error de dominio (diagnóstico): ``CÓDIGO: mensaje`` en stderr, stdout vacío, código 2.
 
 Solo ``veritas analyze`` ejecuta un análisis estructural; sus valores están normalizados a
-ADR-001. La formulación plana solo se ha contrastado con T-FEM-001…004
-(``veritas analyze referencias``, T-009); ningún resultado está validado.
+ADR-001. La formulación plana solo se ha contrastado con T-FEM-001…004 y
+T-CON-REF-01…04 (``veritas analyze referencias``, T-009 y T-010); ningún resultado está
+validado.
 """
 
 import argparse
@@ -48,19 +55,21 @@ import math
 import platform
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Final
 from uuid import UUID
 
 from veritas import PRODUCT_NAME, __version__
 from veritas.core import units as u
-from veritas.core.connections.end import Dof, DofState, EndConnection
+from veritas.core.connections.end import Dof, DofState, EndConnection, MemberEnd
 from veritas.core.diagnostics import (
     Diagnostic,
     DiagnosticCode,
     DiagnosticError,
     InputTypeError,
     InputValueError,
+    Severity,
 )
 from veritas.core.geometry.entities import Member
 from veritas.core.geometry.local_axes import ReferenceSource, compute_local_axes
@@ -131,11 +140,16 @@ MODULE_STATUS: Final[tuple[tuple[str, str], ...]] = (
     ("Geometría y barras", f"{AVAILABLE} (T-003)"),
     ("Materiales y secciones", f"{AVAILABLE} (T-004)"),
     ("Apoyos", f"{AVAILABLE} (T-005)"),
+    (
+        "Uniones de extremo I/J",
+        f"{AVAILABLE} (T-010): rígido, liberado o resorte por GDL; el análisis plano solo "
+        "calcula el giro de flexión del plano",
+    ),
     ("Cargas", f"{AVAILABLE} (T-006)"),
     (
         "Análisis FEM",
         f"{AVAILABLE} (T-007): plano XZ, resultados normalizados (T-008), contrastados solo "
-        "con T-FEM-001…004 (T-009), no validados",
+        "con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010), no validados",
     ),
     ("Interfaz gráfica", PENDING),
     ("Verificación normativa", NOT_CHECKED),
@@ -263,9 +277,14 @@ def _add_analyze_parser(
         dest="analyze_command", metavar="ACCIÓN", required=True
     )
     analyze_demo = analyze_sub.add_parser(
-        "demo", help="Voladizo (viga), mecanismo o pórtico; resultados normalizados a ADR-001."
+        "demo",
+        help="Voladizo (viga), mecanismo, pórtico, tres materiales o biempotrada; ADR-001.",
     )
-    analyze_demo.add_argument("--caso", default="viga", choices=["viga", "mecanismo", "portico"])
+    analyze_demo.add_argument(
+        "--caso",
+        default="viga",
+        choices=["viga", "mecanismo", "portico", "tres-materiales", "biempotrada"],
+    )
     analyze_demo.add_argument(
         "--timeout", default="60", help="Tiempo máximo de la corrida en s (por defecto 60)."
     )
@@ -275,8 +294,18 @@ def _add_analyze_parser(
     analyze_demo.add_argument(
         "--bruto", action="store_true", help="Añade la tabla BRUTA en la base del solver."
     )
+    unions = analyze_sub.add_parser(
+        "uniones", help="Compara extremo rígido, liberado y con resorte, y un mecanismo (T-010)."
+    )
+    unions.add_argument(
+        "--timeout", default="60", help="Tiempo máximo de cada corrida en s (por defecto 60)."
+    )
+    unions.add_argument(
+        "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
+    )
     references = analyze_sub.add_parser(
-        "referencias", help="Contraste con las referencias analíticas T-FEM-001…004 (T-009)."
+        "referencias",
+        help="Contraste con las referencias T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010).",
     )
     references.add_argument(
         "--caso", default=REFERENCES_ALL, choices=[*benchmarks.CASES, REFERENCES_ALL]
@@ -666,7 +695,9 @@ def format_model_demo(profile_name: str) -> str:
     return "\n".join(lines)
 
 
-STABILITY_NOT_CHECKED: Final = "Estabilidad y mecanismos: NO COMPROBADOS (T-010)."
+STABILITY_NOT_CHECKED: Final = (
+    "Estabilidad y mecanismos: no se juzgan aquí; se comprueban al analizar (plano XZ, T-010)."
+)
 _SPRING_PATTERN: Final = re.compile(
     r"^\s*([A-Za-z]{2})\s*=\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|[-+]?(?:nan|inf))"
     r"\s*([^\d\s.+-].*?)\s*$",  # La unidad no empieza por cifra: sin retroceso.
@@ -798,7 +829,8 @@ def _check_support_usage(args: argparse.Namespace, parser: argparse.ArgumentPars
 CONNECTION_PRESETS: Final = ("rigido", "articulado", "semirrigido")
 CONNECTION_BASIS: Final = "Extremo de barra: seis GDL en la base LOCAL de la barra (ADR-001 §1)."
 CONNECTION_ANALYSIS_PENDING: Final = (
-    "Análisis: el adaptador plano XZ aún rechaza extremos no rígidos (T-010, entrega E2)."
+    "Análisis plano XZ: solo se calcula el giro de flexión del plano liberado o con resorte; "
+    "otros GDL no rígidos se rechazan con diagnóstico (T-010, D2)."
 )
 _END_DOF_BY_NAME: Final = {str(dof).lower(): dof for dof in Dof}
 
@@ -1197,7 +1229,11 @@ def _analyze_demo_model(case: str) -> tuple[StructuralModel, UUID, dict[UUID, st
         b = model.add_node(m(ANALYZE_DEMO_L), m(0), m(0), label="N2")
         model.add_member(a.id, b.id, material=steel.ref, section=section.ref, label="B1")
         model.add_nodal_load(load_case.id, b.id, fz=u.Quantity.of(-ANALYZE_DEMO_P, "N"))
-        if case == "viga":
+        if case == "biempotrada":
+            model.set_support(a.id, fixed_restraints(), label="Empotramiento N1")
+            model.set_support(b.id, fixed_restraints(), label="Empotramiento N2")
+            description = "Biempotrada sin GDL libres (D3 de T-009): se rechaza antes del cálculo."
+        elif case == "viga":
             model.set_support(a.id, fixed_restraints(), label="Empotramiento")
             description = (
                 "Voladizo B1 de 2 m en +X, R 200×400 de acero (E = 210 000 N/mm²), "
@@ -1262,6 +1298,9 @@ def _run_lines(run: AnalysisRun, labels: dict[UUID, str]) -> list[str]:
     ]
     if run.pivot is not None:
         node = "—" if run.pivot.node_id is None else labels.get(run.pivot.node_id, "—")
+        if run.pivot.member_id is not None:  # Giro propio de un extremo no rígido (T-010).
+            member = labels.get(run.pivot.member_id, str(run.pivot.member_id))
+            node = f"extremo {run.pivot.end} de {member}, nudo {node}"
         pivot = "—" if run.pivot.min_pivot is None else f"{run.pivot.min_pivot:.3e}"
         lines.append(
             f"Salvaguarda de singularidad: {run.pivot.free_dofs} GDL libres, pivote escalado "
@@ -1300,7 +1339,8 @@ NOT_CALCULATED_MARK: Final = "n/c"
 RESULTS_NOTE: Final = (
     "RESULTADOS normalizados a ADR-001 (Z arriba; reacción = acción del apoyo sobre la "
     "estructura; pI/pJ = acción del nudo sobre la barra en base local; N > 0 tracción). "
-    "Formulación plana contrastada solo con T-FEM-001…004 (T-009); no validados."
+    "Formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 "
+    "(T-010); no validados."
 )
 MARKS_NOTE: Final = (
     f"({NOT_APPLICABLE_MARK} = GDL libre del apoyo: reacción no aplicable, no es cero; "
@@ -1452,6 +1492,349 @@ def run_analyze_demo(
     return "\n".join(lines), code
 
 
+# --- Uniones de extremo (T-010, D7) -------------------------------------------------------
+
+UNIONS_L: Final = 4.0  # m, luz total; carga en el centro N3.
+UNIONS_P: Final = 10_000.0  # N, hacia -Z.
+UNIONS_SPRING_RATIO: Final = 1.0  # k·L/(EI) del resorte de la variante semirrígida.
+COMPARISON_NOTE: Final = (
+    "Comparación de variantes del mismo modelo; «—» = sin valor (no aplicable o corrida "
+    "fallida). Los valores no están validados (aplicación experimental)."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _Variant:
+    """Variante de un modelo de comparación: nombre, modelo, caso y etiquetas."""
+
+    name: str
+    model: StructuralModel
+    case_id: UUID
+    labels: dict[UUID, str]
+
+
+@dataclass(frozen=True, slots=True)
+class _Solved:
+    variant: _Variant
+    run: AnalysisRun
+    results: PlanarResults | None
+    error: DiagnosticError | None
+
+
+type _Extractor = Callable[[_Solved], float | None]
+
+
+def _labels(model: StructuralModel) -> dict[UUID, str]:
+    labels = {node.id: node.label for node in model.nodes.values()}
+    labels |= {member.id: member.label for member in model.members.values()}
+    labels |= {support.id: support.label for support in model.supports.values()}
+    return labels
+
+
+def _id(variant: _Variant, label: str) -> UUID:
+    return next(key for key, value in variant.labels.items() if value == label)
+
+
+def _solve(variant: _Variant, timeout: float) -> _Solved:
+    config = AnalysisConfiguration(variant.case_id, timeout_s=timeout)
+    run = analyze_planar_xz(variant.model, config)
+    if run.status is not RunStatus.SUCCEEDED:
+        return _Solved(variant, run, None, None)
+    try:
+        return _Solved(variant, run, normalize_planar_xz(run, variant.model), None)
+    except DiagnosticError as error:
+        return _Solved(variant, run, None, error)
+
+
+def _node_value(node: str, index: int) -> _Extractor:
+    def extract(solved: _Solved) -> float | None:
+        if solved.results is None:
+            return None
+        node_id = _id(solved.variant, node)
+        item = next(n for n in solved.results.nodes if n.node_id == node_id)
+        return item.displacement.components[index].value
+
+    return extract
+
+
+def _reaction_value(node: str, index: int) -> _Extractor:
+    def extract(solved: _Solved) -> float | None:
+        if solved.results is None:
+            return None
+        node_id = _id(solved.variant, node)
+        item = next(r for r in solved.results.reactions if r.node_id == node_id)
+        return item.global_.components[index].value
+
+    return extract
+
+
+def _end_value(member: str, end: MemberEnd, index: int) -> _Extractor:
+    def extract(solved: _Solved) -> float | None:
+        if solved.results is None:
+            return None
+        member_id = _id(solved.variant, member)
+        item = next(m for m in solved.results.members if m.member_id == member_id)
+        return (item.p_i if end is MemberEnd.I else item.p_j).components[index].value
+
+    return extract
+
+
+def _comparison(
+    solved: Sequence[_Solved],
+    rows: Sequence[tuple[str, QuantityKind, _Extractor]],
+    profile: PresentationProfile,
+    references: Sequence[Sequence[str]] = (),
+) -> str:
+    table = []
+    for index, (name, kind, extract) in enumerate(rows):
+        cells = []
+        for item in solved:
+            value = extract(item)
+            unit = _SI_SYMBOLS[kind]
+            cells.append(
+                NOT_APPLICABLE_MARK
+                if value is None
+                else format_quantity(u.Quantity.of(value, unit), kind, profile)
+            )
+        extra = list(references[index]) if references else []
+        table.append([name, *cells, *extra])
+    header = ["Magnitud", *(item.variant.name for item in solved)]
+    if references:
+        header += [f"Ref. {item.variant.name}" for item in solved[: len(references[0])]]
+    return _table(header, table)
+
+
+def _status_lines(solved: Sequence[_Solved]) -> list[str]:
+    lines = []
+    for item in solved:
+        errors = [d for d in item.run.diagnostics if d.severity is Severity.ERROR]
+        warnings = [d for d in item.run.diagnostics if d.severity is Severity.WARNING]
+        lines.append(f"[{item.variant.name}] Estado: {item.run.status}")
+        for diagnostic in errors:
+            lines.append(f"  ERROR {diagnostic.code}: {render_message(diagnostic)}")
+            location = diagnostic.location
+            if location is not None and location.entity_id is not None:
+                where = item.variant.labels.get(location.entity_id, str(location.entity_id))
+                lines.append(f"  Ubicación (orientativa): {where}")
+        if item.error is not None:
+            lines.append(f"  ERROR {item.error.code}: {render_message(item.error.diagnostic)}")
+        lines += [
+            f"  AVISO: {render_message(d)}"
+            for d in warnings
+            if d.message_key != "fem.out_of_plane_implicit_restraint"
+        ]
+    return lines
+
+
+def _steel(model: StructuralModel, name: str = "Acero estructural (ejemplo)") -> MaterialRevision:
+    return model.add_material(
+        name=name,
+        family=MaterialFamily.STEEL,
+        source="CTE DB-SE-A §4.2",
+        standard_edition=_DEMO_EDITION,
+        elastic_modulus=u.Quantity.of(ANALYZE_DEMO_E, "N/mm²"),
+        shear_modulus=u.Quantity.of(81_000, "N/mm²"),
+        poisson_ratio=0.3,
+        density=u.Quantity.of(7850, "kg/m³"),
+    )
+
+
+def _unions_variant(name: str, end_j: EndConnection | None, *, mechanism: bool = False) -> _Variant:
+    """Viga N1-N3-N2 de 4 m (B1, B2), P en N3; varía el extremo J de B2 (sobre N2)."""
+    model = StructuralModel()
+    steel = _steel(model)
+    section = model.add_rectangular_section(
+        b=u.Quantity.of(0.2, "m"), h=u.Quantity.of(0.4, "m"), name="R 200×400"
+    )
+    case = model.add_load_case("Q1", LoadCategory.VARIABLE)
+    m = u.Quantity.of
+    n1 = model.add_node(m(0, "m"), m(0, "m"), m(0, "m"), label="N1")
+    n3 = model.add_node(m(UNIONS_L / 2, "m"), m(0, "m"), m(0, "m"), label="N3")
+    n2 = model.add_node(m(UNIONS_L, "m"), m(0, "m"), m(0, "m"), label="N2")
+    b1 = model.add_member(n1.id, n3.id, material=steel.ref, section=section.ref, label="B1")
+    b2 = model.add_member(n3.id, n2.id, material=steel.ref, section=section.ref, label="B2")
+    if mechanism:
+        model.set_support(n1.id, pinned_restraints(), label="Articulación")
+        model.set_support(n2.id, roller_restraints(), label="Rodillo")
+        released = EndConnection.rigid().with_dof(Dof.RY, DofState.RELEASED)
+        model.set_member_end(b1.id, MemberEnd.J, released)
+    else:
+        model.set_support(n1.id, fixed_restraints(), label="Empotramiento N1")
+        model.set_support(n2.id, fixed_restraints(), label="Empotramiento N2")
+    if end_j is not None:
+        model.set_member_end(b2.id, MemberEnd.J, end_j)
+    model.add_nodal_load(case.id, n3.id, fz=u.Quantity.of(-UNIONS_P, "N"))
+    return _Variant(name, model, case.id, _labels(model))
+
+
+def run_analyze_unions(timeout_text: str, profile_name: str = "SI") -> tuple[str, int]:
+    """``veritas analyze uniones``: tres uniones y un mecanismo (puerta F1C; T-010, D7)."""
+    timeout = _parse_number(timeout_text)
+    profile = _profile(profile_name)
+    ei = ANALYZE_DEMO_E * 1e6 * 0.2 * 0.4**3 / 12
+    k = UNIONS_SPRING_RATIO * ei / UNIONS_L
+    spring = EndConnection.semi_rigid(Dof.RY, u.Quantity(k, Dof.RY.stiffness_dimension))
+    variants = [
+        _unions_variant("Rígida", None),
+        _unions_variant("Liberada", EndConnection.rigid().with_dof(Dof.RY, DofState.RELEASED)),
+        _unions_variant("Resorte", spring),
+    ]
+    solved = [_solve(variant, timeout) for variant in variants]
+    length, load = UNIONS_L, UNIONS_P
+    rows: list[tuple[str, QuantityKind, _Extractor]] = [
+        ("Uz N3 (centro)", QuantityKind.DISPLACEMENT, _node_value("N3", 2)),
+        ("RZ N1", QuantityKind.FORCE, _reaction_value("N1", 2)),
+        ("RZ N2", QuantityKind.FORCE, _reaction_value("N2", 2)),
+        ("MY N1 (reacción)", QuantityKind.MOMENT, _reaction_value("N1", 4)),
+        ("MY N2 (reacción)", QuantityKind.MOMENT, _reaction_value("N2", 4)),
+        ("My extremo J de B2", QuantityKind.MOMENT, _end_value("B2", MemberEnd.J, 4)),
+    ]
+
+    def q(value: float, kind: QuantityKind) -> str:
+        return format_quantity(u.Quantity.of(value, _SI_SYMBOLS[kind]), kind, profile)
+
+    disp, force, moment = QuantityKind.DISPLACEMENT, QuantityKind.FORCE, QuantityKind.MOMENT
+    references = [
+        [q(-load * length**3 / (192 * ei), disp), q(-7 * load * length**3 / (768 * ei), disp)],
+        [q(load / 2, force), q(11 * load / 16, force)],
+        [q(load / 2, force), q(5 * load / 16, force)],
+        [q(-load * length / 8, moment), q(-3 * load * length / 16, moment)],
+        [q(load * length / 8, moment), q(0.0, moment)],
+        [q(load * length / 8, moment), q(0.0, moment)],
+    ]
+    mechanism = _solve(_unions_variant("Mecanismo", None, mechanism=True), timeout)
+    stiffness = format_quantity(
+        u.Quantity(k, Dof.RY.stiffness_dimension), QuantityKind.ROTATIONAL_STIFFNESS, profile
+    )
+    lines = [
+        "Viga N1-N3-N2 de 4 m (B1 = N1→N3, B2 = N3→N2), R 200×400 de acero, empotrada en N1 y "
+        "N2, P = −10 kN en Z en N3. Se cambia solo el extremo J de B2 (sobre N2): rígido, giro "
+        f"Ry liberado o resorte k = {UNIONS_SPRING_RATIO}·EI/L = "
+        f"{stiffness}.",
+        f"Perfil de unidades: {profile.name}",
+        "",
+        *_status_lines(solved),
+        "",
+        _comparison(solved, rows, profile, references),
+        "Referencias a mano: Rígida = biempotrada (PL/8, PL³/(192EI)); Liberada = empotrada-"
+        "articulada (3PL/16, 7PL³/(768EI), reacciones 11P/16 y 5P/16). El resorte queda entre "
+        "ambas. Esta tabla no se contrasta automáticamente; el contraste con tolerancia está en "
+        "`veritas analyze referencias` (T-CON-REF-01…04).",
+        COMPARISON_NOTE,
+        "",
+        "Mecanismo: la misma viga sobre articulación (N1) y rodillo (N2) con el extremo J de B1 "
+        "también liberado (rótula en N3).",
+        *_status_lines([mechanism]),
+        "",
+        EXPERIMENTAL_WARNING,
+    ]
+    ok = all(item.results is not None for item in solved) and any(
+        d.code is DiagnosticCode.ANALYSIS_SINGULAR for d in mechanism.run.diagnostics
+    )
+    return "\n".join(lines), EXIT_OK if ok else EXIT_ANALYSIS_FAILED
+
+
+def _three_materials_variant(name: str, release: bool) -> _Variant:
+    """Pórtico N1-N2-N3-N4: pilar S235, dintel de aluminio y pilar S355 (ROADMAP)."""
+    model = StructuralModel()
+    s235 = _steel(model, "Acero S235 (ejemplo)")
+    s355 = _steel(model, "Acero S355 (ejemplo)")
+    aluminium = model.add_material(
+        name="Aluminio, valores comunes (ejemplo)",
+        family=MaterialFamily.ALUMINIUM,
+        source="UNE-EN 1999-1-1 §3.2.5",
+        standard_edition=_DEMO_EDITION,
+        elastic_modulus=u.Quantity.of(70_000, "N/mm²"),
+        shear_modulus=u.Quantity.of(27_000, "N/mm²"),
+        poisson_ratio=0.3,
+        density=u.Quantity.of(2700, "kg/m³"),
+    )
+    m = u.Quantity.of
+    column = model.add_rectangular_section(b=m(0.2, "m"), h=m(0.3, "m"), name="R 200×300")
+    beam = model.add_rectangular_section(b=m(0.2, "m"), h=m(0.4, "m"), name="R 200×400")
+    case = model.add_load_case("H", LoadCategory.VARIABLE)
+    nodes = [
+        model.add_node(m(x, "m"), m(0, "m"), m(z, "m"), label=label)
+        for x, z, label in ((0, 0, "N1"), (0, 3, "N2"), (4, 3, "N3"), (4, 0, "N4"))
+    ]
+    members = [
+        model.add_member(i.id, j.id, material=mat.ref, section=sec.ref, label=label)
+        for i, j, mat, sec, label in (
+            (nodes[0], nodes[1], s235, column, "B1"),
+            (nodes[1], nodes[2], aluminium, beam, "B2"),
+            (nodes[2], nodes[3], s355, column, "B3"),
+        )
+    ]
+    model.set_support(nodes[0].id, fixed_restraints(), label="Empotramiento N1")
+    model.set_support(nodes[3].id, fixed_restraints(), label="Empotramiento N4")
+    model.add_nodal_load(case.id, nodes[1].id, fx=m(10_000, "N"))
+    if release:
+        model.set_member_end(
+            members[1].id, MemberEnd.J, EndConnection.rigid().with_dof(Dof.RY, DofState.RELEASED)
+        )
+    return _Variant(name, model, case.id, _labels(model))
+
+
+def run_three_materials(timeout_text: str, profile_name: str = "SI") -> tuple[str, int]:
+    """«Primera demostración solicitada» del ROADMAP (P1 de T-009; T-010, D5-A y D7)."""
+    timeout = _parse_number(timeout_text)
+    profile = _profile(profile_name)
+    variants = [
+        _three_materials_variant("Rígidas", release=False),
+        _three_materials_variant("J de B2 liberado", release=True),
+    ]
+    solved = [_solve(variant, timeout) for variant in variants]
+    model = variants[0].model
+    members = sorted(model.members.values(), key=lambda member: member.label)
+    material_rows = [
+        [
+            member.label,
+            _material_label(model.material(member.material)),
+            format_quantity(
+                u.Quantity.of(model.material(member.material).elastic_modulus, "Pa"),
+                QuantityKind.STRESS,
+                profile,
+            ),
+            _section_label(model.section(member.section)),
+        ]
+        for member in members
+    ]
+    disp, rot = QuantityKind.DISPLACEMENT, QuantityKind.ANGLE
+    force, moment = QuantityKind.FORCE, QuantityKind.MOMENT
+    rows: list[tuple[str, QuantityKind, _Extractor]] = [
+        ("Ux N2", disp, _node_value("N2", 0)),
+        ("Ux N3", disp, _node_value("N3", 0)),
+        ("Uz N3", disp, _node_value("N3", 2)),
+        ("Ry N2", rot, _node_value("N2", 4)),
+        ("Ry N3", rot, _node_value("N3", 4)),
+        ("RX N1", force, _reaction_value("N1", 0)),
+        ("RZ N1", force, _reaction_value("N1", 2)),
+        ("MY N1", moment, _reaction_value("N1", 4)),
+        ("RX N4", force, _reaction_value("N4", 0)),
+        ("RZ N4", force, _reaction_value("N4", 2)),
+        ("MY N4", moment, _reaction_value("N4", 4)),
+        ("My extremo J de B2", moment, _end_value("B2", MemberEnd.J, 4)),
+    ]
+    lines = [
+        "Pórtico N1-N2-N3-N4 (pilares de 3 m, dintel de 4 m), empotrado en N1 y N4, carga "
+        "nodal H = +10 kN en X en N2. Un material y una sección por barra; uniones rígidas I/J y, "
+        "después, el giro Ry del extremo J del dintel B2 (sobre N3) liberado.",
+        "Los dos aceros tienen el mismo E: la diferencia de rigidez la marca el aluminio (D5-A).",
+        f"Perfil de unidades: {profile.name}",
+        "",
+        _table(["Barra", "Material", "E", "Sección"], material_rows),
+        "",
+        *_status_lines(solved),
+        "",
+        _comparison(solved, rows, profile),
+        COMPARISON_NOTE,
+        "",
+        EXPERIMENTAL_WARNING,
+    ]
+    ok = all(item.results is not None for item in solved)
+    return "\n".join(lines), EXIT_OK if ok else EXIT_ANALYSIS_FAILED
+
+
 REFERENCES_ALL: Final = "todos"
 REFERENCE_MATCH: Final = "coincide"
 REFERENCE_MISMATCH: Final = "NO COINCIDE"
@@ -1527,7 +1910,7 @@ def format_reference_outcomes(
     outcomes: Sequence[benchmarks.ReferenceOutcome], profile: PresentationProfile
 ) -> tuple[str, int]:
     """Texto del contraste y código de salida (0 si todo coincide; si no, 3)."""
-    lines = ["Referencias analíticas (plan T-009):"]
+    lines = ["Referencias analíticas (planes T-009 y T-010):"]
     lines += [f"  - {_text(text)}" for text in benchmarks.HYPOTHESES]
     lines.append("")
     for outcome in outcomes:
@@ -1614,6 +1997,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "analyze":
             if args.analyze_command == "referencias":
                 text, code = run_analyze_references(args.caso, args.timeout, args.profile)
+            elif args.analyze_command == "uniones":
+                text, code = run_analyze_unions(args.timeout, args.profile)
+            elif args.caso == "tres-materiales":
+                text, code = run_three_materials(args.timeout, args.profile)
             else:
                 text, code = run_analyze_demo(args.caso, args.timeout, args.profile, raw=args.bruto)
             print(text)

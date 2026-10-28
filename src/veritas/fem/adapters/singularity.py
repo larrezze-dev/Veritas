@@ -7,15 +7,18 @@ se aplica aquí de forma exacta: los GDL del nudo se giran a (tangente, normal) 
 elimina la normal. Después: escalado de Jacobi y LDLᵀ con pivotaje diagonal completo.
 
 La garantía es condicionada a ``tol_pivot`` y a la batería de pruebas declarada; no es
-una demostración general (revisión B1). No localiza mecanismos (T-010).
+una demostración general (revisión B1). Desde T-010 incluye el giro propio de los extremos
+no rígidos y los giros huérfanos restringidos; el GDL del pivote localiza el mecanismo de
+forma orientativa (un GDL del modo, no el modo completo).
 """
 
 import math
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from veritas.fem.adapters.protocol import PlanarRequest
+from veritas.fem.adapters.protocol import PlanarBeam, PlanarRequest
 
 COMPONENTS: Final = ("u1", "u2", "theta")
 TANGENT: Final = "t"
@@ -71,11 +74,51 @@ def beam_stiffness(
     return [[sum(rotation[m][i] * kt[m][j] for m in range(6)) for j in range(6)] for i in range(6)]
 
 
+def aux_rotation_index(request: PlanarRequest) -> dict[int, int]:
+    """Índice global del giro propio de cada aux de extremo (tras los 3·N GDL de nudos)."""
+    first = 3 * len(request.nodes)
+    return {link.aux: first + k for k, link in enumerate(request.end_links)}
+
+
+def element_displacement(
+    request: PlanarRequest, beam: PlanarBeam, displacement: Mapping[int, Sequence[float]]
+) -> tuple[float, ...]:
+    """(u₁, u₂, θ) de los extremos I, J del elemento: traslación del nudo, giro del aux.
+
+    ``displacement`` incluye nudos y aux de extremo (tag → (u₁, u₂, θ)).
+    """
+    values: list[float] = []
+    for end, node in (("I", beam.node_i), ("J", beam.node_j)):
+        element_node = request.element_node(beam, end)
+        values += [displacement[node][0], displacement[node][1], displacement[element_node][2]]
+    return tuple(values)
+
+
+def _add_end_springs(
+    request: PlanarRequest, stiffness: Matrix, index: dict[int, int], aux_theta: dict[int, int]
+) -> None:
+    """Resorte de extremo relativo: k·[[1, −1], [−1, 1]] sobre (θ maestro, θ aux)."""
+    for link in request.end_links:
+        if link.stiffness is None:
+            continue
+        master, aux = 3 * index[link.master] + 2, aux_theta[link.aux]
+        stiffness[master][master] += link.stiffness
+        stiffness[aux][aux] += link.stiffness
+        stiffness[master][aux] -= link.stiffness
+        stiffness[aux][master] -= link.stiffness
+
+
 def full_stiffness(request: PlanarRequest) -> tuple[Matrix, dict[int, int]]:
-    """K completa (3 GDL por nudo) sin penalizaciones ni restricciones; mapa tag → índice."""
+    """K completa sin penalizaciones ni restricciones; mapa tag → índice del nudo.
+
+    3 GDL por nudo y, por cada extremo no rígido (T-010), el giro propio del aux. El aux
+    es un alias del maestro en u₁, u₂ (``equalDOF``): la barra usa (u₁, u₂) del maestro y
+    θ del aux; un resorte de extremo es k·[[1, −1], [−1, 1]] sobre (θ maestro, θ aux).
+    """
     index = {node.tag: position for position, node in enumerate(request.nodes)}
     coordinates = {node.tag: (node.x1, node.x2) for node in request.nodes}
-    size = 3 * len(request.nodes)
+    aux_theta = aux_rotation_index(request)
+    size = 3 * len(request.nodes) + len(aux_theta)
     stiffness = [[0.0] * size for _ in range(size)]
     for beam in request.beams:
         element = beam_stiffness(
@@ -85,11 +128,16 @@ def full_stiffness(request: PlanarRequest) -> tuple[Matrix, dict[int, int]]:
             beam.elastic_modulus,
             beam.inertia,
         )
-        dofs = [3 * index[beam.node_i] + k for k in range(3)]
-        dofs += [3 * index[beam.node_j] + k for k in range(3)]
+        dofs: list[int] = []
+        for end, node in (("I", beam.node_i), ("J", beam.node_j)):
+            base = 3 * index[node]
+            element_node = request.element_node(beam, end)
+            theta = aux_theta[element_node] if element_node in aux_theta else base + 2
+            dofs += [base, base + 1, theta]
         for i, row in enumerate(dofs):
             for j, column in enumerate(dofs):
                 stiffness[row][column] += element[i][j]
+    _add_end_springs(request, stiffness, index, aux_theta)
     for spring in request.springs:
         if spring.penalty:
             continue
@@ -122,6 +170,7 @@ def reduced_coordinates(request: PlanarRequest) -> list[tuple[DofLabel, dict[int
     tangente t = (−n₂, n₁) en lugar de (u1, u2)."""
     index = {node.tag: position for position, node in enumerate(request.nodes)}
     fixed = {(fix.node, k) for fix in request.fixes for k in range(3) if fix.fixity[k]}
+    fixed |= {(node, 2) for node in request.orphan_fixes}  # Giro huérfano (T-010, D3).
     oblique: dict[int, tuple[float, float]] = {}
     for spring in request.springs:
         if spring.penalty:
@@ -138,6 +187,8 @@ def reduced_coordinates(request: PlanarRequest) -> list[tuple[DofLabel, dict[int
         for k in (*translations, 2):
             if (node.tag, k) not in fixed:
                 coordinates.append((DofLabel(node.tag, COMPONENTS[k]), {base + k: 1.0}))
+    for aux, position in aux_rotation_index(request).items():  # Nunca fijado.
+        coordinates.append((DofLabel(aux, COMPONENTS[2]), {position: 1.0}))
     return coordinates
 
 
