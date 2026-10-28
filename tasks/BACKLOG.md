@@ -52,7 +52,7 @@ Cada línea requiere plan y aprobación propios antes de implementarse; ninguna 
 | T-017 | La tabla de `veritas analyze uniones` no se contrasta automáticamente | Contraste con tolerancia de las columnas rígida y liberada (fórmulas ya impresas) y código 3 si no coincide, como `analyze referencias` |
 | T-017 | Control de residuo K·u − P (O7 de T-007; resortes de rigidez extrema) | Residuo independiente con la K de la salvaguarda; complementa el aviso `fem.end_spring_near_rigid` |
 | Adaptador 3D (por crear, con ADR) | Solo plano XZ: solo se traduce el giro de flexión del plano; el preset «articulado» (Ry y Rz) y la torsión se rechazan | Adaptador de seis GDL por nudo con liberaciones por GDL local; reutiliza `EndConnection`, el nudo auxiliar y la batería T-CON-REF |
-| T-017 o adaptador 3D | Traslaciones de extremo liberadas o con resorte rechazadas (D2-C no elegida) | Restricción en ejes locales de la barra (`equalDOF` no basta en barras inclinadas): transformación local o elemento con condensación estática verificada, con referencias propias |
+| Adaptador 3D (T-017, D5-A) | Traslaciones de extremo liberadas o con resorte rechazadas (D2-C no elegida) | Restricción en ejes locales de la barra (`equalDOF` no basta en barras inclinadas): transformación local o elemento con condensación estática verificada, con referencias propias |
 | F6 (resultados) | El giro propio del extremo de barra (aux) no se publica | Publicarlo normalizado a ADR-001 (θ = −Ry: invertir signo; revisión de E2, observación 6) como giro relativo extremo-nudo |
 | F6 (resultados) | Precisión de presentación limitada por el perfil (flechas de centésimas de mm con 3 decimales) | Cifras significativas configurables por magnitud en los perfiles de presentación |
 | T-012 (persistencia) | Uniones sin guardar/abrir (T-CON-005, CON-002 «persistentes») | Round-trip de los seis estados y rigideces por extremo |
@@ -68,7 +68,7 @@ Cada línea requiere plan y aprobación propios antes de implementarse; ninguna 
 | T-014 | — | F7A | Editor manual de configuración de normativas (crear, editar, copiar, borrar) | Requisito de `CLAUDE.md`, sin ID SRS | NO INICIADO |
 | T-015 | — | F5A (antes de los paneles) | Cargas de barra ampliadas: puntuales, parciales, trapezoidales y momentos distribuidos | LD-002 (completar el aporte parcial de T-006) | NO INICIADO |
 | T-016 | — | F5A | Asientos impuestos en apoyos como acción de un caso de carga | GEO-010 / LD-002 (límite remitido por T-005 al ticket de cargas y no incluido en T-006) | NO INICIADO |
-| T-017 | — | F1C+ (antes de F2) | Endurecimiento de uniones y mecanismos: postcondiciones del aux (P1), modo de mecanismo determinista, contraste automático de `analyze uniones`, residuo K·u − P | CON-009, FEM-008 (límites de T-010) | NO INICIADO |
+| T-017 | — | F1C+ (antes de F2) | Endurecimiento de uniones y mecanismos: postcondiciones del aux (P1), modo de mecanismo determinista, contraste automático de `analyze uniones`, residuo K·u − P | CON-009, FEM-008 (límites de T-010) | APROBADO (2026-10-28), E1 pendiente ([plan](../plans/T-017.md)) |
 
 Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se acepte la fase anterior.
 
@@ -79,3 +79,4 @@ Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se 
 - 2026-10-28: T-009 amplía su alcance a T-FEM-001…004 (corrige la fila); propuesta P2 de T-008 resuelta en T-009 (D3-A).
 - 2026-10-28: T-009 aceptado; P1 (primera demostración del ROADMAP) asignada a T-010; registradas, a petición del usuario, las propuestas de los límites de T-009 (adaptador 3D, Timoshenko, rodillo sin penalización, ampliación de la batería de referencias).
 - 2026-10-28: T-010 aceptado (F1C ACEPTADA); R2 y R3 confirmados. Registrados, a petición del usuario, P1 y la planificación de la subsanación de los límites de T-010; nuevo ticket T-017 (endurecimiento de uniones y mecanismos).
+- 2026-10-28: T-017 elegido por el usuario como siguiente ticket; plan aprobado (D1–D7 = A, sin O1). D5-A: las traslaciones de extremo liberadas pasan al adaptador 3D.
