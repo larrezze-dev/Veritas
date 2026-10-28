@@ -22,6 +22,7 @@ Fecha de base: 2026-10-24. Fuente: decisiones del Product Owner incorporadas en 
 |---|---|---|
 | [ADR-001](adr/ADR-001-convenciones-dominio.md) | Ejes y signos; UUID y referencias versionadas; revisiones y procedencia de resultados; diagnósticos estables | ACCEPTED — aprobado por el usuario el 2026-10-27; implementación por tickets posteriores (T-003 y siguientes) |
 | [ADR-002](adr/ADR-002-adaptador-plano-proceso-solver.md) | Primer adaptador FEM limitado al plano XZ, worker OpenSeesPy en proceso aislado por corrida con el mismo intérprete 3.12 (revisión DEC-011) y procedencia en memoria sin hash canónico (excepción incremental) | ACCEPTED — aprobado por el usuario el 2026-10-27, incluida la revisión DEC-011; implementación en T-007 |
+| [ADR-003](adr/ADR-003-adaptador-espacial-3d.md) | Adaptador FEM espacial de seis GDL por nudo junto al plano (contraste cruzado), protocolo y worker propios, restricciones exactas donde se pueda (Lagrange para el rodillo inclinado), configuración espacial y extensión de la excepción de procedencia de ADR-002 | ACCEPTED — aprobado por el usuario el 2026-10-28 («aprobado», con el plan T-018, D1–D10 = A); implementación en T-018 |
 
 Los ADR complementan DEC-001…010 sin sustituirlas. Aprobar un ADR no declara implementadas sus capacidades ni valida un solver. Al aprobar o rechazar un ADR, actualizar su estado aquí y en el propio ADR con fecha y referencia a la aprobación expresa del usuario.
 
