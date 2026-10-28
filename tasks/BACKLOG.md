@@ -62,15 +62,23 @@ Cada línea requiere plan y aprobación propios antes de implementarse; ninguna 
 
 | ID | SRS backlog | Fase | Título | Requisitos SRS (aporte previsto) | Estado |
 |---|---|---|---|---|---|
-| T-011 | S3D-010 | F4 | Viewport mínimo PyVista | GEO-008 (parcial) | NO INICIADO |
-| T-012 | S3D-011 | F4 | Persistencia de proyecto versionado, round-trip y codificación canónica del hash | DAT-001, DAT-004, NFR-007 | NO INICIADO |
-| T-013 | S3D-012 | F8 | Informe básico | RPT-002, RPT-004, RPT-005 | NO INICIADO |
-| T-014 | — | F7A | Editor manual de configuración de normativas (crear, editar, copiar, borrar) | Requisito de `CLAUDE.md`, sin ID SRS | NO INICIADO |
-| T-015 | — | F5A (antes de los paneles) | Cargas de barra ampliadas: puntuales, parciales, trapezoidales y momentos distribuidos | LD-002 (completar el aporte parcial de T-006) | NO INICIADO |
-| T-016 | — | F5A | Asientos impuestos en apoyos como acción de un caso de carga | GEO-010 / LD-002 (límite remitido por T-005 al ticket de cargas y no incluido en T-006) | NO INICIADO |
+| T-011 | S3D-010 | F4 | Viewport mínimo PyVista | GEO-008 (parcial) | ABIERTO — orden 8; dependencias nuevas (PySide6, PyVista) a aprobar en su plan |
+| T-012 | S3D-011 | F4 | Persistencia de proyecto versionado, round-trip y codificación canónica del hash | DAT-001, DAT-004, NFR-007 | ABIERTO — orden 6 (tras las entidades nuevas de T-015, T-016 y T-019) |
+| T-013 | S3D-012 | F8 | Informe básico | RPT-002, RPT-004, RPT-005 | APLAZADO — necesita combinaciones, comprobaciones y versiones de catálogo (F2, F5A, F7A) |
+| T-014 | — | F7A | Editor manual de configuración de normativas (crear, editar, copiar, borrar) | Requisito de `CLAUDE.md`, sin ID SRS | ABIERTO — orden 7; solo capa de datos (configuraciones protegidas y de usuario), el contenido normativo lo fija F7A |
+| T-015 | — | F5A (antes de los paneles) | Cargas de barra ampliadas: puntuales, parciales, trapezoidales y momentos distribuidos | LD-002 (completar el aporte parcial de T-006) | ABIERTO — orden 3 |
+| T-016 | — | F5A | Asientos impuestos en apoyos como acción de un caso de carga | GEO-010 / LD-002 (límite remitido por T-005 al ticket de cargas y no incluido en T-006) | ABIERTO — orden 2 |
 | T-017 | — | F1C+ (antes de F2) | Endurecimiento de uniones y mecanismos: postcondiciones del aux (P1), modo de mecanismo determinista, contraste automático de `analyze uniones`, residuo K·u − P | CON-009, FEM-008 (límites de T-010) | ACEPTADO 2026-10-28 (E1 8ebbbb6; E2) ([plan](../plans/T-017.md)) |
 
+| T-018 | — | FEM-3D (antes de F2) | Adaptador FEM 3D (seis GDL por nudo), con ADR-003. Absorbe: liberaciones por GDL local (Rz, torsión, preset «articulado»), traslaciones de extremo (D5-A de T-017), rodillo inclinado sin penalización y referencias de cercha y pórtico. El ADR decide si el adaptador plano se mantiene | FEM-002 (y GEO-010, CON-009 en 3D) | ABIERTO — orden 1 |
+| T-019 | — | F5A (adelantado) | Peso específico γ del material y selección de barras del peso propio (cambia la API aceptada de `MaterialRevision`) | LD-003 | ABIERTO — orden 4 |
+| T-020 | — | F6 (adelantado) | Resultados pendientes: giro propio del extremo de barra normalizado a ADR-001 y cifras significativas configurables por magnitud | RES-001 (parcial) | ABIERTO — orden 5 |
+
 Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se acepte la fase anterior.
+
+### Orden de planificación (decisión del usuario, 2026-10-28)
+
+«ABIERTO» significa registrado para planificar; ningún ticket se implementa sin plan aprobado en `plans/`. Se planifican y entregan de uno en uno, en este orden: T-018 (3D, ADR-003) → T-016 → T-015 → T-019 → T-020 → T-012 → T-014 → T-011. Aplazados: T-013 y el elemento Timoshenko (necesita el área de cortante de F3A).
 
 ## Historial
 
@@ -81,3 +89,4 @@ Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se 
 - 2026-10-28: T-010 aceptado (F1C ACEPTADA); R2 y R3 confirmados. Registrados, a petición del usuario, P1 y la planificación de la subsanación de los límites de T-010; nuevo ticket T-017 (endurecimiento de uniones y mecanismos).
 - 2026-10-28: T-017 elegido por el usuario como siguiente ticket; plan aprobado (D1–D7 = A, sin O1). D5-A: las traslaciones de extremo liberadas pasan al adaptador 3D.
 - 2026-10-28: T-017 E1 aceptada por el usuario (commit 8ebbbb6). E2 (modo de mecanismo) aceptada el mismo día; T-017 ACEPTADO.
+- 2026-10-28: a petición del usuario («abre todos los tickets pendientes que puedan resolverse con lo desarrollado»), se abren T-011, T-012, T-014, T-015 y T-016 y se crean T-018 (adaptador 3D con ADR-003), T-019 (γ y selección del peso propio) y T-020 (resultados pendientes). Orden «3D primero». T-013 y Timoshenko aplazados. Las filas de propuestas y límites asignadas al adaptador 3D, a F5A (γ, peso propio) y a F6 (giro del aux, precisión) pasan a T-018, T-019 y T-020.

@@ -25,6 +25,8 @@ El Product Owner puede probar cada fase y detener el desarrollo sin invalidar lo
 
 **F1C+ (T-017, antes de F2; [plan](../plans/T-017.md)):** endurecimiento de uniones y mecanismos. E1 (controles de la solución tras el equilibrio y contraste de `veritas analyze uniones`) ACEPTADA por el usuario el 2026-10-28 (commit 8ebbbb6). E2 (modo de mecanismo determinista) ACEPTADA el 2026-10-28. T-017 ACEPTADO. No altera el estado aceptado de F1C.
 
+**Tickets abiertos para planificar (decisión del usuario, 2026-10-28):** se adelantan, antes de F2, los que solo dependen de F0–F1C. Orden: T-018 (adaptador 3D, ADR-003), T-016, T-015, T-019, T-020, T-012, T-014 y T-011. Aplazados: T-013 y Timoshenko. Detalle en `tasks/BACKLOG.md`. Las puertas de fase no cambian.
+
 Estados admitidos: `NO INICIADA`, `EN CURSO`, `EN VALIDACIÓN` (entregada, esperando aceptación del usuario), `ACEPTADA` (con fecha y referencia a la aceptación expresa) y `RECHAZADA` (en corrección dentro de la misma fase).
 
 ## Prioridades internas
