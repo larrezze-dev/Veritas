@@ -50,10 +50,10 @@
 | T-SEC-002 | Anillo con radios R,r | A=π(R²−r²), I=π(R⁴−r⁴)/4 | F3A | NO INICIADO |
 | T-SEC-003 | Polígono con hueco | Área neta y centroide correctos | F3B | NO INICIADO |
 | T-CAT-001 | CSV con unidades inválidas | Importación informada y sin corrupción | F2 | NO INICIADO |
-| T-FEM-001 | Viga biapoyada, P central | Reacciones P/2, Mmax=PL/4 | F1B | NO INICIADO |
-| T-FEM-002 | Voladizo con q | Flecha extremo qL⁴/(8EI) bajo hipótesis adecuadas | F1B | NO INICIADO |
-| T-FEM-003 | Apoyo con resorte traslacional k (barra isostática) | Desplazamiento del apoyo δ = R/k; reacción R = −k·u en la base del apoyo (plan T-005, R5/O5) | F1B (T-009) | NO INICIADO |
-| T-FEM-004 | Rodillo inclinado | Reacción normal al plano de rodadura (según ez′), nula en el plano; equilibrio global (plan T-005, R5) | F1B (T-009) | NO INICIADO |
+| T-FEM-001 | Viga biapoyada, P central | Reacciones P/2, Mmax=PL/4 (con signo ADR-001: My = −PL/4), flecha −PL³/(48EI); tol 1e-9 (`tests/test_fem_reference.py`) | F1B (T-009) | SUPERADO (T-009 aceptado 2026-10-28) |
+| T-FEM-002 | Voladizo con q | Flecha extremo qL⁴/(8EI) bajo hipótesis adecuadas (Euler-Bernoulli sin cortante); n = 1, 2, 4 barras; tol 1e-9 | F1B (T-009) | SUPERADO (T-009 aceptado 2026-10-28) |
+| T-FEM-003 | Apoyo con resorte traslacional k (barra isostática) | Desplazamiento del apoyo δ = R/k; reacción R = −k·u en la base del apoyo (plan T-005, R5/O5); variantes base global (dos k) e inclinada 30°; tol 1e-9 | F1B (T-009) | SUPERADO (T-009 aceptado 2026-10-28) |
+| T-FEM-004 | Rodillo inclinado | Reacción normal al plano de rodadura (según ez′), nula en el plano; equilibrio global (plan T-005, R5); 30° por penalización; tol 1e-6 | F1B (T-009) | SUPERADO (T-009 aceptado 2026-10-28) |
 | T-LD-001 | Panel uniforme | Equilibrio ΣF y ΣM | F5A | NO INICIADO |
 | T-COM-001 | Dos casos lineales | Superposición correcta | F5A | NO INICIADO |
 | T-COM-002 | Caso no lineal | Rechaza superposición inapropiada | F5A | NO INICIADO |

@@ -164,6 +164,25 @@ def test_too_many_dofs_is_rejected_before_running(tmp_path: Path) -> None:
     assert info.value.diagnostic.message_key == "fem.too_many_dofs"
 
 
+def test_structure_without_free_dofs_is_rejected_before_running(tmp_path: Path) -> None:
+    # Plan T-009, D3: biempotrada de una barra; antes caía el worker (LAPACK DGBSV).
+    frame = Frame()
+    a, b = frame.node(0, 0), frame.node(2, 0)
+    frame.member(a, b)
+    frame.support(a, fixed_restraints())
+    frame.support(b, fixed_restraints())
+    frame.nodal(b, fz=-1000.0)
+    marker = tmp_path / "launched"
+    worker = fake_worker(tmp_path, f"open({str(marker)!r}, 'w').write('x')\nrespond()\n")
+    revision = frame.model.model_revision
+    with pytest.raises(InputValueError) as info:
+        analyze_planar_xz(frame.model, frame.config(), worker=worker)
+    assert info.value.code is DiagnosticCode.UNSUPPORTED_CONFIGURATION
+    assert info.value.diagnostic.message_key == "fem.no_free_dofs"
+    assert not marker.exists()
+    assert frame.model.model_revision == revision
+
+
 def test_run_record_invariant() -> None:
     with pytest.raises(ValueError, match="SUCCEEDED"):
         AnalysisRun(

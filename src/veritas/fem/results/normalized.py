@@ -12,7 +12,8 @@ seis componentes con ejes y signos de ADR-001:
 
 El estado de cada componente se decide por la estructura, nunca por su valor. Postcondiciones
 (D7, B1): equilibrio de nudos, barras y global, y coherencia de Q. Si fallan, no hay
-resultados. Los valores no están validados frente a referencias (T-009).
+resultados. La formulación plana solo se ha contrastado con T-FEM-001…004 (T-009); los
+valores no están validados.
 """
 
 import math

@@ -29,11 +29,17 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   normalizadas a ADR-001 (plan T-008): desplazamientos, reacciones y fuerzas/esfuerzos de
   extremo; ``--bruto`` añade la tabla BRUTA del solver. Código 0 si SUCCEEDED; 3 si FAILED
   o si la normalización no supera sus postcondiciones (sin resultados).
+- ``veritas analyze referencias [--caso T-FEM-001|…|T-FEM-004|todos] [--timeout S]
+  [--profile P]``: contraste con las referencias analíticas T-FEM-001…004 (plan T-009):
+  referencia, calculado, error relativo y tolerancia por magnitud. Código 0 si todas
+  coinciden; 3 si alguna corrida falla, la normalización falla o alguna magnitud no
+  coincide. «Coincide» no valida la aplicación.
 - Subcomando u opción desconocidos: uso en stderr, stdout vacío, código 2.
 - Error de dominio (diagnóstico): ``CÓDIGO: mensaje`` en stderr, stdout vacío, código 2.
 
 Solo ``veritas analyze`` ejecuta un análisis estructural; sus valores están normalizados a
-ADR-001 pero no validados frente a referencias (T-009).
+ADR-001. La formulación plana solo se ha contrastado con T-FEM-001…004
+(``veritas analyze referencias``, T-009); ningún resultado está validado.
 """
 
 import argparse
@@ -70,7 +76,7 @@ from veritas.core.loads.loads import (
     vector_quantities,
 )
 from veritas.core.materials.material import MaterialFamily, MaterialRevision
-from veritas.core.messages_es import MESSAGES_ES, render_message
+from veritas.core.messages_es import MESSAGES_ES, render_message, render_text
 from veritas.core.presentation import (
     BUILTIN_PROFILES,
     PresentationProfile,
@@ -101,6 +107,7 @@ from veritas.fem import (
     RunStatus,
     Vector6,
     analyze_planar_xz,
+    benchmarks,
     normalize_planar_xz,
 )
 
@@ -127,7 +134,8 @@ MODULE_STATUS: Final[tuple[tuple[str, str], ...]] = (
     ("Cargas", f"{AVAILABLE} (T-006)"),
     (
         "Análisis FEM",
-        f"{AVAILABLE} (T-007): plano XZ, resultados normalizados (T-008), no validados (T-009)",
+        f"{AVAILABLE} (T-007): plano XZ, resultados normalizados (T-008), contrastados solo "
+        "con T-FEM-001…004 (T-009), no validados",
     ),
     ("Interfaz gráfica", PENDING),
     ("Verificación normativa", NOT_CHECKED),
@@ -244,6 +252,18 @@ def _add_analyze_parser(
     )
     analyze_demo.add_argument(
         "--bruto", action="store_true", help="Añade la tabla BRUTA en la base del solver."
+    )
+    references = analyze_sub.add_parser(
+        "referencias", help="Contraste con las referencias analíticas T-FEM-001…004 (T-009)."
+    )
+    references.add_argument(
+        "--caso", default=REFERENCES_ALL, choices=[*benchmarks.CASES, REFERENCES_ALL]
+    )
+    references.add_argument(
+        "--timeout", default="60", help="Tiempo máximo de cada corrida en s (por defecto 60)."
+    )
+    references.add_argument(
+        "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
     )
 
 
@@ -1025,7 +1045,7 @@ NO_RESULTS_NORMALIZATION: Final = (
 )
 RAW_NOTE: Final = (
     "RESULTADOS BRUTOS: base del solver SOLVER_XZ_RAW (x₁ = X, x₂ = Z, θ = −Ry). "
-    "NO normalizados a ADR-001 (T-008) ni validados frente a referencias (T-009)."
+    "NO normalizados a ADR-001 (T-008) ni validados."
 )
 
 
@@ -1162,7 +1182,7 @@ NOT_CALCULATED_MARK: Final = "n/c"
 RESULTS_NOTE: Final = (
     "RESULTADOS normalizados a ADR-001 (Z arriba; reacción = acción del apoyo sobre la "
     "estructura; pI/pJ = acción del nudo sobre la barra en base local; N > 0 tracción). "
-    "No validados frente a referencias (T-009)."
+    "Formulación plana contrastada solo con T-FEM-001…004 (T-009); no validados."
 )
 MARKS_NOTE: Final = (
     f"({NOT_APPLICABLE_MARK} = GDL libre del apoyo: reacción no aplicable, no es cero; "
@@ -1314,6 +1334,116 @@ def run_analyze_demo(
     return "\n".join(lines), code
 
 
+REFERENCES_ALL: Final = "todos"
+REFERENCE_MATCH: Final = "coincide"
+REFERENCE_MISMATCH: Final = "NO COINCIDE"
+REFERENCE_NO_RESULTS: Final = "SIN RESULTADOS"  # Corrida o normalización fallida (D1-bis).
+REFERENCES_NOTE: Final = (
+    "«coincide» = |calculado − referencia| ≤ tolerancia · max(|referencia|, S), con S la "
+    "mayor |referencia| de la misma magnitud en el caso. Coincidir con la referencia "
+    "analítica dentro de la tolerancia no valida la aplicación."
+)
+
+
+def _text(text: benchmarks.Text) -> str:
+    return render_text(text.key, dict(text.params))
+
+
+def _reference_table(
+    outcome: benchmarks.ReferenceOutcome, profile: PresentationProfile
+) -> list[str]:
+    def shown(check: benchmarks.ReferenceCheck, value: float | None) -> str:
+        # Seis cifras significativas: los decimales fijos ocultan giros y desplazamientos
+        # pequeños (p. ej. 0,001 rad). Un 0 solo aparece si el valor es exactamente 0.
+        if value is None:
+            return NOT_CALCULATED_MARK
+        unit = profile.unit_for(check.kind)
+        return f"{check.quantity_value(value).to(unit) + 0.0:.6g} {unit.symbol}"  # −0 → 0
+
+    rows = [
+        [
+            check.quantity,
+            check.formula,
+            shown(check, check.reference),
+            shown(check, check.computed),
+            "—" if check.relative_error is None else f"{check.relative_error:.1e}",
+            f"{check.tolerance:.0e}",
+            REFERENCE_MATCH if check.matches else REFERENCE_MISMATCH,
+        ]
+        for check in outcome.checks
+    ]
+    header = ["Magnitud", "Fórmula", "Referencia", "Calculado", "Error rel.", "Tol.", "Resultado"]
+    return _table(header, rows).splitlines()
+
+
+def _reference_lines(
+    outcome: benchmarks.ReferenceOutcome, profile: PresentationProfile
+) -> list[str]:
+    lines = [
+        f"== {outcome.case_id} — {_text(outcome.title)} ==",
+        _text(outcome.description),
+        "",
+    ]
+    lines += _run_lines(outcome.run, outcome.labels)
+    if outcome.run.status is not RunStatus.SUCCEEDED:
+        return [*lines, NO_RESULTS_FAILED, f"{outcome.case_id}: {REFERENCE_NO_RESULTS}"]
+    if outcome.failure is not None:
+        error = outcome.failure
+        return [
+            *lines,
+            f"ERROR {error.code}: {render_message(error.diagnostic)}",
+            NO_RESULTS_NORMALIZATION,
+            f"{outcome.case_id}: {REFERENCE_NO_RESULTS}",
+        ]
+    assert outcome.results is not None  # SUCCEEDED y normalizado.
+    lines += [*_hypothesis_lines(outcome.results.hypotheses), ""]
+    lines += _reference_table(outcome, profile)
+    lines += [f"  {_text(note)}" for note in outcome.notes]
+    matched = sum(check.matches for check in outcome.checks)
+    verdict = REFERENCE_MATCH if outcome.matches else REFERENCE_MISMATCH
+    lines.append(f"{outcome.case_id}: {matched}/{len(outcome.checks)} magnitudes, {verdict}.")
+    return lines
+
+
+def format_reference_outcomes(
+    outcomes: Sequence[benchmarks.ReferenceOutcome], profile: PresentationProfile
+) -> tuple[str, int]:
+    """Texto del contraste y código de salida (0 si todo coincide; si no, 3)."""
+    lines = ["Referencias analíticas (plan T-009):"]
+    lines += [f"  - {_text(text)}" for text in benchmarks.HYPOTHESES]
+    lines.append("")
+    for outcome in outcomes:
+        lines += [*_reference_lines(outcome, profile), ""]
+    lines.append(REFERENCES_NOTE)
+    failed = [outcome.case_id for outcome in outcomes if not outcome.matches]
+    empty = [outcome.case_id for outcome in outcomes if outcome.results is None]
+    mismatched = [case_id for case_id in failed if case_id not in empty]
+    if empty:
+        lines.append(f"{REFERENCE_NO_RESULTS}: {', '.join(empty)}.")
+    if mismatched:
+        lines.append(f"{REFERENCE_MISMATCH}: {', '.join(mismatched)}.")
+    if not failed:
+        count = len(outcomes)
+        subject = "La variante coincide" if count == 1 else f"Las {count} variantes coinciden"
+        lines.append(
+            f"{subject} con su referencia analítica dentro de la tolerancia; no valida la "
+            "aplicación."
+        )
+    lines.extend(["", EXPERIMENTAL_WARNING])
+    return "\n".join(lines), EXIT_ANALYSIS_FAILED if failed else EXIT_OK
+
+
+def run_analyze_references(
+    case: str, timeout_text: str, profile_name: str = "SI"
+) -> tuple[str, int]:
+    """``veritas analyze referencias``: (texto, código de salida 0 o 3)."""
+    timeout = _parse_number(timeout_text)
+    profile = _profile(profile_name)
+    cases = benchmarks.CASES if case == REFERENCES_ALL else (case,)
+    outcomes = [outcome for item in cases for outcome in benchmarks.run_reference(item, timeout)]
+    return format_reference_outcomes(outcomes, profile)
+
+
 def _tolerant_streams() -> None:
     # Una salida canalizada en Windows usa la codificación local (p. ej. cp1252), sin
     # símbolos como «⁴». Se sustituyen en lugar de abortar con UnicodeEncodeError.
@@ -1361,7 +1491,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "analyze":
-            text, code = run_analyze_demo(args.caso, args.timeout, args.profile, raw=args.bruto)
+            if args.analyze_command == "referencias":
+                text, code = run_analyze_references(args.caso, args.timeout, args.profile)
+            else:
+                text, code = run_analyze_demo(args.caso, args.timeout, args.profile, raw=args.bruto)
             print(text)
             return code
         output = _run(args, parser)

@@ -4,6 +4,7 @@ Las plantillas usan los parámetros del diagnóstico con ``str.format``. Un par�
 ausente no rompe la presentación: se muestra la plantilla sin sustituir.
 """
 
+from collections.abc import Mapping
 from typing import Final
 
 from veritas.core.diagnostics import Diagnostic
@@ -134,6 +135,10 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "El modelo tiene {count} GDL libres; la comprobación de singularidad admite como máximo "
         "{limit} en esta versión."
     ),
+    "fem.no_free_dofs": (
+        "Todos los GDL del modelo plano están restringidos (ningún GDL libre): el análisis "
+        "plano no resuelve esta estructura en esta versión. No se calcula."
+    ),
     "fem.singular": (
         "Rigidez singular o extremadamente mal condicionada (pivote escalado {pivot} ≤ "
         "{tolerance}, componente {component}): posible mecanismo o apoyos insuficientes. "
@@ -172,8 +177,9 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "orden de 1e-8 en la dirección restringida)."
     ),
     "fem.hypothesis_normalized": (
-        "Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); no validados "
-        "frente a referencias analíticas (T-009)."
+        "Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación "
+        "plana contrastada solo con T-FEM-001…004 (T-009); este resultado no está validado; "
+        "aplicación experimental."
     ),
     "fem.hypothesis_support_projection": (
         "Reacción en base del apoyo inclinado: Q_apoyo·R con Y, Mx y Mz tomados como 0 (no "
@@ -196,6 +202,46 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "fem.results_unsupported_load": (
         "Carga {load} de un tipo que la normalización no admite (error interno)."
     ),
+    "benchmark.hypothesis_formulation": (
+        "Euler-Bernoulli 2D sin deformación por cortante, geomTransf Linear, estática lineal, "
+        "EI y EA constantes y cargas consistentes: las fórmulas son exactas en nudos y extremos."
+    ),
+    "benchmark.hypothesis_data": (
+        "Acero E = {modulus_gpa:g} GPa, R {b_mm:g}×{h_mm:g} (Iy = b·h³/12, A = b·h)."
+    ),
+    "benchmark.title_simply_supported": "Biapoyada con P central",
+    "benchmark.title_cantilever": "Voladizo con carga uniforme",
+    "benchmark.title_spring_global": "Resorte traslacional en base global",
+    "benchmark.title_spring_inclined": "Resorte traslacional en base inclinada",
+    "benchmark.title_inclined_roller": "Rodillo inclinado",
+    "benchmark.description_simply_supported": (
+        "Biapoyada de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), P = {load_kn:g} kN hacia −Z "
+        "como carga nodal en N2, articulación en N1. Rodillo vertical (Uz) en N3."
+    ),
+    "benchmark.description_cantilever": (
+        "Voladizo de {span:g} m en +X en dos barras (nudo interior a = L/2), empotrado en N1, "
+        "q = −{load_kn_m:g} kN/m en Z sobre B1 y B2."
+    ),
+    "benchmark.description_spring_global": (
+        "Biapoyada de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), P = {load_kn:g} kN hacia −Z "
+        "como carga nodal en N2, articulación en N1. Resorte k = {stiffness:g} N/m en Uz de N3 "
+        "(isostática)."
+    ),
+    "benchmark.description_spring_inclined": (
+        "Biapoyada de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), P = {load_kn:g} kN hacia −Z "
+        "como carga nodal en N2, articulación en N1. Resorte k = {stiffness:g} N/m en Uz′ de "
+        "N3, base a {angle:g}° (ex′ = (cos, 0, sin), ez′ = (−sin, 0, cos)); Ux′ libre."
+    ),
+    "benchmark.description_inclined_roller": (
+        "Biapoyada de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), P = {load_kn:g} kN hacia −Z "
+        "como carga nodal en N2, articulación en N1. Rodillo rígido sobre un plano a "
+        "{angle:g}° en N3 (Uz′ fijo por penalización, Ux′ libre)."
+    ),
+    "benchmark.note_in_plane_not_applicable": (
+        "R_x′ en N3: no aplicable (GDL libre); la reacción no tiene componente en el plano de "
+        "rodadura."
+    ),
+    "benchmark.note_in_plane_status": "R_x′ en N3: estado {status} (se esperaba no aplicable).",
     "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",
     "section.property_unrepresentable": (
         "La propiedad {property} no es representable como valor positivo en doble precisión "
@@ -226,12 +272,17 @@ QUANTITY_KIND_LABELS_ES: Final[dict[str, str]] = {
 }
 
 
-def render_message(diagnostic: Diagnostic) -> str:
-    """Texto en español del diagnóstico; si falta la clave, se devuelve la propia clave."""
-    template = MESSAGES_ES.get(diagnostic.message_key)
+def render_text(key: str, params: Mapping[str, object] | None = None) -> str:
+    """Texto en español de una clave con parámetros; si falta la clave, la propia clave."""
+    template = MESSAGES_ES.get(key)
     if template is None:
-        return diagnostic.message_key
+        return key
     try:
-        return template.format(**diagnostic.params_dict())
+        return template.format(**(params or {}))
     except (KeyError, IndexError, ValueError):
         return template
+
+
+def render_message(diagnostic: Diagnostic) -> str:
+    """Texto en español del diagnóstico; si falta la clave, se devuelve la propia clave."""
+    return render_text(diagnostic.message_key, diagnostic.params_dict())

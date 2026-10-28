@@ -345,6 +345,13 @@ def _too_many_dofs(count: int, limit: int) -> InputValueError:
     )
 
 
+def _no_free_dofs() -> InputValueError:
+    # Plan T-009, D3: con K reducida vacía el worker caería en LAPACK sin diagnóstico útil.
+    return InputValueError(
+        Diagnostic.create(DiagnosticCode.UNSUPPORTED_CONFIGURATION, "fem.no_free_dofs", {})
+    )
+
+
 def analyze_planar_xz(  # noqa: PLR0911 (un retorno por causa de fallo)
     model: StructuralModel, config: AnalysisConfiguration, *, worker: Path = WORKER_PATH
 ) -> AnalysisRun:
@@ -357,6 +364,8 @@ def analyze_planar_xz(  # noqa: PLR0911 (un retorno por causa de fallo)
     request = translation.request
     run.case_revision = request.case_revision
     free = len(reduced_coordinates(request))
+    if free == 0:
+        raise _no_free_dofs()
     if free > config.max_free_dofs:
         raise _too_many_dofs(free, config.max_free_dofs)
     try:

@@ -111,4 +111,5 @@ def test_info_declares_fem_normalized_but_not_validated() -> None:
     status = dict(cli.MODULE_STATUS)["Análisis FEM"]
     assert status.startswith(cli.AVAILABLE)
     assert "normalizados (T-008)" in status
-    assert "no validados (T-009)" in status
+    assert "contrastados solo con T-FEM-001…004 (T-009)" in status
+    assert status.endswith("no validados")

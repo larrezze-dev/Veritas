@@ -18,8 +18,8 @@ Regla de avance: un ticket a la vez; no iniciar el siguiente sin la aceptación 
 | T-006 | S3D-006 | F1B | Casos de carga, cargas nodales y peso propio | LD-001, LD-002, LD-003 | T-005 | ACEPTADO (2026-10-27) ([plan](../plans/T-006.md)) |
 | T-007 | S3D-007 | F1B | Adaptador OpenSeesPy en proceso aislado | FEM-001, FEM-003, FEM-005, FEM-008, FEM-010, NFR-003 | T-006, ADR-002 (aceptado 2026-10-27) | ACEPTADO (2026-10-27) ([plan](../plans/T-007.md)) |
 | T-008 | S3D-008 | F1B | Resultados normalizados: desplazamientos, reacciones y esfuerzos de extremo | FEM-004, RES-001 | T-007 | ACEPTADO (2026-10-28) |
-| T-009 | S3D-009 | F1B | Pruebas analíticas de referencia (viga biapoyada, voladizo) y primera demostración | T-FEM-001, T-FEM-002 | T-008 | NO INICIADO |
-| T-010 | — | F1C | Liberaciones y resortes I/J, detección de mecanismo | CON-003, CON-004, CON-009, CON-011, FEM-008 | T-009 | NO INICIADO |
+| T-009 | S3D-009 | F1B | Pruebas analíticas de referencia (biapoyada, voladizo, resorte, rodillo inclinado) y primera demostración | T-FEM-001 a T-FEM-004 (corregido en el plan T-009) | T-008 | ACEPTADO (2026-10-28, «aceptado, P1 a T-010») |
+| T-010 | — | F1C | Liberaciones y resortes I/J, detección de mecanismo; incluye la «primera demostración solicitada» del ROADMAP (tres barras con materiales distintos y comparación con liberación de un extremo; P1 de T-009) | CON-003, CON-004, CON-009, CON-011, FEM-008 | T-009 | NO INICIADO |
 
 ## Propuestas pendientes asignadas a tickets
 
@@ -31,7 +31,11 @@ Origen: revisión structural-reviewer de T-002 (ver `plans/T-002.md`). El usuari
 | T-004 | ~~Unidad kg/m (masa lineal de perfiles)~~ — incorporada en T-004 (D6; aceptado 2026-10-27) |
 | ~~T-006~~ → F5A / ticket de γ | Magnitud `SURFACE_LOAD` (kN/m², separada de tensión/módulo) → F5A (paneles, LD-004/005); unidad kN/m³ (peso específico, DB-SE-AE) → ticket que introduzca γ o paneles. Aplazadas en T-006 (D7-A, aprobado 2026-10-27) |
 | T-008 | Magnitud `DISPLACEMENT` (flechas en mm con perfil kN-m) |
-| T-009 / T-010 | Estructura sin GDL libres (p. ej. biempotrada de una barra): hoy FAILED con `fem.worker_crashed` (LAPACK `DGBSV`). Detectarla antes de lanzar el worker con un diagnóstico propio o resolverla sin solver. Origen: P2 de T-008 (requiere aprobación en el plan del ticket) |
+| ~~T-009 / T-010~~ | ~~Estructura sin GDL libres~~ — resuelto en T-009 (D3-A): rechazo previo con `fem.no_free_dofs` |
+| Por crear (FEM-002, con ADR) | Adaptador FEM 3D (seis GDL por nudo). ADR-002 limitó el primer adaptador al plano XZ; hace falta un ADR nuevo. Reutiliza ADR-001 y los vectores de 6 componentes de T-008. Origen: límites de T-009 |
+| Por crear (tras la propiedad de área de cortante) | Elemento Timoshenko (deformación por cortante). Necesita el área de cortante Av de la sección, que hoy no se calcula (afecta a T-004) y requiere referencias propias. Origen: límites de T-009 |
+| Por crear (con ADR) | Rodillo inclinado rígido sin penalización: restricciones multipunto (constraint handler Transformation). Error actual del orden de 1e-8. Origen: límites de T-009 |
+| T-010 y siguientes de cada capacidad | Ampliar la batería de referencias analíticas: cercha y pórtico (SRS, puerta de F1: «viga/cercha/pórtico de referencia»), y casos propios para cada capacidad nueva (liberaciones, 3D, P-Delta). Una batería no equivale a una validación general. Origen: límites de T-009 |
 | T-012 | Perfil «N-mm» no coherente N-mm-t: renombrar o documentar al persistir perfiles de usuario |
 | Modal (por crear) | Unidades Hz/s y rigidez rotacional distribuida |
 | F5A (ticket por crear) | Peso específico γ (kN/m³) como propiedad del material, para reproducir los pesos específicos tabulados de DB-SE-AE (por verificar). Cambia la API aceptada de `MaterialRevision` (T-004): requiere plan y aprobación. Origen: límite de T-006 (D4-C) |
@@ -54,3 +58,5 @@ Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se 
 
 - 2026-10-27: backlog inicial creado; todos los tickets NO INICIADO.
 - 2026-10-27: registrados, a petición del usuario, los límites de T-006 sin planificación: T-015 (cargas de barra ampliadas), T-016 (asientos impuestos) y dos propuestas para F5A (peso específico γ, selección de barras del peso propio). No se registra la detección de cargas manuales que dupliquen el peso propio: no se puede decidir con certeza.
+- 2026-10-28: T-009 amplía su alcance a T-FEM-001…004 (corrige la fila); propuesta P2 de T-008 resuelta en T-009 (D3-A).
+- 2026-10-28: T-009 aceptado; P1 (primera demostración del ROADMAP) asignada a T-010; registradas, a petición del usuario, las propuestas de los límites de T-009 (adaptador 3D, Timoshenko, rodillo sin penalización, ampliación de la batería de referencias).
