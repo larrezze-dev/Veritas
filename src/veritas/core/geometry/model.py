@@ -29,6 +29,7 @@ from types import MappingProxyType
 from typing import Final, Literal
 from uuid import UUID
 
+from veritas.core.connections.end import EndConnection, MemberEnd
 from veritas.core.diagnostics import (
     Diagnostic,
     DiagnosticCode,
@@ -285,6 +286,30 @@ class StructuralModel:
         if axes.orientation == current.orientation:
             return current
         updated = replace(current, revision=current.revision + 1, orientation=axes.orientation)
+        self._members[member_id] = updated
+        self._model_revision += 1
+        return updated
+
+    def set_member_end(self, member_id: UUID, end: MemberEnd, connection: EndConnection) -> Member:
+        """Configuración de un extremo: nueva revisión de barra (CON-002, T-CON-002).
+
+        Solo cambia el extremo indicado; el otro extremo y las demás barras del nudo no se
+        modifican. Si la configuración es idéntica a la guardada, no hay cambio y se
+        devuelve la revisión actual.
+        """
+        current = self.member(member_id)
+        if not isinstance(end, MemberEnd):
+            raise _invalid_type("extremo", "MemberEnd", end)
+        if not isinstance(connection, EndConnection):
+            raise _invalid_type("unión de extremo", "EndConnection", connection)
+        if (current.end_i if end is MemberEnd.I else current.end_j) == connection:
+            return current
+        revision = current.revision + 1
+        updated = (
+            replace(current, revision=revision, end_i=connection)
+            if end is MemberEnd.I
+            else replace(current, revision=revision, end_j=connection)
+        )
         self._members[member_id] = updated
         self._model_revision += 1
         return updated

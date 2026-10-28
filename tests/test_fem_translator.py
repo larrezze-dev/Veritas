@@ -5,6 +5,7 @@ import math
 import pytest
 
 from fem_support import AREA, E_PA, IY, IZ, Frame, inclined
+from veritas.core.connections.end import Dof, EndConnection, MemberEnd
 from veritas.core.diagnostics import DiagnosticCode, InputValueError, Severity
 from veritas.core.loads.loads import LoadBasis
 from veritas.core.materials.material import MaterialFamily
@@ -365,3 +366,19 @@ def test_tags_follow_uuid_order() -> None:
     assert [n.entity_id for n in request.nodes] == sorted(n.entity_id for n in request.nodes)
     assert [n.tag for n in request.nodes] == [1, 2, 3]
     assert [b.entity_id for b in request.beams] == sorted(b.entity_id for b in request.beams)
+
+
+@pytest.mark.parametrize("end", list(MemberEnd))
+@pytest.mark.parametrize(
+    "connection",
+    [
+        EndConnection.pinned(),
+        EndConnection.semi_rigid(Dof.RY, Quantity.of(5000, "kN·m/rad")),
+    ],
+)
+def test_non_rigid_member_end_rejected_until_e2(end: MemberEnd, connection: EndConnection) -> None:
+    # T-010 E1: el dominio admite liberaciones y resortes; el adaptador aún no (D9-A).
+    frame = cantilever(Frame())
+    (member_id,) = frame.model.members
+    frame.model.set_member_end(member_id, end, connection)
+    rejected(frame, "fem.member_end_not_rigid")

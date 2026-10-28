@@ -83,6 +83,17 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "support.unsupported_basis": (
         "Base de apoyo no soportada: «{basis}» (se admiten global e inclinada)."
     ),
+    "connection.spring_nonpositive": (
+        "Rigidez del resorte de extremo en {dof} no admitida: {value} (se exige > 0 y normal; "
+        "use RELEASED en su lugar)."
+    ),
+    "connection.semi_rigid_dof": (
+        "El preset semirrígido pone el resorte en un giro (Rx, Ry, Rz), no en {dof}."
+    ),
+    "connection.duplicate_dof": "El GDL de extremo {dof} se define más de una vez.",
+    "connection.unknown_dof": (
+        "GDL de extremo desconocido: «{dof}» (se admiten Ux, Uy, Uz, Rx, Ry, Rz)."
+    ),
     "load.all_zero": "Una carga debe tener alguna componente no nula ({fields}).",
     "load.self_weight_duplicate": (
         "El modelo ya tiene un peso propio (caso {case_id}); solo se admite uno. "

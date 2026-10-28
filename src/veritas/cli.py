@@ -54,7 +54,7 @@ from uuid import UUID
 
 from veritas import PRODUCT_NAME, __version__
 from veritas.core import units as u
-from veritas.core.connections.end import Dof, EndConnection
+from veritas.core.connections.end import Dof, DofState, EndConnection
 from veritas.core.diagnostics import (
     Diagnostic,
     DiagnosticCode,
@@ -228,9 +228,31 @@ def build_parser() -> argparse.ArgumentParser:
     support_demo.add_argument(
         "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
     )
+    _add_connection_parser(subparsers, profile_names)
     _add_load_parser(subparsers, profile_names)
     _add_analyze_parser(subparsers, profile_names)
     return parser
+
+
+def _add_connection_parser(
+    subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]", profile_names: list[str]
+) -> None:
+    connection_parser = subparsers.add_parser("connection", help="Uniones de extremo I/J.")
+    connection_sub = connection_parser.add_subparsers(
+        dest="connection_command", metavar="ACCIÓN", required=True
+    )
+    dofs = connection_sub.add_parser(
+        "dofs", help="Seis GDL locales de un extremo de barra (sin análisis)."
+    )
+    dofs.add_argument("--preset", choices=CONNECTION_PRESETS, help="Preset.")
+    dofs.add_argument("--release", default=None, help="GDL liberados separados por comas: Ry,Rz.")
+    dofs.add_argument(
+        "--spring",
+        action="append",
+        default=[],
+        help='Resorte GDL=valor unidad, repetible: "Ry=5000 kN*m/rad", "Ux=2e5 kN/m".',
+    )
+    dofs.add_argument("--profile", default="SI", choices=profile_names, help="Perfil de unidades.")
 
 
 def _add_analyze_parser(
@@ -771,6 +793,102 @@ def _check_support_usage(args: argparse.Namespace, parser: argparse.ArgumentPars
         parser.error("--base inclinada exige --x-dir y --z-ref")
     if not inclined and (args.x_dir is not None or args.z_ref is not None):
         parser.error("--x-dir y --z-ref solo se usan con --base inclinada")
+
+
+CONNECTION_PRESETS: Final = ("rigido", "articulado", "semirrigido")
+CONNECTION_BASIS: Final = "Extremo de barra: seis GDL en la base LOCAL de la barra (ADR-001 §1)."
+CONNECTION_ANALYSIS_PENDING: Final = (
+    "Análisis: el adaptador plano XZ aún rechaza extremos no rígidos (T-010, entrega E2)."
+)
+_END_DOF_BY_NAME: Final = {str(dof).lower(): dof for dof in Dof}
+
+
+def _parse_end_dof(text: str) -> Dof:
+    try:
+        return _END_DOF_BY_NAME[text.strip().lower()]
+    except KeyError:
+        raise InputValueError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_OUT_OF_RANGE, "connection.unknown_dof", {"dof": text.strip()}
+            )
+        ) from None
+
+
+def _parse_end_spring(text: str) -> tuple[Dof, u.Quantity]:
+    match = _SPRING_PATTERN.match(text)
+    if match is None:
+        raise InputTypeError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_INVALID_TYPE,
+                "input.invalid_type",
+                {"field": "--spring", "expected": "GDL=valor unidad", "received": repr(text)},
+            )
+        )
+    return _parse_end_dof(match.group(1)), u.Quantity.of(
+        _parse_number(match.group(2)), match.group(3)
+    )
+
+
+def _custom_connection(release_text: str | None, spring_texts: Sequence[str]) -> EndConnection:
+    names = [] if release_text is None else [n for n in release_text.split(",") if n.strip()]
+    changes: list[tuple[Dof, DofState, u.Quantity | None]] = [
+        (_parse_end_dof(name), DofState.RELEASED, None) for name in names
+    ]
+    changes += [(dof, DofState.SPRING, k) for dof, k in map(_parse_end_spring, spring_texts)]
+    connection = EndConnection.rigid()
+    seen: set[Dof] = set()
+    for dof, state, stiffness in changes:
+        if dof in seen:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE, "connection.duplicate_dof", {"dof": str(dof)}
+                )
+            )
+        seen.add(dof)
+        connection = connection.with_dof(dof, state, stiffness)
+    return connection
+
+
+def _connection_from_args(args: argparse.Namespace) -> EndConnection:
+    if args.preset == "rigido":
+        return EndConnection.rigid()
+    if args.preset == "articulado":
+        return EndConnection.pinned()
+    if args.preset == "semirrigido":
+        dof, stiffness = _parse_end_spring(args.spring[0])
+        return EndConnection.semi_rigid(dof, stiffness)
+    return _custom_connection(args.release, args.spring)
+
+
+def connection_lines(connection: EndConnection, profile: PresentationProfile) -> list[str]:
+    """Tabla GDL/Estado/Rigidez de un extremo, con la rigidez en el perfil."""
+    rows = []
+    for dof in Dof:
+        stiffness = connection.stiffness_of(dof)
+        kind = (
+            QuantityKind.TRANSLATIONAL_STIFFNESS
+            if dof.is_translation
+            else QuantityKind.ROTATIONAL_STIFFNESS
+        )
+        shown = "-" if stiffness is None else format_quantity(stiffness, kind, profile)
+        rows.append((str(dof), str(connection.state(dof)), shown))
+    return [CONNECTION_BASIS, _table(("GDL", "Estado", "Rigidez"), rows)]
+
+
+def format_connection_dofs(args: argparse.Namespace) -> str:
+    """Seis GDL de un extremo de barra; sin análisis ni juicio de estabilidad."""
+    connection = _connection_from_args(args)
+    lines = connection_lines(connection, _profile(args.profile))
+    return "\n".join([*lines, "", CONNECTION_ANALYSIS_PENDING])
+
+
+def _check_connection_usage(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if args.preset in {"rigido", "articulado"} and (args.release is not None or args.spring):
+        parser.error(f"--preset {args.preset} no se combina con --release ni con --spring")
+    if args.preset == "semirrigido" and (args.release is not None or len(args.spring) != 1):
+        parser.error(
+            "--preset semirrigido exige un único --spring en un giro y no admite --release"
+        )
 
 
 _DEMO_ROLLER_ANGLE: Final = math.radians(30.0)
@@ -1474,6 +1592,9 @@ def _run(  # noqa: PLR0911 (un retorno por subcomando)
             _check_support_usage(args, parser)
             return format_support_dofs(args)
         return format_support_demo(args.profile)
+    if args.command == "connection":
+        _check_connection_usage(args, parser)
+        return format_connection_dofs(args)
     if args.command == "load":
         if args.load_command == "selfweight":
             return format_load_selfweight(
