@@ -116,13 +116,19 @@ def test_equilibrium_check_rejects_unbalanced_response(tmp_path: Path) -> None:
 
 
 def test_balanced_response_succeeds_with_provenance(tmp_path: Path) -> None:
+    # Solución exacta del voladizo (L = 2 m, P₂ = −1000 N): los controles de T-017 (D1, D2)
+    # exigen u y localForce coherentes con K·u = P, no solo reacciones equilibradas.
     body = """
     fixed = {f[0] for f in request["fixes"]}
+    beam = request["beams"][0]
+    ei = beam[5] * beam[6]
+    tip = [0.0, -8000.0 / (3 * ei), -2000.0 / ei]
     nodes = [
-        [n[0], [0.0, 0.0, 0.0], [0.0, 1000.0, 2000.0] if n[0] in fixed else [0.0, 0.0, 0.0]]
+        [n[0], [0.0, 0.0, 0.0], [0.0, 1000.0, 2000.0]] if n[0] in fixed
+        else [n[0], tip, [0.0, 0.0, 0.0]]
         for n in request["nodes"]
     ]
-    respond(nodes=nodes)
+    respond(nodes=nodes, beams=[[beam[0], [0.0, 1000.0, 2000.0, 0.0, -1000.0, 0.0]]])
     """
     frame = cantilever()
     first = run_with(tmp_path, body, frame)
@@ -134,12 +140,27 @@ def test_balanced_response_succeeds_with_provenance(tmp_path: Path) -> None:
     assert first.model_revision == frame.model.model_revision
     assert first.case_id == frame.case_id
     assert first.configuration["timeout_s"] == 60.0
-    assert first.versions["adapter"] == "veritas.fem.planar_xz/2"  # T-010
+    assert first.versions["adapter"] == "veritas.fem.planar_xz/3"  # T-017, D6
     assert first.versions["protocol"] == "2"
     assert first.pivot is not None
     assert first.pivot.free_dofs == 3
     reactions = {n.reaction for n in first.raw.nodes}
     assert (None, None, None) in reactions  # Nudo libre: «no aplicable», nunca 0.
+
+
+def test_balanced_reactions_with_null_displacement_fail_residual(tmp_path: Path) -> None:
+    """T-017, D2: reacciones que equilibran P con u = 0 no cumplen K·u = P."""
+    body = """
+    fixed = {f[0] for f in request["fixes"]}
+    nodes = [
+        [n[0], [0.0, 0.0, 0.0], [0.0, 1000.0, 2000.0] if n[0] in fixed else [0.0, 0.0, 0.0]]
+        for n in request["nodes"]
+    ]
+    respond(nodes=nodes)
+    """
+    run = run_with(tmp_path, body)
+    assert_failed(run, DiagnosticCode.ANALYSIS_FAILED, "fem.residual_failed")
+    assert run.diagnostics[0].params_dict()["component"] == "u2"
 
 
 def test_singular_model_never_launches_worker(tmp_path: Path) -> None:

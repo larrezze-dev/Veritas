@@ -48,15 +48,11 @@ class PivotReport:
     singular: bool
 
 
-def beam_stiffness(
-    xi: tuple[float, float], xj: tuple[float, float], area: float, modulus: float, inertia: float
-) -> Matrix:
-    dx, dz = xj[0] - xi[0], xj[1] - xi[1]
-    length = math.hypot(dx, dz)
-    c, s = dx / length, dz / length
+def local_beam_stiffness(length: float, area: float, modulus: float, inertia: float) -> Matrix:
+    """k local Euler–Bernoulli 2D en (u₁, u₂, θ) de I y J."""
     ea, ei = modulus * area / length, modulus * inertia
     a, b, d, e = 12 * ei / length**3, 6 * ei / length**2, 4 * ei / length, 2 * ei / length
-    local = [
+    return [
         [ea, 0.0, 0.0, -ea, 0.0, 0.0],
         [0.0, a, b, 0.0, -a, b],
         [0.0, b, d, 0.0, -b, e],
@@ -64,11 +60,26 @@ def beam_stiffness(
         [0.0, -a, -b, 0.0, a, -b],
         [0.0, b, e, 0.0, -b, d],
     ]
+
+
+def beam_rotation(xi: tuple[float, float], xj: tuple[float, float]) -> tuple[float, Matrix]:
+    """(L, T) con u_local = T·u_global; T es ortogonal."""
+    dx, dz = xj[0] - xi[0], xj[1] - xi[1]
+    length = math.hypot(dx, dz)
+    c, s = dx / length, dz / length
     rotation = [[0.0] * 6 for _ in range(6)]
     for block in (0, 3):
         rotation[block][block], rotation[block][block + 1] = c, s
         rotation[block + 1][block], rotation[block + 1][block + 1] = -s, c
         rotation[block + 2][block + 2] = 1.0
+    return length, rotation
+
+
+def beam_stiffness(
+    xi: tuple[float, float], xj: tuple[float, float], area: float, modulus: float, inertia: float
+) -> Matrix:
+    length, rotation = beam_rotation(xi, xj)
+    local = local_beam_stiffness(length, area, modulus, inertia)
     # K_global = Tᵀ k T
     kt = [[sum(local[i][m] * rotation[m][j] for m in range(6)) for j in range(6)] for i in range(6)]
     return [[sum(rotation[m][i] * kt[m][j] for m in range(6)) for j in range(6)] for i in range(6)]

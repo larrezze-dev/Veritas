@@ -192,6 +192,20 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Control de equilibrio no superado (residuo de fuerzas {force}, de momentos {moment}; "
         "tolerancia {tolerance}). No hay resultados."
     ),
+    "fem.member_end_postcondition_failed": (
+        "Control de la solución no superado en el extremo {end} de la barra {member}: "
+        "{control} (valor {value}, cota {bound}). No hay resultados."
+    ),
+    "fem.member_force_check_failed": (
+        "Control de esfuerzos no superado en la barra {member}: componente {component} de "
+        "localForce frente a k·T·u − F_eq (residuo {value}, cota {bound}). No hay resultados."
+    ),
+    "fem.residual_failed": (
+        "Residuo K·u − P no superado en {subject}, coordenada {component} de la base del "
+        "solver (residuo {value}, cota {bound}). No hay resultados."
+    ),
+    "fem.subject_node": "el nudo {node}",
+    "fem.subject_member_end": "el giro del extremo {end} de la barra {member}",
     "fem.out_of_plane_implicit_restraint": (
         "Ningún apoyo restringe {dof}: el análisis plano lo restringe implícitamente en los "
         "{nodes} nudos. El modelo 3D podría ser un mecanismo fuera del plano; el resultado solo "

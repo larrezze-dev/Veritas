@@ -69,6 +69,8 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
     for tag, _entity, node_i, node_j, area, modulus, inertia, _axis in request["beams"]:
         start = element_node.get((tag, "I"), node_i)
         stop = element_node.get((tag, "J"), node_j)
+        # Sin ``-release``, transformación Linear y beamUniform (Wy, Wx): el padre comprueba
+        # localForce = k·T·u − F_eq (T-017, D1). Cambiarlo exige nueva versión de protocolo.
         ops.element("elasticBeamColumn", tag, start, stop, area, modulus, inertia, 1)
     for tag, _member, _beam, _end, master, aux, stiffness in request["end_links"]:
         if stiffness is not None:
@@ -101,6 +103,8 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
         ops.load(node, p1, p2, moment)
     for beam, wy, wx in request["beam_loads"]:
         ops.eleLoad("-ele", beam, "-type", "-beamUniform", wy, wx)
+    # Transformation hace que nodeDisp(aux)[0:2] sea igual bit a bit al maestro: el control
+    # de alias del padre (T-017, D1) depende de ello. Cambiarlo exige nueva versión de protocolo.
     ops.constraints("Transformation")
     ops.numberer("RCM")
     ops.system("BandGeneral")

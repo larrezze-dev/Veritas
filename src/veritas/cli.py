@@ -1497,6 +1497,10 @@ def run_analyze_demo(
 UNIONS_L: Final = 4.0  # m, luz total; carga en el centro N3.
 UNIONS_P: Final = 10_000.0  # N, hacia -Z.
 UNIONS_SPRING_RATIO: Final = 1.0  # k·L/(EI) del resorte de la variante semirrígida.
+# |x_ríg − x_lib| mínimo, relativo a la escala, para entrar en el cociente s (revisión E1, 5).
+SPRING_RATIO_MIN_SPAN: Final = 1e-6
+YES: Final = "sí"
+NO: Final = "no"
 COMPARISON_NOTE: Final = (
     "Comparación de variantes del mismo modelo; «—» = sin valor (no aplicable o corrida "
     "fallida). Los valores no están validados (aplicación experimental)."
@@ -1584,6 +1588,7 @@ def _comparison(
     rows: Sequence[tuple[str, QuantityKind, _Extractor]],
     profile: PresentationProfile,
     references: Sequence[Sequence[str]] = (),
+    extra_columns: Sequence[str] = (),
 ) -> str:
     table = []
     for index, (name, kind, extract) in enumerate(rows):
@@ -1600,8 +1605,9 @@ def _comparison(
         table.append([name, *cells, *extra])
     header = ["Magnitud", *(item.variant.name for item in solved)]
     if references:
-        header += [f"Ref. {item.variant.name}" for item in solved[: len(references[0])]]
-    return _table(header, table)
+        count = len(references[0]) - len(extra_columns)
+        header += [f"Ref. {item.variant.name}" for item in solved[:count]]
+    return _table([*header, *extra_columns], table)
 
 
 def _status_lines(solved: Sequence[_Solved]) -> list[str]:
@@ -1667,6 +1673,135 @@ def _unions_variant(name: str, end_j: EndConnection | None, *, mechanism: bool =
     return _Variant(name, model, case.id, _labels(model))
 
 
+def unions_references(load: float, length: float, ei: float) -> list[tuple[float, float]]:
+    """(rígida, liberada) en SI por fila de ``analyze uniones``, con signo (ADR-001)."""
+    return [
+        (-load * length**3 / (192 * ei), -7 * load * length**3 / (768 * ei)),
+        (load / 2, 11 * load / 16),
+        (load / 2, 5 * load / 16),
+        (-load * length / 8, -3 * load * length / 16),
+        (load * length / 8, 0.0),
+        (load * length / 8, 0.0),
+    ]
+
+
+@dataclass(frozen=True, slots=True)
+class SpringContrast:
+    """Contraste de la columna «Resorte» de ``analyze uniones`` (T-017, D4-A.2)."""
+
+    within: tuple[bool, ...]  # Por fila: entre rígida y liberada, inclusive y con tolerancia.
+    ratio: float | None  # s medio; None si ninguna fila tiene x_ríg ≠ x_lib.
+    spread: float | None  # máx s − mín s.
+
+    @property
+    def matches(self) -> bool:
+        return (
+            all(self.within)
+            and self.ratio is not None
+            and self.spread is not None
+            and 0.0 < self.ratio < 1.0
+            and self.spread <= benchmarks.TOL_EXACT
+        )
+
+
+def spring_contrast(
+    rigid: Sequence[float | None],
+    released: Sequence[float | None],
+    spring: Sequence[float | None],
+    scales: Sequence[float],
+) -> SpringContrast:
+    """Monotonía y cociente común: con un único resorte, x(k) = x_lib + (x_ríg − x_lib)·s.
+
+    Un k erróneo, pero aplicado igual en toda la estructura, solo cambia s. El cociente
+    detecta un resorte aplicado de forma incoherente (a tierra en vez de relativo, o una
+    magnitud de otra corrida), no el valor de k.
+    """
+    within: list[bool] = []
+    ratios: list[float] = []
+    for x_r, x_l, x_s, scale in zip(rigid, released, spring, scales, strict=True):
+        if x_r is None or x_l is None or x_s is None:
+            within.append(False)
+            continue
+        margin = benchmarks.TOL_EXACT * scale
+        within.append(min(x_r, x_l) - margin <= x_s <= max(x_r, x_l) + margin)
+        # Solo filas con x_ríg − x_lib apreciable: en una casi degenerada, s no es fiable.
+        if abs(x_r - x_l) >= SPRING_RATIO_MIN_SPAN * scale:
+            ratios.append((x_s - x_l) / (x_r - x_l))
+    if not ratios:
+        return SpringContrast(tuple(within), None, None)
+    return SpringContrast(tuple(within), sum(ratios) / len(ratios), max(ratios) - min(ratios))
+
+
+@dataclass(frozen=True, slots=True)
+class UnionsContrast:
+    """Contraste de ``analyze uniones``: Rígida y Liberada por referencia, Resorte por s."""
+
+    rigid: tuple[benchmarks.ReferenceCheck, ...]
+    released: tuple[benchmarks.ReferenceCheck, ...]
+    spring: SpringContrast
+
+    @property
+    def matches(self) -> bool:
+        checks = (*self.rigid, *self.released)
+        return all(check.matches for check in checks) and self.spring.matches
+
+    @property
+    def row_matches(self) -> list[bool]:
+        return [
+            r.matches and lib.matches and within
+            for r, lib, within in zip(self.rigid, self.released, self.spring.within, strict=True)
+        ]
+
+    @property
+    def row_errors(self) -> list[float | None]:
+        errors: list[float | None] = []
+        for r, lib in zip(self.rigid, self.released, strict=True):
+            e_r, e_l = r.relative_error, lib.relative_error
+            errors.append(None if e_r is None or e_l is None else max(e_r, e_l))
+        return errors
+
+
+def contrast_unions(
+    solved: Sequence[_Solved],
+    rows: Sequence[tuple[str, QuantityKind, _Extractor]],
+    pairs: Sequence[tuple[float, float]],
+    moment_scale: float,
+) -> UnionsContrast:
+    """Rígida y Liberada con ``benchmarks.evaluate``; Resorte con ``spring_contrast``."""
+    scales = {QuantityKind.MOMENT: moment_scale}
+    checks = [
+        benchmarks.evaluate(
+            [
+                (name, "", kind, pair[column], extract(solved[column]))
+                for (name, kind, extract), pair in zip(rows, pairs, strict=True)
+            ],
+            benchmarks.TOL_EXACT,
+            scales,
+        )
+        for column in (0, 1)
+    ]
+    rigid, released = checks
+    spring = spring_contrast(
+        [check.computed for check in rigid],
+        [check.computed for check in released],
+        [extract(solved[2]) for _name, _kind, extract in rows],
+        [max(r.scale, lib.scale) for r, lib in zip(rigid, released, strict=True)],
+    )
+    return UnionsContrast(rigid, released, spring)
+
+
+def _spring_lines(contrast: UnionsContrast) -> list[str]:
+    spring = contrast.spring
+    ratio = NOT_APPLICABLE_MARK if spring.ratio is None else f"{spring.ratio:.6f}"
+    spread = NOT_APPLICABLE_MARK if spring.spread is None else f"{spring.spread:.1e}"
+    verdict = REFERENCE_MATCH if contrast.matches else REFERENCE_MISMATCH
+    return [
+        f"Resorte: s = {ratio} (dispersión {spread}, tolerancia {benchmarks.TOL_EXACT:g}); "
+        f"entre Rígida y Liberada: {YES if all(spring.within) else NO}.",
+        f"Contraste de uniones: {verdict}.",
+    ]
+
+
 def run_analyze_unions(timeout_text: str, profile_name: str = "SI") -> tuple[str, int]:
     """``veritas analyze uniones``: tres uniones y un mecanismo (puerta F1C; T-010, D7)."""
     timeout = _parse_number(timeout_text)
@@ -1693,14 +1828,18 @@ def run_analyze_unions(timeout_text: str, profile_name: str = "SI") -> tuple[str
     def q(value: float, kind: QuantityKind) -> str:
         return format_quantity(u.Quantity.of(value, _SI_SYMBOLS[kind]), kind, profile)
 
-    disp, force, moment = QuantityKind.DISPLACEMENT, QuantityKind.FORCE, QuantityKind.MOMENT
+    pairs = unions_references(load, length, ei)
+    contrast = contrast_unions(solved, rows, pairs, load * length / 8)
     references = [
-        [q(-load * length**3 / (192 * ei), disp), q(-7 * load * length**3 / (768 * ei), disp)],
-        [q(load / 2, force), q(11 * load / 16, force)],
-        [q(load / 2, force), q(5 * load / 16, force)],
-        [q(-load * length / 8, moment), q(-3 * load * length / 16, moment)],
-        [q(load * length / 8, moment), q(0.0, moment)],
-        [q(load * length / 8, moment), q(0.0, moment)],
+        [
+            q(rigid, kind),
+            q(released, kind),
+            YES if ok else NO,
+            NOT_APPLICABLE_MARK if error is None else f"{error:.1e}",
+        ]
+        for (_name, kind, _extract), (rigid, released), ok, error in zip(
+            rows, pairs, contrast.row_matches, contrast.row_errors, strict=True
+        )
     ]
     mechanism = _solve(_unions_variant("Mecanismo", None, mechanism=True), timeout)
     stiffness = format_quantity(
@@ -1715,11 +1854,15 @@ def run_analyze_unions(timeout_text: str, profile_name: str = "SI") -> tuple[str
         "",
         *_status_lines(solved),
         "",
-        _comparison(solved, rows, profile, references),
+        _comparison(solved, rows, profile, references, ("Coincide", "Err. rel. máx.")),
         "Referencias a mano: Rígida = biempotrada (PL/8, PL³/(192EI)); Liberada = empotrada-"
-        "articulada (3PL/16, 7PL³/(768EI), reacciones 11P/16 y 5P/16). El resorte queda entre "
-        "ambas. Esta tabla no se contrasta automáticamente; el contraste con tolerancia está en "
-        "`veritas analyze referencias` (T-CON-REF-01…04).",
+        "articulada (3PL/16, 7PL³/(768EI), reacciones 11P/16 y 5P/16). Contraste automático "
+        "(T-017, D4): Rígida y Liberada con su referencia, error relativo ≤ "
+        f"{benchmarks.TOL_EXACT:g} sobre la mayor referencia del mismo tipo (momentos: al "
+        "menos PL/8). El resorte no tiene fórmula cerrada revisada: cada magnitud debe quedar "
+        "entre Rígida y Liberada y el cociente s = (x_res − x_lib)/(x_ríg − x_lib) debe ser "
+        "común a todas, como corresponde a un único resorte.",
+        *_spring_lines(contrast),
         COMPARISON_NOTE,
         "",
         "Mecanismo: la misma viga sobre articulación (N1) y rodillo (N2) con el extremo J de B1 "
@@ -1728,8 +1871,10 @@ def run_analyze_unions(timeout_text: str, profile_name: str = "SI") -> tuple[str
         "",
         EXPERIMENTAL_WARNING,
     ]
-    ok = all(item.results is not None for item in solved) and any(
-        d.code is DiagnosticCode.ANALYSIS_SINGULAR for d in mechanism.run.diagnostics
+    ok = (
+        all(item.results is not None for item in solved)
+        and any(d.code is DiagnosticCode.ANALYSIS_SINGULAR for d in mechanism.run.diagnostics)
+        and contrast.matches
     )
     return "\n".join(lines), EXIT_OK if ok else EXIT_ANALYSIS_FAILED
 

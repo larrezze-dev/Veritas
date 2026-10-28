@@ -15,7 +15,7 @@ from veritas.core.diagnostics import Diagnostic
 
 RAW_BASIS: Final = "SOLVER_XZ_RAW"
 ADAPTER_ID: Final = "veritas.fem.planar_xz"
-ADAPTER_VERSION: Final = "2"  # 2: extremos liberados/resorte (T-010)
+ADAPTER_VERSION: Final = "3"  # 2: extremos de barra (T-010); 3: controles de T-017
 
 type Triple = tuple[float, float, float]
 

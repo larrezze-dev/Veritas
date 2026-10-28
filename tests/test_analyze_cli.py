@@ -133,6 +133,64 @@ def test_unions_compares_three_ends_and_diagnoses_mechanism(
     assert "6.875 kN" in out  # 11P/16 de la variante liberada.
     assert cli.COMPARISON_NOTE in out
     assert cli.EXPERIMENTAL_WARNING in out
+    # T-017, D4: contraste automático.
+    assert "Coincide" in out
+    assert "Err. rel. máx." in out
+    assert "no se contrasta automáticamente" not in out
+    # Valor de regresión, no referencia revisada (D4-B no aprobada): s con 6 decimales.
+    assert "Resorte: s = 0.200000 (" in out
+    assert "Contraste de uniones: coincide." in out
+
+
+@pytest.mark.solver
+def test_unions_altered_reference_exits_3(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = cli.unions_references
+
+    def altered(load: float, length: float, ei: float) -> list[tuple[float, float]]:
+        pairs = original(load, length, ei)
+        pairs[1] = (pairs[1][0] * (1 + 1e-6), pairs[1][1])  # RZ N1 rígida
+        return pairs
+
+    monkeypatch.setattr(cli, "unions_references", altered)
+    assert cli.main(["analyze", "uniones"]) == cli.EXIT_ANALYSIS_FAILED
+    out = capsys.readouterr().out
+    assert f"Contraste de uniones: {cli.REFERENCE_MISMATCH}." in out
+
+
+SCALES = [1.0, 1.0, 1.0]
+
+
+def test_spring_contrast_accepts_a_single_spring() -> None:
+    rigid, released = [1.0, -2.0, 0.5], [3.0, 0.0, 0.0]
+    spring = [x_l + (x_r - x_l) * 0.3 for x_r, x_l in zip(rigid, released, strict=True)]
+    contrast = cli.spring_contrast(rigid, released, spring, SCALES)
+    assert contrast.matches
+    assert contrast.ratio == pytest.approx(0.3, abs=1e-15)
+
+
+def test_spring_contrast_rejects_an_inconsistent_magnitude() -> None:
+    """Una magnitud con otro s (resorte incoherente): monotonía sí, cociente común no.
+
+    Un k erróneo pero aplicado igual en toda la estructura no se detecta: solo cambia s.
+    """
+    rigid, released = [1.0, -2.0, 0.5], [3.0, 0.0, 0.0]
+    ratios = [0.3, 0.3, 0.31]
+    spring = [x_l + (x_r - x_l) * s for x_r, x_l, s in zip(rigid, released, ratios, strict=True)]
+    contrast = cli.spring_contrast(rigid, released, spring, SCALES)
+    assert all(contrast.within)
+    assert not contrast.matches
+
+
+def test_spring_contrast_rejects_out_of_range_and_missing() -> None:
+    rigid, released = [1.0, -2.0], [3.0, 0.0]
+    outside = cli.spring_contrast(rigid, released, [3.5, 0.5], SCALES[:2])
+    assert outside.within == (False, False)
+    assert not outside.matches
+    missing = cli.spring_contrast(rigid, released, [None, -1.0], SCALES[:2])
+    assert missing.within == (False, True)
+    assert not missing.matches
 
 
 @pytest.mark.solver
@@ -150,3 +208,12 @@ def test_fixed_fixed_demo_is_rejected_before_solver(capsys: pytest.CaptureFixtur
     out, err = capsys.readouterr()
     assert out == ""
     assert err.startswith("UNSUPPORTED_CONFIGURATION:")
+
+
+def test_spring_contrast_skips_near_degenerate_rows() -> None:
+    """Una fila con |x_ríg − x_lib| < 1e-6·escala no entra en s (revisión E1, 5)."""
+    rigid, released = [1.0, 2e-8], [3.0, 1e-8]
+    spring = [3.0 - 2.0 * 0.3, 1.9e-8]  # s ≈ 0,9 en la fila casi degenerada.
+    contrast = cli.spring_contrast(rigid, released, spring, [3.0, 3.0])
+    assert contrast.matches
+    assert contrast.ratio == pytest.approx(0.3, abs=1e-15)

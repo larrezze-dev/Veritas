@@ -1,7 +1,8 @@
 """Adaptador FEM plano XZ con OpenSeesPy en proceso aislado (plan T-007; ADR-002).
 
 ``analyze_planar_xz`` traduce el modelo, aplica la salvaguarda de singularidad (D3),
-ejecuta el worker en un proceso nuevo y comprueba el equilibrio. Devuelve un
+ejecuta el worker en un proceso nuevo y comprueba el equilibrio y, desde T-017, los
+controles de la solución de ``postconditions`` (D1 y D2). Devuelve un
 ``AnalysisRun``: un fallo, una singularidad o un tiempo agotado dan ``FAILED`` sin
 resultados. Una entrada no soportada se rechaza antes con ``InputValueError``.
 
@@ -14,7 +15,6 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final
 from uuid import UUID, uuid4
 
 from veritas import __version__
@@ -26,6 +26,7 @@ from veritas.core.diagnostics import (
     ParamValue,
 )
 from veritas.core.geometry.model import StructuralModel
+from veritas.core.messages_es import render_text
 from veritas.fem.adapters.planar_xz import Translation, translate_planar_xz
 from veritas.fem.adapters.protocol import (
     PROTOCOL_VERSION,
@@ -44,6 +45,12 @@ from veritas.fem.adapters.singularity import (
     reduced_coordinates,
 )
 from veritas.fem.config import AnalysisConfiguration
+from veritas.fem.postconditions import (
+    PENALTY_EQUILIBRIUM_FACTOR,
+    CheckFailure,
+    member_checks,
+    residual_check,
+)
 from veritas.fem.results.normalized import (
     Component,
     ComponentStatus,
@@ -90,9 +97,9 @@ __all__ = [
     "normalize_planar_xz",
 ]
 
-# Constante c de la ampliación del control de equilibrio por redondeo de K·u: error hacia
-# atrás de la solución directa (R2) y de la penalización (R1). Se registra en la procedencia.
-PENALTY_EQUILIBRIUM_FACTOR: Final = 10.0
+# PENALTY_EQUILIBRIUM_FACTOR (postconditions): constante c de la ampliación de los controles
+# por redondeo de K·u, error hacia atrás de la solución directa (R2) y de la penalización
+# (R1). Se registra en la procedencia.
 
 
 @dataclass(frozen=True, slots=True)
@@ -352,6 +359,28 @@ def _rounding_bound(request: PlanarRequest, response: WorkerResponse) -> tuple[f
     return scale * force, scale * moment
 
 
+def _check_failure(model: StructuralModel, failure: CheckFailure) -> _Failure:
+    """Controles de T-017 (D1, D2): añade la etiqueta y la ubicación de la entidad."""
+    params = dict(failure.params)
+    location = None
+    if failure.member_id is not None:
+        member = model.member(UUID(failure.member_id))
+        params["member"] = member.label or str(member.id)
+        location = Location(entity_id=member.id, revision=member.revision)
+    if failure.key == "fem.residual_failed":
+        if failure.member_id is not None:
+            params["subject"] = render_text(
+                "fem.subject_member_end", {"end": params.pop("end"), "member": params.pop("member")}
+            )
+        elif failure.node_id is not None:
+            node = model.node(UUID(failure.node_id))
+            params["subject"] = render_text(
+                "fem.subject_node", {"node": node.label or str(node.id)}
+            )
+            location = Location(entity_id=node.id, revision=node.revision)
+    return _Failure(DiagnosticCode.ANALYSIS_FAILED, failure.key, params, location)
+
+
 def _worker_failure(outcome: WorkerOutcome, timeout_s: float) -> _Failure | None:
     if outcome.timed_out:
         return _Failure(DiagnosticCode.ANALYSIS_FAILED, "fem.timeout", {"timeout": timeout_s})
@@ -500,4 +529,7 @@ def analyze_planar_xz(  # noqa: PLR0911 (un retorno por causa de fallo)
             ),
             None,
         )
+    check = member_checks(request, response, config) or residual_check(request, response, config)
+    if check is not None:
+        return run.finish(_check_failure(model, check), None)
     return run.finish(None, raw)

@@ -4,13 +4,18 @@ import math
 from collections.abc import Sequence
 from uuid import UUID
 
+import pytest
+
+from veritas import fem
 from veritas.core.geometry.entities import Member, Node
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.loads.load_case import LoadCategory
 from veritas.core.materials.material import MaterialFamily
 from veritas.core.supports.support import Restraints, SupportBasis
 from veritas.core.units import Quantity
+from veritas.fem.adapters.protocol import PlanarRequest, WorkerResponse
 from veritas.fem.config import AnalysisConfiguration
+from veritas.fem.results.run import AnalysisRun
 
 E_PA = 210e9
 B, H = 0.2, 0.4
@@ -82,3 +87,24 @@ def inclined(angle_deg: float) -> SupportBasis:
     """Base inclinada con x′ a ``angle_deg`` en el plano XZ y ey′ = +Y."""
     c, s = math.cos(math.radians(angle_deg)), math.sin(math.radians(angle_deg))
     return SupportBasis.inclined((c, 0.0, s), (-s, 0.0, c))
+
+
+def solved_pair(
+    frame: Frame, monkeypatch: pytest.MonkeyPatch, **overrides: float
+) -> tuple[PlanarRequest, WorkerResponse, AnalysisConfiguration, AnalysisRun]:
+    """Corrida real y la (petición, respuesta) que llega al control de equilibrio (T-017)."""
+    captured: list[tuple[PlanarRequest, WorkerResponse]] = []
+    original = fem.equilibrium_residual
+
+    def spy(
+        request: PlanarRequest, response: WorkerResponse, config: AnalysisConfiguration
+    ) -> tuple[bool, float, float]:
+        captured.append((request, response))
+        return original(request, response, config)
+
+    monkeypatch.setattr(fem, "equilibrium_residual", spy)
+    config = frame.config(**overrides)
+    run = fem.analyze_planar_xz(frame.model, config)
+    monkeypatch.setattr(fem, "equilibrium_residual", original)
+    assert len(captured) == 1, run.diagnostics
+    return captured[0][0], captured[0][1], config, run
