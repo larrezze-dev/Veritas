@@ -85,8 +85,28 @@ class RawPlanarResults:
 
 
 @dataclass(frozen=True, slots=True)
+class MechanismDof:
+    """GDL que participa en el modo de mecanismo (T-017, D3), en base de dominio.
+
+    ``component``: «Ux», «Uz», «Ry» o «t» (traslación tangente de un apoyo oblicuo). Con
+    ``member_id``, es el giro propio del extremo ``end`` de esa barra sobre ``node_id``.
+    ``participation`` = Σ_q Q_iq² en coordenadas escaladas (entre 0 y 1).
+    """
+
+    node_id: UUID
+    component: str
+    participation: float
+    member_id: UUID | None = None
+    end: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PivotSummary:
-    """Pivote mínimo relativo de la salvaguarda D3 y su GDL (siempre registrado)."""
+    """Pivote mínimo relativo de la salvaguarda D3 y su GDL (siempre registrado).
+
+    Con singularidad y modo concluyente (T-017, D3), ``nullity`` y ``mechanism`` dan el
+    modo completo en orden determinista; si no, ``nullity`` es None y ``mechanism`` vacío.
+    """
 
     free_dofs: int
     min_pivot: float | None
@@ -95,6 +115,8 @@ class PivotSummary:
     # T-010: el GDL del pivote es el giro propio del extremo ``end`` de ``member_id``.
     member_id: UUID | None = None
     end: str | None = None
+    nullity: int | None = None
+    mechanism: tuple[MechanismDof, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

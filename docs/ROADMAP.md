@@ -23,6 +23,8 @@ El Product Owner puede probar cada fase y detener el desarrollo sin invalidar lo
 
 ¹ Requisito procedente de `CLAUDE.md` (principios no negociables); no tiene ID en la SRS v1.1.0. Ticket T-014 en `tasks/BACKLOG.md`; no se modifica la SRS sin aprobación.
 
+**F1C+ (T-017, antes de F2; [plan](../plans/T-017.md)):** endurecimiento de uniones y mecanismos. E1 (controles de la solución tras el equilibrio y contraste de `veritas analyze uniones`) ACEPTADA por el usuario el 2026-10-28 (commit 8ebbbb6). E2 (modo de mecanismo determinista) ACEPTADA el 2026-10-28. T-017 ACEPTADO. No altera el estado aceptado de F1C.
+
 Estados admitidos: `NO INICIADA`, `EN CURSO`, `EN VALIDACIÓN` (entregada, esperando aceptación del usuario), `ACEPTADA` (con fecha y referencia a la aceptación expresa) y `RECHAZADA` (en corrección dentro de la misma fase).
 
 ## Prioridades internas

@@ -8,8 +8,9 @@ elimina la normal. Después: escalado de Jacobi y LDLᵀ con pivotaje diagonal c
 
 La garantía es condicionada a ``tol_pivot`` y a la batería de pruebas declarada; no es
 una demostración general (revisión B1). Desde T-010 incluye el giro propio de los extremos
-no rígidos y los giros huérfanos restringidos; el GDL del pivote localiza el mecanismo de
-forma orientativa (un GDL del modo, no el modo completo).
+no rígidos y los giros huérfanos restringidos. Desde T-017 (D3), con singularidad se
+calcula además el modo de mecanismo completo (espacio nulo y participación por GDL) con la
+misma factorización; el GDL del pivote sigue registrado como orientativo.
 """
 
 import math
@@ -46,6 +47,8 @@ class PivotReport:
     min_pivot: float | None
     dof: DofLabel | None
     singular: bool
+    labels: tuple[DofLabel, ...] = ()
+    mode: "MechanismMode | None" = None
 
 
 def local_beam_stiffness(length: float, area: float, modulus: float, inertia: float) -> Matrix:
@@ -228,14 +231,42 @@ def pivot_check(matrix: Matrix, tol_pivot: float) -> tuple[float | None, int | N
     size = len(matrix)
     if size == 0:
         return None, None, False
-    diagonal = [matrix[i][i] for i in range(size)]
-    if any(not math.isfinite(value) or value < 0.0 for value in diagonal):
-        raise InvalidStiffnessError("diagonal de rigidez negativa o no finita")
+    diagonal = _checked_diagonal(matrix)
     smallest = min(range(size), key=lambda i: diagonal[i])
     if diagonal[smallest] < sys.float_info.min:
         return 0.0, smallest, True
-    scale = [1.0 / math.sqrt(value) for value in diagonal]
-    work = [[matrix[i][j] * scale[i] * scale[j] for j in range(size)] for i in range(size)]
+    factor = _factor(matrix, tol_pivot)
+    return factor.pivot, factor.position, factor.singular
+
+
+def _checked_diagonal(matrix: Matrix) -> list[float]:
+    diagonal = [matrix[i][i] for i in range(len(matrix))]
+    if any(not math.isfinite(value) or value < 0.0 for value in diagonal):
+        raise InvalidStiffnessError("diagonal de rigidez negativa o no finita")
+    return diagonal
+
+
+@dataclass(frozen=True, slots=True)
+class _Factorization:
+    """LDLᵀ con escalado de Jacobi y pivotaje diagonal completo, detenida en el primer
+    pivote ≤ tol. ``work`` queda permutado por ``order``: sus ``steps`` primeras filas, de
+    la diagonal a la derecha, son U = D·Lᵀ."""
+
+    pivot: float
+    position: int
+    singular: bool
+    scaled: Matrix
+    work: Matrix
+    order: list[int]
+    steps: int
+
+
+def _factor(matrix: Matrix, tol_pivot: float) -> _Factorization:
+    """Diagonal estrictamente positiva (la comprueba el llamador)."""
+    size = len(matrix)
+    scale = [1.0 / math.sqrt(matrix[i][i]) for i in range(size)]
+    scaled = [[matrix[i][j] * scale[i] * scale[j] for j in range(size)] for i in range(size)]
+    work = [row[:] for row in scaled]
     order = list(range(size))
     min_pivot, min_index = math.inf, order[0]
     for k in range(size):
@@ -249,7 +280,7 @@ def pivot_check(matrix: Matrix, tol_pivot: float) -> tuple[float | None, int | N
         if pivot < min_pivot:
             min_pivot, min_index = pivot, order[k]
         if not math.isfinite(pivot) or pivot <= tol_pivot:
-            return pivot, order[k], True
+            return _Factorization(pivot, order[k], True, scaled, work, order, k)
         row_k = work[k]
         for i in range(k + 1, size):
             factor = work[i][k] / pivot
@@ -258,11 +289,128 @@ def pivot_check(matrix: Matrix, tol_pivot: float) -> tuple[float | None, int | N
                 row_i[k + 1 :] = [
                     a - factor * b for a, b in zip(row_i[k + 1 :], row_k[k + 1 :], strict=True)
                 ]
-    return min_pivot, min_index, False
+    return _Factorization(min_pivot, min_index, False, scaled, work, order, size)
+
+
+# Modo de mecanismo (plan T-017, D3). Constantes declaradas, registradas en la procedencia.
+MECHANISM_PARTICIPATION: Final = 1e-6
+MECHANISM_GUARD_BAND: Final = (1e-8, 1e-4)
+MECHANISM_RESIDUAL_FACTOR: Final = 100.0
+
+
+@dataclass(frozen=True, slots=True)
+class MechanismMode:
+    """Espacio nulo de la K reducida escalada: nulidad y participación p_i = Σ_q Q_iq².
+
+    ``conclusive`` es False si la comprobación a posteriori no se cumple (‖K̃·q‖ mayor que
+    c·tol_pivot o algún p_i dentro de la banda de guarda): el modo no se publica.
+    """
+
+    nullity: int
+    participation: tuple[float, ...]
+    conclusive: bool
+    residual: float
+
+
+def _null_vectors(factor: _Factorization) -> list[list[float]]:
+    """Base N = [−A⁻¹B; I] del bloque restante, en el orden original de la matriz.
+
+    A⁻¹B se obtiene de las filas U ya eliminadas: U_A·X = U_B por sustitución hacia atrás.
+    """
+    size, k = len(factor.work), factor.steps
+    work = factor.work
+    vectors: list[list[float]] = []
+    for q in range(k, size):
+        x = [0.0] * k
+        for r in range(k - 1, -1, -1):
+            value = work[r][q] - sum(work[r][c] * x[c] for c in range(r + 1, k))
+            x[r] = value / work[r][r]
+        vector = [0.0] * size
+        for j in range(k):
+            vector[factor.order[j]] = -x[j]
+        vector[factor.order[q]] = 1.0
+        vectors.append(vector)
+    return vectors
+
+
+def _orthonormal(vectors: list[list[float]]) -> list[list[float]]:
+    """Gram–Schmidt modificado con reortogonalización (dos pasadas)."""
+    basis: list[list[float]] = []
+    for vector in vectors:
+        v = vector[:]
+        for _ in range(2):
+            for b in basis:
+                dot = sum(x * y for x, y in zip(v, b, strict=True))
+                v = [x - dot * y for x, y in zip(v, b, strict=True)]
+        norm = math.sqrt(sum(x * x for x in v))
+        if norm > 0.0:
+            basis.append([x / norm for x in v])
+    return basis
+
+
+def mechanism_mode(matrix: Matrix, tol_pivot: float) -> MechanismMode:
+    """Modo de mecanismo de una K simétrica singular según ``pivot_check``.
+
+    Las coordenadas con diagonal nula son vectores aislados del espacio nulo y se separan
+    antes de escalar; el resto usa la misma factorización que decide la singularidad.
+    """
+    size = len(matrix)
+    diagonal = _checked_diagonal(matrix)
+    zero = [i for i in range(size) if diagonal[i] < sys.float_info.min]
+    rest = [i for i in range(size) if diagonal[i] >= sys.float_info.min]
+    vectors: list[list[float]] = []
+    for i in zero:
+        vector = [0.0] * size
+        vector[i] = 1.0
+        vectors.append(vector)
+    scaled_rows: dict[int, list[float]] = {}
+    if rest:
+        sub = [[matrix[i][j] for j in rest] for i in rest]
+        factor = _factor(sub, tol_pivot)
+        if factor.singular:
+            for local in _null_vectors(factor):
+                vector = [0.0] * size
+                for position, value in zip(rest, local, strict=True):
+                    vector[position] = value
+                vectors.append(vector)
+        for a, i in enumerate(rest):
+            row = [0.0] * size
+            for b, j in enumerate(rest):
+                row[j] = factor.scaled[a][b]
+            scaled_rows[i] = row
+    # Con K semidefinida positiva, la fila y la columna de una diagonal nula son nulas. Si
+    # no lo son (K indefinida por error de ensamblaje), el modo no es concluyente.
+    coupled = any(matrix[i][j] != 0.0 or matrix[j][i] != 0.0 for i in zero for j in rest)
+    for i in zero:  # Fila escalada con escala 1.
+        scaled_rows[i] = [0.0 if j in rest else matrix[i][j] for j in range(size)]
+    basis = _orthonormal(vectors)
+    participation = tuple(sum(q[i] ** 2 for q in basis) for i in range(size))
+    residual = max(
+        (
+            math.sqrt(
+                sum(
+                    sum(a * b for a, b in zip(scaled_rows[i], q, strict=True)) ** 2
+                    for i in range(size)
+                )
+            )
+            for q in basis
+        ),
+        default=0.0,
+    )
+    low, high = MECHANISM_GUARD_BAND
+    # len(basis) == len(vectors): defensa ante vectores NaN; las columnas [−X; I] y los e_i
+    # son independientes por construcción (revisión E2, 7).
+    conclusive = (
+        not coupled
+        and len(basis) == len(vectors) > 0
+        and residual <= MECHANISM_RESIDUAL_FACTOR * tol_pivot
+        and not any(low <= p <= high for p in participation)
+    )
+    return MechanismMode(len(basis), participation, conclusive, residual)
 
 
 def check_singularity(request: PlanarRequest, tol_pivot: float) -> PivotReport:
-    """Salvaguarda completa sobre la petición."""
+    """Salvaguarda completa sobre la petición; con singularidad, también el modo (D3)."""
     reduced, labels = reduced_stiffness(request)
     pivot, position, singular = pivot_check(reduced, tol_pivot)
     return PivotReport(
@@ -270,4 +418,6 @@ def check_singularity(request: PlanarRequest, tol_pivot: float) -> PivotReport:
         min_pivot=pivot,
         dof=None if position is None else labels[position],
         singular=singular,
+        labels=tuple(labels),
+        mode=mechanism_mode(reduced, tol_pivot) if singular else None,
     )

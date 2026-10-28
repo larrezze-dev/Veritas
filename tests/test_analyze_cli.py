@@ -129,7 +129,9 @@ def test_unions_compares_three_ends_and_diagnoses_mechanism(
     assert out.count("Estado: SUCCEEDED") == 3
     assert "[Mecanismo] Estado: FAILED" in out
     assert "ANALYSIS_SINGULAR" in out
-    assert "Ubicación (orientativa):" in out
+    assert "Ubicación (GDL del modo): B1" in out  # T-017, D3
+    assert "Modo de mecanismo (nulidad 1" in out
+    assert "nudo N3, Uz (0.6)" in out
     assert "6.875 kN" in out  # 11P/16 de la variante liberada.
     assert cli.COMPARISON_NOTE in out
     assert cli.EXPERIMENTAL_WARNING in out

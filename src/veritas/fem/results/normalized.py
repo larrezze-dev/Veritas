@@ -59,7 +59,16 @@ AXES_FACTOR: Final = 2.0
 AXES_EPS_FACTOR: Final = 4.0
 
 _EPS: Final = sys.float_info.epsilon
-_SNAPSHOT_EXTRA: Final = frozenset({"penalty_equilibrium_factor"})
+_SNAPSHOT_EXTRA: Final = frozenset(
+    {
+        "penalty_equilibrium_factor",
+        # Constantes del modo de mecanismo (T-017, D3), registradas en la procedencia.
+        "mechanism_participation",
+        "mechanism_guard_low",
+        "mechanism_guard_high",
+        "mechanism_residual_factor",
+    }
+)
 
 
 class ResultsNormalizationError(InputValueError):

@@ -131,9 +131,14 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "apoyo lo restringe y el caso aplica un momento en ese nudo. No se calcula."
     ),
     "fem.mechanism_member_end": (
-        "Rigidez singular (pivote escalado {pivot} ≤ {tolerance}): mecanismo que afecta, al "
-        "menos, al giro del extremo {end} de la barra {member}. La ubicación es orientativa (un "
-        "GDL del mecanismo, no el mecanismo completo). No se calcula."
+        "Rigidez singular (pivote escalado {pivot} ≤ {tolerance}): mecanismo en el que "
+        "participa el giro del extremo {end} de la barra {member}. Los GDL que participan se "
+        "registran con el modo de mecanismo; si el modo no es concluyente, la ubicación es "
+        "orientativa (un GDL del mecanismo). No se calcula."
+    ),
+    "fem.mechanism_mode_inconclusive": (
+        "El modo de mecanismo no es concluyente (residuo {residual} > {limit} o participación "
+        "dentro de la banda de guarda): la ubicación es la del pivote, orientativa."
     ),
     "fem.material_family_unsupported": (
         "La barra {member} usa material {family}; el análisis plano solo admite acero y aluminio "

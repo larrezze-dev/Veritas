@@ -108,9 +108,11 @@ from veritas.core.supports.support import (
 )
 from veritas.core.validation import positive_si
 from veritas.fem import (
+    MECHANISM_PARTICIPATION,
     AnalysisConfiguration,
     AnalysisRun,
     ComponentStatus,
+    MechanismDof,
     PlanarResults,
     ReactionSource,
     RunStatus,
@@ -1610,6 +1612,36 @@ def _comparison(
     return _table([*header, *extra_columns], table)
 
 
+MECHANISM_LIST_LIMIT: Final = 10  # Participantes mostrados; el resto, «y N más» (D3-6).
+
+
+def _mechanism_dof_text(item: MechanismDof, labels: dict[UUID, str]) -> str:
+    node = labels.get(item.node_id) or str(item.node_id)
+    if item.member_id is not None:
+        member = labels.get(item.member_id) or str(item.member_id)
+        where = f"extremo {item.end} de {member}, {item.component}"
+    elif item.component == "t":
+        where = f"nudo {node}, traslación tangente del apoyo"
+    else:
+        where = f"nudo {node}, {item.component}"
+    return f"{where} ({item.participation:.3g})"
+
+
+def _mechanism_lines(run: AnalysisRun, labels: dict[UUID, str]) -> list[str]:
+    """Modo de mecanismo de la salvaguarda (T-017, D3): nulidad y participantes."""
+    pivot = run.pivot
+    if pivot is None or pivot.nullity is None:
+        return []
+    items = [_mechanism_dof_text(item, labels) for item in pivot.mechanism]
+    shown = items[:MECHANISM_LIST_LIMIT]
+    rest = len(items) - len(shown)
+    tail = f" y {rest} más" if rest else ""
+    return [
+        f"  Modo de mecanismo (nulidad {pivot.nullity}; participación ≥ "
+        f"{MECHANISM_PARTICIPATION:g}): {'; '.join(shown)}{tail}."
+    ]
+
+
 def _status_lines(solved: Sequence[_Solved]) -> list[str]:
     lines = []
     for item in solved:
@@ -1619,9 +1651,12 @@ def _status_lines(solved: Sequence[_Solved]) -> list[str]:
         for diagnostic in errors:
             lines.append(f"  ERROR {diagnostic.code}: {render_message(diagnostic)}")
             location = diagnostic.location
+            mode = item.run.pivot is not None and item.run.pivot.nullity is not None
             if location is not None and location.entity_id is not None:
                 where = item.variant.labels.get(location.entity_id, str(location.entity_id))
-                lines.append(f"  Ubicación (orientativa): {where}")
+                kind = "GDL del modo" if mode else "orientativa"
+                lines.append(f"  Ubicación ({kind}): {where}")
+        lines += _mechanism_lines(item.run, item.variant.labels)
         if item.error is not None:
             lines.append(f"  ERROR {item.error.code}: {render_message(item.error.diagnostic)}")
         lines += [

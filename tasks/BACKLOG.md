@@ -48,7 +48,7 @@ Cada línea requiere plan y aprobación propios antes de implementarse; ninguna 
 | Ticket destino | Límite de T-010 | Subsanación propuesta |
 |---|---|---|
 | T-017 (nuevo, F1C+) | P1: ninguna postcondición comprueba el alias del aux ni la condición de extremo (revisión del código de E2, hallazgo 2) | Controles tras el cálculo: \|u(aux) − u(maestro)\| ≤ cota, \|M\| ≤ cota en extremo liberado, \|M − k·Δθ\| ≤ cota con resorte, `nodeReaction(aux)[2]` ≈ 0; fallo explícito si no se cumplen |
-| T-017 | La localización del mecanismo es un único GDL y puede variar entre corridas (tags por orden de UUID) | Modo de mecanismo (vector nulo por sustitución hacia atrás, D4-B) con la lista de nudos/extremos que participan, independiente del orden de tags; mensaje determinista |
+| T-017 | La localización del mecanismo es un único GDL y puede variar entre corridas (tags por orden de UUID) | Modo de mecanismo (espacio nulo con la misma LDLᵀ de la salvaguarda, D3-A del plan T-017) con la lista de nudos/extremos que participan, independiente del orden de tags; mensaje determinista |
 | T-017 | La tabla de `veritas analyze uniones` no se contrasta automáticamente | Contraste con tolerancia de las columnas rígida y liberada (fórmulas ya impresas) y código 3 si no coincide, como `analyze referencias` |
 | T-017 | Control de residuo K·u − P (O7 de T-007; resortes de rigidez extrema) | Residuo independiente con la K de la salvaguarda; complementa el aviso `fem.end_spring_near_rigid` |
 | Adaptador 3D (por crear, con ADR) | Solo plano XZ: solo se traduce el giro de flexión del plano; el preset «articulado» (Ry y Rz) y la torsión se rechazan | Adaptador de seis GDL por nudo con liberaciones por GDL local; reutiliza `EndConnection`, el nudo auxiliar y la batería T-CON-REF |
@@ -68,7 +68,7 @@ Cada línea requiere plan y aprobación propios antes de implementarse; ninguna 
 | T-014 | — | F7A | Editor manual de configuración de normativas (crear, editar, copiar, borrar) | Requisito de `CLAUDE.md`, sin ID SRS | NO INICIADO |
 | T-015 | — | F5A (antes de los paneles) | Cargas de barra ampliadas: puntuales, parciales, trapezoidales y momentos distribuidos | LD-002 (completar el aporte parcial de T-006) | NO INICIADO |
 | T-016 | — | F5A | Asientos impuestos en apoyos como acción de un caso de carga | GEO-010 / LD-002 (límite remitido por T-005 al ticket de cargas y no incluido en T-006) | NO INICIADO |
-| T-017 | — | F1C+ (antes de F2) | Endurecimiento de uniones y mecanismos: postcondiciones del aux (P1), modo de mecanismo determinista, contraste automático de `analyze uniones`, residuo K·u − P | CON-009, FEM-008 (límites de T-010) | APROBADO (2026-10-28), E1 pendiente ([plan](../plans/T-017.md)) |
+| T-017 | — | F1C+ (antes de F2) | Endurecimiento de uniones y mecanismos: postcondiciones del aux (P1), modo de mecanismo determinista, contraste automático de `analyze uniones`, residuo K·u − P | CON-009, FEM-008 (límites de T-010) | ACEPTADO 2026-10-28 (E1 8ebbbb6; E2) ([plan](../plans/T-017.md)) |
 
 Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se acepte la fase anterior.
 
@@ -80,3 +80,4 @@ Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se 
 - 2026-10-28: T-009 aceptado; P1 (primera demostración del ROADMAP) asignada a T-010; registradas, a petición del usuario, las propuestas de los límites de T-009 (adaptador 3D, Timoshenko, rodillo sin penalización, ampliación de la batería de referencias).
 - 2026-10-28: T-010 aceptado (F1C ACEPTADA); R2 y R3 confirmados. Registrados, a petición del usuario, P1 y la planificación de la subsanación de los límites de T-010; nuevo ticket T-017 (endurecimiento de uniones y mecanismos).
 - 2026-10-28: T-017 elegido por el usuario como siguiente ticket; plan aprobado (D1–D7 = A, sin O1). D5-A: las traslaciones de extremo liberadas pasan al adaptador 3D.
+- 2026-10-28: T-017 E1 aceptada por el usuario (commit 8ebbbb6). E2 (modo de mecanismo) aceptada el mismo día; T-017 ACEPTADO.

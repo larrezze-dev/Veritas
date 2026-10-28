@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Final
 from uuid import UUID, uuid4
 
 from veritas import __version__
@@ -24,6 +25,7 @@ from veritas.core.diagnostics import (
     InputValueError,
     Location,
     ParamValue,
+    Severity,
 )
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.messages_es import render_text
@@ -37,7 +39,12 @@ from veritas.fem.adapters.protocol import (
     WorkerStatus,
 )
 from veritas.fem.adapters.singularity import (
+    MECHANISM_GUARD_BAND,
+    MECHANISM_PARTICIPATION,
+    MECHANISM_RESIDUAL_FACTOR,
+    DofLabel,
     InvalidStiffnessError,
+    MechanismMode,
     PivotReport,
     beam_stiffness,
     check_singularity,
@@ -69,6 +76,7 @@ from veritas.fem.results.run import (
     ADAPTER_VERSION,
     RAW_BASIS,
     AnalysisRun,
+    MechanismDof,
     PivotSummary,
     RawEndRotation,
     RawMemberForces,
@@ -80,10 +88,12 @@ from veritas.fem.results.run import (
 from veritas.fem.runners.subprocess_runner import WORKER_PATH, WorkerOutcome, run_worker
 
 __all__ = [
+    "MECHANISM_PARTICIPATION",
     "AnalysisConfiguration",
     "AnalysisRun",
     "Component",
     "ComponentStatus",
+    "MechanismDof",
     "MemberEndForces",
     "NodeDisplacement",
     "PlanarResults",
@@ -124,6 +134,7 @@ class _Run:
         self.translation: Translation | None = None
         self.pivot: PivotSummary | None = None
         self.outcome: WorkerOutcome | None = None
+        self.warnings: list[Diagnostic] = []
         self.versions: dict[str, str | None] = {
             "veritas": __version__,
             "adapter": f"{ADAPTER_ID}/{ADAPTER_VERSION}",
@@ -145,6 +156,7 @@ class _Run:
                     cause=failure.cause,
                 )
             )
+        diagnostics.extend(self.warnings)
         translation = self.translation
         if translation is not None:
             diagnostics.extend(translation.warnings)
@@ -158,6 +170,10 @@ class _Run:
             configuration={
                 **self.config.snapshot(),
                 "penalty_equilibrium_factor": PENALTY_EQUILIBRIUM_FACTOR,
+                "mechanism_participation": MECHANISM_PARTICIPATION,
+                "mechanism_guard_low": MECHANISM_GUARD_BAND[0],
+                "mechanism_guard_high": MECHANISM_GUARD_BAND[1],
+                "mechanism_residual_factor": MECHANISM_RESIDUAL_FACTOR,
             },
             request_json=None if translation is None else translation.request.to_json(),
             versions=dict(self.versions),
@@ -171,9 +187,70 @@ class _Run:
         )
 
 
-def _pivot_summary(request: PlanarRequest, report: PivotReport) -> PivotSummary:
+# Diferencia de participación que se trata como empate al elegir la ubicación (D3-5): muy
+# por debajo de la banda de guarda y por encima del redondeo de p_i.
+MECHANISM_TIE_TOLERANCE: Final = 1e-9
+
+# Componentes de la salvaguarda (base del solver) en base de dominio (T-017, D3-4).
+DOMAIN_COMPONENT: Final = {"u1": "Ux", "u2": "Uz", "theta": "Ry", "t": "t"}
+_COMPONENT_ORDER: Final = {"Ux": 0, "Uz": 1, "t": 2, "Ry": 3}
+
+
+def _entity_label(model: StructuralModel, entity_id: UUID, member: bool) -> str:
+    entity = model.member(entity_id) if member else model.node(entity_id)
+    return entity.label or str(entity.id)
+
+
+def _mechanism(
+    model: StructuralModel,
+    request: PlanarRequest,
+    labels: tuple[DofLabel, ...],
+    mode: MechanismMode,
+) -> tuple[MechanismDof, ...]:
+    """Participantes (p ≥ MECHANISM_PARTICIPATION) en orden determinista: etiqueta de la
+    entidad (barra para un extremo, nudo si no), extremo y componente."""
     node_ids = {node.tag: UUID(node.entity_id) for node in request.nodes}
     links = {link.aux: link for link in request.end_links}
+    items: list[MechanismDof] = []
+    for label, participation in zip(labels, mode.participation, strict=True):
+        if participation < MECHANISM_PARTICIPATION:
+            continue
+        component = DOMAIN_COMPONENT[label.component]
+        link = links.get(label.node)
+        if link is None:
+            items.append(MechanismDof(node_ids[label.node], component, participation))
+        else:
+            items.append(
+                MechanismDof(
+                    node_ids[link.master],
+                    component,
+                    participation,
+                    UUID(link.member_id),
+                    link.end,
+                )
+            )
+
+    def key(item: MechanismDof) -> tuple[str, str, str, int]:
+        # Etiquetas repetidas: desempate por el id de la entidad (revisión E2, 8).
+        if item.member_id is not None:
+            label = _entity_label(model, item.member_id, True)
+            return (label, str(item.member_id), item.end or "", 3)
+        label = _entity_label(model, item.node_id, False)
+        return (label, str(item.node_id), "", _COMPONENT_ORDER[item.component])
+
+    return tuple(sorted(items, key=key))
+
+
+def _pivot_summary(
+    model: StructuralModel, request: PlanarRequest, report: PivotReport
+) -> PivotSummary:
+    node_ids = {node.tag: UUID(node.entity_id) for node in request.nodes}
+    links = {link.aux: link for link in request.end_links}
+    nullity: int | None = None
+    mechanism: tuple[MechanismDof, ...] = ()
+    if report.mode is not None and report.mode.conclusive:
+        nullity = report.mode.nullity
+        mechanism = _mechanism(model, request, report.labels, report.mode)
     if report.dof is not None and report.dof.node in links:
         link = links[report.dof.node]
         return PivotSummary(
@@ -183,12 +260,59 @@ def _pivot_summary(request: PlanarRequest, report: PivotReport) -> PivotSummary:
             component=report.dof.component,
             member_id=UUID(link.member_id),
             end=link.end,
+            nullity=nullity,
+            mechanism=mechanism,
         )
     return PivotSummary(
         free_dofs=report.free_dofs,
         min_pivot=report.min_pivot,
         node_id=None if report.dof is None else node_ids[report.dof.node],
         component=None if report.dof is None else report.dof.component,
+        nullity=nullity,
+        mechanism=mechanism,
+    )
+
+
+def _singular_failure(
+    model: StructuralModel, pivot: PivotSummary, config: AnalysisConfiguration
+) -> _Failure:
+    """Clave y ubicación del mecanismo (T-017, D3-5); sin modo, las del pivote (T-010)."""
+    value = pivot.min_pivot if pivot.min_pivot is not None else 0.0
+    ends = [item for item in pivot.mechanism if item.member_id is not None]
+    member_id, end = (ends[0].member_id, ends[0].end) if ends else (None, None)
+    if not pivot.mechanism:
+        member_id, end = pivot.member_id, pivot.end
+    if member_id is not None:
+        member = model.member(member_id)
+        return _Failure(
+            DiagnosticCode.ANALYSIS_SINGULAR,
+            "fem.mechanism_member_end",
+            {
+                "member": member.label or str(member.id),
+                "end": end or "",
+                "pivot": value,
+                "tolerance": config.tol_pivot,
+            },
+            Location(entity_id=member.id, revision=member.revision),
+        )
+    # Componente siempre en base de dominio, también al volver al pivote (usuario, E2).
+    node_id = pivot.node_id
+    component = DOMAIN_COMPONENT.get(pivot.component or "", pivot.component or "")
+    if pivot.mechanism:
+        largest = max(item.participation for item in pivot.mechanism)
+        # Empate (D3-5) con tolerancia: participaciones iguales en aritmética exacta difieren
+        # en redondeo según el orden de tags (revisión E2, 1). Gana el primero por etiqueta.
+        top = next(
+            item
+            for item in pivot.mechanism
+            if item.participation >= largest - MECHANISM_TIE_TOLERANCE
+        )
+        node_id, component = top.node_id, top.component
+    return _Failure(
+        DiagnosticCode.ANALYSIS_SINGULAR,
+        "fem.singular",
+        {"pivot": value, "component": component, "tolerance": config.tol_pivot},
+        None if node_id is None else Location(entity_id=node_id),
     )
 
 
@@ -462,38 +586,22 @@ def analyze_planar_xz(  # noqa: PLR0911 (un retorno por causa de fallo)
             _Failure(DiagnosticCode.ANALYSIS_FAILED, "fem.invalid_stiffness", {}, cause=str(error)),
             None,
         )
-    run.pivot = _pivot_summary(request, report)
-    if report.singular and run.pivot.member_id is not None:
-        member = model.member(run.pivot.member_id)
-        return run.finish(
-            _Failure(
-                DiagnosticCode.ANALYSIS_SINGULAR,
-                "fem.mechanism_member_end",
-                {
-                    "member": member.label or str(member.id),
-                    "end": run.pivot.end or "",
-                    "pivot": report.min_pivot if report.min_pivot is not None else 0.0,
-                    "tolerance": config.tol_pivot,
-                },
-                Location(entity_id=member.id, revision=member.revision),
-            ),
-            None,
-        )
+    run.pivot = _pivot_summary(model, request, report)
     if report.singular:
-        location = None if run.pivot.node_id is None else Location(entity_id=run.pivot.node_id)
-        return run.finish(
-            _Failure(
-                DiagnosticCode.ANALYSIS_SINGULAR,
-                "fem.singular",
-                {
-                    "pivot": report.min_pivot if report.min_pivot is not None else 0.0,
-                    "component": run.pivot.component or "",
-                    "tolerance": config.tol_pivot,
-                },
-                location,
-            ),
-            None,
-        )
+        mode = report.mode
+        if mode is not None and not mode.conclusive:
+            run.warnings.append(
+                Diagnostic.create(
+                    DiagnosticCode.ANALYSIS_SINGULAR,
+                    "fem.mechanism_mode_inconclusive",
+                    {
+                        "residual": mode.residual,
+                        "limit": MECHANISM_RESIDUAL_FACTOR * config.tol_pivot,
+                    },
+                    severity=Severity.WARNING,
+                )
+            )
+        return run.finish(_singular_failure(model, run.pivot, config), None)
     run.outcome = outcome = run_worker(request.to_json(), config.timeout_s, worker)
     failure = _worker_failure(outcome, config.timeout_s)
     if failure is not None or outcome.response_text is None:
