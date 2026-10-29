@@ -18,7 +18,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 PROTOCOL_ID = "veritas.opensees.spatial"
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 
 
 def _version(package: str) -> str | None:
@@ -44,7 +44,64 @@ def _response(status: str, message: str = "", analyze_code: int | None = None) -
         "grounds": [],
         "chains": [],
         "beams": [],
+        "aux": [],
+        "end_springs": [],
     }
+
+
+def _fixes(ops: Any, request: dict[str, Any]) -> None:
+    """Un único fix por nudo: el giro huérfano (plan T-018, R4) se fusiona con el del apoyo."""
+    fixity_by_node: dict[int, list[int]] = {node: list(f) for node, f in request["fixes"]}
+    for node, rotations in request["orphan_fixes"]:
+        fixity = fixity_by_node.setdefault(node, [0] * 6)
+        fixity[3:] = [max(a, b) for a, b in zip(fixity[3:], rotations, strict=True)]
+    for node, fixity in fixity_by_node.items():
+        ops.fix(node, *fixity)
+
+
+def _beams_and_ends(
+    ops: Any, request: dict[str, Any], coordinates: dict[int, tuple[float, float, float]]
+) -> None:
+    """Barras y extremos no rígidos (E2-a): aux en el maestro, sin fix; el elemento se conecta
+    a él y lo unen al maestro ``equalDOF`` y ``zeroLength`` de extremo."""
+    element_node: dict[tuple[int, str], int] = {}
+    master_of: dict[int, int] = {}
+    for aux, master, beam, end in request["aux_nodes"]:
+        ops.node(aux, *coordinates[master])
+        element_node[(beam, end)] = aux
+        master_of[aux] = master
+    for beam in request["beams"]:
+        tag, _entity, node_i, node_j, area, e, g, j, iy, iz, vecxz = beam[:11]
+        release_y, release_z = beam[11], beam[12]
+        # Transformación Linear con vecxz = ez de ADR-001 (hecho 1) y beamUniform (Wy, Wz, Wx)
+        # (hecho 9). A y J llegan efectivos (hechos 5 y 15); -releasey/-releasez solo si el
+        # código no es 0 (hecho 14). El padre contrasta localForce con k·T·u − F_eq condensados.
+        ops.geomTransf("Linear", tag, *vecxz)
+        start = element_node.get((tag, "I"), node_i)
+        stop = element_node.get((tag, "J"), node_j)
+        releases: list[Any] = []
+        if release_y:
+            releases += ["-releasey", release_y]
+        if release_z:
+            releases += ["-releasez", release_z]
+        ops.element("elasticBeamColumn", tag, start, stop, area, e, g, j, iy, iz, tag, *releases)
+    for aux, dofs in request["end_equals"]:
+        ops.equalDOF(master_of[aux], aux, *dofs)
+    for tag, aux, dof, stiffness, axis_x, axis_yp, _penalty in request["end_springs"]:
+        ops.uniaxialMaterial("Elastic", tag, stiffness)
+        ops.element(
+            "zeroLength",
+            tag,
+            master_of[aux],
+            aux,
+            "-mat",
+            tag,
+            "-dir",
+            dof,
+            "-orient",
+            *axis_x,
+            *axis_yp,
+        )
 
 
 def _build(ops: Any, request: dict[str, Any]) -> None:
@@ -54,13 +111,8 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
     for tag, _entity, x, y, z in request["nodes"]:
         ops.node(tag, x, y, z)
         coordinates[tag] = (x, y, z)
-    for node, fixity in request["fixes"]:
-        ops.fix(node, *fixity)
-    for tag, _entity, node_i, node_j, area, e, g, j, iy, iz, vecxz in request["beams"]:
-        # Sin ``-release`` en E1, transformación Linear con vecxz = ez de ADR-001 (hecho 1) y
-        # beamUniform (Wy, Wz, Wx) (hecho 9): el padre contrasta localForce con k·T·u − F_eq.
-        ops.geomTransf("Linear", tag, *vecxz)
-        ops.element("elasticBeamColumn", tag, node_i, node_j, area, e, g, j, iy, iz, tag)
+    _fixes(ops, request)
+    _beams_and_ends(ops, request, coordinates)
     grounds: set[int] = set()
     for tag, _support, node, ground, dof, stiffness, axis_x, axis_yp, _pen in request["springs"]:
         if ground not in grounds:
@@ -134,6 +186,18 @@ def _solve(request: dict[str, Any]) -> dict[str, Any]:
         ]
         response["beams"] = [
             [beam[0], list(ops.eleResponse(beam[0], "localForce"))] for beam in request["beams"]
+        ]
+        response["aux"] = [
+            [aux[0], list(ops.nodeDisp(aux[0])), list(ops.nodeReaction(aux[0]))]
+            for aux in request["aux_nodes"]
+        ]
+        response["end_springs"] = [
+            [
+                spring[0],
+                ops.eleResponse(spring[0], "basicForce")[0],
+                ops.eleResponse(spring[0], "basicDeformation")[0],
+            ]
+            for spring in request["end_springs"]
         ]
     except Exception as error:  # Todo error de OpenSees es un fallo de la corrida.
         return _response("SOLVER_ERROR", f"{type(error).__name__}: {error}")

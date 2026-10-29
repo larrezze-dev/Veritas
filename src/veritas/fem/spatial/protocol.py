@@ -3,10 +3,12 @@
 Mismas reglas que el protocolo plano (ADR-002 §5): JSON sin NaN/Inf, claves conocidas y
 tipos estrictos; no es formato de proyecto. Base del solver = base global de ADR-001, seis
 GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz). Handler Lagrange con ``alpha_sp`` y ``alpha_mp``
-calibrados por el traductor (plan T-018, calibración de D3).
+calibrados por el traductor (plan T-018, calibración de D3). v2 (E2): extremos de barra no
+rígidos con ``-releasey``/``-releasez``, A y J efectivos, nudos aux y giros huérfanos.
 """
 
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Any, Final
 
 from veritas.fem.adapters.protocol import (
@@ -24,9 +26,11 @@ from veritas.fem.adapters.protocol import (
 )
 
 PROTOCOL_ID: Final = "veritas.opensees.spatial"
-PROTOCOL_VERSION: Final = 1
+PROTOCOL_VERSION: Final = 2  # 2: extremos de barra (E2-b)
 DOFS_PER_NODE: Final = 6
 AXES: Final = 3  # Componentes de una terna de un nudo (traslaciones o giros).
+RELEASE_CODES: Final = (0, 1, 2, 3)  # -releasey/-releasez: ninguno, I, J, ambos.
+BEAM_ENDS: Final = ("I", "J")
 
 type Vec3 = tuple[float, float, float]
 type Six = tuple[float, float, float, float, float, float]
@@ -47,12 +51,47 @@ def _six(value: object, field: str) -> Six:
     return a, b, c, d, e, f
 
 
-def _fixity(value: object) -> tuple[int, int, int, int, int, int]:
-    items = tuple(_int(v, "fixity") for v in _list(value, "fixity", 6))
+def _mask(value: object, field: str, size: int) -> tuple[int, ...]:
+    items = tuple(_int(v, field) for v in _list(value, field, size))
     if any(v not in (0, 1) for v in items):
-        raise ProtocolError("fixity: se esperaba 0 o 1")
-    a, b, c, d, e, f = items
+        raise ProtocolError(f"{field}: se esperaba 0 o 1")
+    return items
+
+
+def _fixity(value: object) -> tuple[int, int, int, int, int, int]:
+    a, b, c, d, e, f = _mask(value, "fixity", DOFS_PER_NODE)
     return a, b, c, d, e, f
+
+
+def _rotation_mask(value: object) -> tuple[int, int, int]:
+    x, y, z = _mask(value, "orphan", AXES)
+    return x, y, z
+
+
+def _release(value: object, field: str) -> int:
+    code = _int(value, field)
+    if code not in RELEASE_CODES:
+        raise ProtocolError(f"{field}: se esperaba 0-3")
+    return code
+
+
+def _end(value: object) -> str:
+    end = _str(value, "end")
+    if end not in BEAM_ENDS:
+        raise ProtocolError("end: se esperaba I o J")
+    return end
+
+
+def _dofs(value: object) -> tuple[int, ...]:
+    dofs = tuple(_dof(v) for v in _list(value, "dofs"))
+    if not dofs or any(a >= b for a, b in pairwise(dofs)):
+        raise ProtocolError("dofs: se esperaba una lista creciente no vacía")
+    return dofs
+
+
+def _unique(values: list[int], field: str) -> None:
+    if len(set(values)) != len(values):
+        raise ProtocolError(f"{field}: nudo repetido")
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +107,13 @@ class SpatialNode:
 
 @dataclass(frozen=True, slots=True)
 class SpatialBeam:
-    """``elasticBeamColumn`` 3D con ``geomTransf Linear`` de vector ``vecxz`` = ez (ADR-001)."""
+    """``elasticBeamColumn`` 3D con ``geomTransf Linear`` de vector ``vecxz`` = ez (ADR-001).
+
+    ``release_y``/``release_z``: códigos de ``-releasey``/``-releasez`` (0 ninguno, 1 I, 2 J,
+    3 ambos; hecho 14). ``area`` y ``torsion_constant`` son efectivos (Ux y Rx no rígidos en
+    serie, hechos 5 y 15); valen 0 si y solo si ``axial_released``/``torsion_released``
+    (algún extremo liberado). El worker no usa las marcas: solo permiten validar el 0.
+    """
 
     tag: int
     entity_id: str
@@ -81,6 +126,10 @@ class SpatialBeam:
     inertia_y: float
     inertia_z: float
     vecxz: Vec3
+    release_y: int = 0
+    release_z: int = 0
+    axial_released: bool = False
+    torsion_released: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +185,55 @@ class SpatialChain:
 
 
 @dataclass(frozen=True, slots=True)
+class SpatialOrphanFix:
+    """Giros globales sin rigidez de un nudo que el traductor fija (plan T-018, R4).
+
+    Separado de ``SpatialFix`` para que la normalización distinga ambas reacciones; el
+    worker los fusiona en un único ``fix`` por nudo (OpenSees rechaza dos).
+    """
+
+    node: int
+    rotations: tuple[int, int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class SpatialAuxNode:
+    """Nudo aux en las coordenadas de ``master``: el elemento ``beam`` se conecta a él en el
+    extremo ``end`` (E2-a). Nunca lleva ``fix``; lo unen al maestro los enlaces de extremo."""
+
+    tag: int
+    master: int
+    beam: int
+    end: str
+
+
+@dataclass(frozen=True, slots=True)
+class SpatialEndEqual:
+    """``equalDOF(maestro, aux, *dofs)`` en GDL globales 1-6 (componentes rígidas exactas)."""
+
+    aux: int
+    dofs: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SpatialEndSpring:
+    """``zeroLength`` maestro→aux en la dirección ``dof`` de la base (``axis_x``, ``axis_yp``)
+    del extremo, como ``SpatialSpring``. ``penalty`` marca una componente rígida representada
+    por penalización (E2-a). Etiqueta de elemento = etiqueta de material."""
+
+    tag: int
+    aux: int
+    dof: int
+    stiffness: float
+    axis_x: Vec3
+    axis_yp: Vec3
+    penalty: bool
+
+
+type SpatialEndLink = SpatialEndEqual | SpatialEndSpring
+
+
+@dataclass(frozen=True, slots=True)
 class SpatialNodalLoad:
     """Carga nodal global (Fx, Fy, Fz, Mx, My, Mz)."""
 
@@ -169,6 +267,17 @@ class SpatialRequest:
     chains: tuple[SpatialChain, ...]
     nodal_loads: tuple[SpatialNodalLoad, ...]
     beam_loads: tuple[SpatialBeamLoad, ...]
+    orphan_fixes: tuple[SpatialOrphanFix, ...] = ()
+    aux_nodes: tuple[SpatialAuxNode, ...] = ()
+    end_equals: tuple[SpatialEndEqual, ...] = ()
+    end_springs: tuple[SpatialEndSpring, ...] = ()
+
+    def element_node(self, beam: SpatialBeam, end: str) -> int:
+        """Nudo al que se conecta el elemento en ese extremo: aux si lo hay, si no el nudo."""
+        for aux in self.aux_nodes:
+            if aux.beam == beam.tag and aux.end == end:
+                return aux.tag
+        return beam.node_i if end == "I" else beam.node_j
 
     def to_dict(self) -> dict[str, Any]:
         """Diccionario JSON del protocolo."""
@@ -194,6 +303,10 @@ class SpatialRequest:
                     b.inertia_y,
                     b.inertia_z,
                     list(b.vecxz),
+                    b.release_y,
+                    b.release_z,
+                    b.axial_released,
+                    b.torsion_released,
                 ]
                 for b in self.beams
             ],
@@ -229,6 +342,21 @@ class SpatialRequest:
             ],
             "nodal_loads": [[p.node, list(p.values)] for p in self.nodal_loads],
             "beam_loads": [[w.beam, w.wy, w.wz, w.wx] for w in self.beam_loads],
+            "orphan_fixes": [[o.node, list(o.rotations)] for o in self.orphan_fixes],
+            "aux_nodes": [[x.tag, x.master, x.beam, x.end] for x in self.aux_nodes],
+            "end_equals": [[q.aux, list(q.dofs)] for q in self.end_equals],
+            "end_springs": [
+                [
+                    s.tag,
+                    s.aux,
+                    s.dof,
+                    s.stiffness,
+                    list(s.axis_x),
+                    list(s.axis_yp),
+                    s.penalty,
+                ]
+                for s in self.end_springs
+            ],
         }
 
     def to_json(self) -> str:
@@ -244,10 +372,38 @@ class SpatialRequest:
             SpatialNode(_int(n[0], "node"), _str(n[1], "node"), *_vec3(n[2:], "xyz"))
             for n in (_list(item, "node", 5) for item in _list(data["nodes"], "nodes"))
         )
-        beams = tuple(_beam(_list(item, "beam", 11)) for item in _list(data["beams"], "beams"))
+        beams = tuple(_beam(_list(item, "beam", 15)) for item in _list(data["beams"], "beams"))
         fixes = tuple(
             SpatialFix(_int(f[0], "fix"), _fixity(f[1]))
             for f in (_list(item, "fix", 2) for item in _list(data["fixes"], "fixes"))
+        )
+        _unique([f.node for f in fixes], "fixes")
+        orphans = tuple(
+            SpatialOrphanFix(_int(o[0], "orphan"), _rotation_mask(o[1]))
+            for o in (_list(item, "orphan", 2) for item in _list(data["orphan_fixes"], "orph"))
+        )
+        _unique([o.node for o in orphans], "orphan_fixes")
+        aux_nodes = tuple(
+            SpatialAuxNode(_int(x[0], "aux"), _int(x[1], "master"), _int(x[2], "beam"), _end(x[3]))
+            for x in (_list(item, "aux", 4) for item in _list(data["aux_nodes"], "aux_nodes"))
+        )
+        if len({(x.beam, x.end) for x in aux_nodes}) != len(aux_nodes):
+            raise ProtocolError("aux_nodes: extremo de barra repetido")
+        end_equals = tuple(
+            SpatialEndEqual(_int(q[0], "aux"), _dofs(q[1]))
+            for q in (_list(item, "end_equal", 2) for item in _list(data["end_equals"], "eq"))
+        )
+        end_springs = tuple(
+            SpatialEndSpring(
+                _int(s[0], "end_spring"),
+                _int(s[1], "aux"),
+                _dof(s[2]),
+                _finite(s[3], "k"),
+                _vec3(s[4], "axis_x"),
+                _vec3(s[5], "axis_yp"),
+                _bool(s[6], "penalty"),
+            )
+            for s in (_list(item, "end_spring", 7) for item in _list(data["end_springs"], "es"))
         )
         springs = tuple(
             SpatialSpring(
@@ -299,11 +455,23 @@ class SpatialRequest:
             chains,
             nodal,
             beam_loads,
+            orphans,
+            aux_nodes,
+            end_equals,
+            end_springs,
         )
 
 
 def _beam(b: list[Any]) -> SpatialBeam:
     area, elastic, shear, torsion, inertia_y, inertia_z = _floats(b[4:10], "section", 6)
+    axial_released, torsion_released = _bool(b[13], "axial"), _bool(b[14], "torsion")
+    # E2-b: A y J efectivos ≥ 0, y 0 solo con el extremo correspondiente liberado.
+    for value, released, field in (
+        (area, axial_released, "area"),
+        (torsion, torsion_released, "torsion"),
+    ):
+        if value < 0.0 or (value == 0.0) != released:
+            raise ProtocolError(f"{field}: 0 si y solo si el extremo está liberado")
     return SpatialBeam(
         _int(b[0], "beam"),
         _str(b[1], "beam"),
@@ -316,6 +484,10 @@ def _beam(b: list[Any]) -> SpatialBeam:
         inertia_y,
         inertia_z,
         _vec3(b[10], "vecxz"),
+        _release(b[11], "release_y"),
+        _release(b[12], "release_z"),
+        axial_released,
+        torsion_released,
     )
 
 
@@ -342,6 +514,10 @@ _REQUEST_KEYS: Final = frozenset(
         "chains",
         "nodal_loads",
         "beam_loads",
+        "orphan_fixes",
+        "aux_nodes",
+        "end_equals",
+        "end_springs",
     }
 )
 _RESPONSE_KEYS: Final = frozenset(
@@ -356,6 +532,8 @@ _RESPONSE_KEYS: Final = frozenset(
         "grounds",
         "chains",
         "beams",
+        "aux",
+        "end_springs",
     }
 )
 _VERSION_KEYS: Final = frozenset({"python", "openseespy", "openseespywin"})
@@ -383,6 +561,8 @@ class SpatialWorkerResponse:
     ground_reactions: tuple[tuple[int, Six], ...]
     chain_results: tuple[SpatialChainResult, ...]
     beam_forces: tuple[tuple[int, tuple[float, ...]], ...]
+    aux_results: tuple[tuple[int, Six, Six], ...] = ()
+    end_spring_results: tuple[tuple[int, float, float], ...] = ()
 
     @classmethod
     def from_json(cls, text: str) -> "SpatialWorkerResponse":
@@ -419,6 +599,15 @@ class SpatialWorkerResponse:
             (_int(b[0], "beam"), _floats(b[1], "local_force", 12))
             for b in (_list(item, "beam", 2) for item in _list(data["beams"], "beams"))
         )
+        aux = tuple(
+            (_int(x[0], "aux"), _six(x[1], "aux_disp"), _six(x[2], "aux_reaction"))
+            for x in (_list(item, "aux", 3) for item in _list(data["aux"], "aux"))
+        )
+        # basicForce y basicDeformation del zeroLength de una dirección (E2.5, F = k·Δ).
+        end_springs = tuple(
+            (_int(s[0], "end_spring"), _finite(s[1], "force"), _finite(s[2], "deformation"))
+            for s in (_list(item, "end_spring", 3) for item in _list(data["end_springs"], "es"))
+        )
         return cls(
             status,
             analyze_code,
@@ -428,4 +617,6 @@ class SpatialWorkerResponse:
             grounds,
             chains,
             beams,
+            aux,
+            end_springs,
         )

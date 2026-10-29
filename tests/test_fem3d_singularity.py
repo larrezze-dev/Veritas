@@ -38,7 +38,9 @@ from veritas.fem.runners.subprocess_runner import run_worker
 from veritas.fem.spatial.config import SpatialAnalysisConfiguration
 from veritas.fem.spatial.protocol import (
     Six,
+    SpatialAuxNode,
     SpatialBeamLoad,
+    SpatialOrphanFix,
     SpatialRequest,
     SpatialWorkerResponse,
 )
@@ -310,6 +312,26 @@ MALFORMED = [
         lambda r: dataclasses.replace(
             r, springs=(dataclasses.replace(r.springs[0], axis_yp=r.springs[0].axis_x),)
         ),
+    ),
+    # Defensa transitoria de E2.1: extremos del protocolo v2 hasta la salvaguarda de E2.3.
+    (
+        "liberación (E2.3)",
+        lambda r: dataclasses.replace(r, beams=(dataclasses.replace(r.beams[0], release_y=2),)),
+    ),
+    (
+        "torsión liberada (E2.3)",
+        lambda r: dataclasses.replace(
+            r,
+            beams=(dataclasses.replace(r.beams[0], torsion_constant=0.0, torsion_released=True),),
+        ),
+    ),
+    (
+        "aux (E2.3)",
+        lambda r: dataclasses.replace(r, aux_nodes=(SpatialAuxNode(99, 2, 1, "J"),)),
+    ),
+    (
+        "huérfano (E2.3)",
+        lambda r: dataclasses.replace(r, orphan_fixes=(SpatialOrphanFix(2, (1, 0, 0)),)),
     ),
 ]
 

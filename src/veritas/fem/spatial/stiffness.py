@@ -334,7 +334,21 @@ def validate_request(request: SpatialRequest) -> None:
     """Defensa ante una petición que el traductor nunca emite: propiedades de barra no
     positivas, rigidez de resorte negativa (o nula si es de penalización), cadena con a ≤ 0,
     kr ≤ 0 o tangente paralela a la normal. Se rechaza como error interno, no como
-    mecanismo (revisión de la pieza 4, m5); las direcciones nulas las rechaza ``unit``."""
+    mecanismo (revisión de la pieza 4, m5); las direcciones nulas las rechaza ``unit``.
+
+    Defensa transitoria (plan T-018, E2.1): hasta E2.3 la salvaguarda no representa los
+    extremos no rígidos del protocolo v2; se rechazan para no calcular una K rígida."""
+    if (
+        request.orphan_fixes
+        or request.aux_nodes
+        or request.end_equals
+        or request.end_springs
+        or any(
+            beam.release_y or beam.release_z or beam.axial_released or beam.torsion_released
+            for beam in request.beams
+        )
+    ):
+        raise InvalidStiffnessError("extremos de barra no rígidos: salvaguarda pendiente (E2.3)")
     for beam in request.beams:
         values = (
             beam.area,
