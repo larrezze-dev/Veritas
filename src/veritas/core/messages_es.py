@@ -262,6 +262,51 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "fem.results_unsupported_load": (
         "Carga {load} de un tipo que la normalización no admite (error interno)."
     ),
+    "fem3d.member_end_not_rigid": (
+        "El extremo {end} de la barra {member} no es rígido ({dof}: {state}); el análisis "
+        "espacial solo admite por ahora extremos rígidos."
+    ),
+    "fem3d.load_type_unsupported": (
+        "Carga de tipo {type} que el análisis espacial no admite; no se ignora."
+    ),
+    "fem3d.hypothesis_spatial": (
+        "Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la "
+        "base global de ADR-001."
+    ),
+    "fem3d.hypothesis_euler_bernoulli": (
+        "Barras Euler–Bernoulli 3D sin deformación por cortante; torsión uniforme de "
+        "Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = 0."
+    ),
+    "fem3d.hypothesis_lagrange": (
+        "Restricciones por multiplicadores de Lagrange con factores escalados a la mayor "
+        "rigidez diagonal de las barras."
+    ),
+    "fem3d.hypothesis_inclined_chain": (
+        "Traslaciones fijas según una normal no global representadas de forma exacta, sin "
+        "penalización, con nudos auxiliares que no forman parte de los resultados."
+    ),
+    "fem3d.hypothesis_penalty": (
+        "Al menos un giro fijo parcial en base oblicua se representa por penalización; el "
+        "resultado lleva la tolerancia de penalización."
+    ),
+    "fem3d.hypothesis_normalized": (
+        "Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis "
+        "componentes calculadas; formulación espacial contrastada solo con su batería "
+        "declarada (T-018); este resultado no está validado; aplicación experimental."
+    ),
+    "fem3d.chain_postcondition_failed": (
+        "Control de la cadena del apoyo inclinado no superado en el nudo {node} ({control}: "
+        "desviación {value}, cota {bound}). No hay resultados."
+    ),
+    "fem3d.penalty_estimate_failed": (
+        "La restricción representada por penalización en el nudo {node} se incumple más de "
+        "lo admitido (estimado {value}, cota {bound}; incluye el redondeo "
+        "eps·penalty_factor, que crece con un factor de penalización alto). No hay resultados."
+    ),
+    "fem3d.solver_stderr": (
+        "El solver escribió avisos durante una corrida terminada: «{text}». Los controles de "
+        "la solución deciden si es válida."
+    ),
     "benchmark.hypothesis_formulation": (
         "Euler-Bernoulli 2D sin deformación por cortante, geomTransf Linear, estática lineal, "
         "EI y EA constantes y cargas consistentes: las fórmulas son exactas en nudos y extremos."
@@ -333,6 +378,63 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "T-010); su giro se publica como no aplicable."
     ),
     "benchmark.note_in_plane_status": "R_x′ en N3: estado {status} (se esperaba no aplicable).",
+    "benchmark.hypothesis_spatial_formulation": (
+        "Euler-Bernoulli 3D sin deformación por cortante, torsión uniforme de Saint-Venant sin "
+        "alabeo, estática lineal, secciones constantes y cargas consistentes: las fórmulas son "
+        "exactas en nudos y extremos."
+    ),
+    "benchmark.hypothesis_spatial_data": (
+        "Acero E = {modulus_gpa:g} GPa, G = {shear_gpa:g} GPa, R {b_mm:g}×{h_mm:g}; A, Iy, Iz "
+        "y J (= {torsion:.5g} m⁴, serie de Saint-Venant) de las propiedades de la sección."
+    ),
+    "benchmark.title_spatial_cantilever_y": "Voladizo espacial en +Y",
+    "benchmark.title_spatial_cantilever_oblique": "Voladizo espacial oblicuo",
+    "benchmark.title_bracket_vertical": "Ménsula acodada con carga vertical",
+    "benchmark.title_bracket_horizontal": "Ménsula acodada con carga horizontal",
+    "benchmark.title_portal_in_plane": "Pórtico biempotrado, carga en su plano",
+    "benchmark.title_portal_out_of_plane": "Pórtico biempotrado, carga fuera de su plano",
+    "benchmark.title_oblique_self_weight": "Voladizo oblicuo con peso propio",
+    "benchmark.title_oblique_member_loads": "Voladizo oblicuo con cargas de barra local y global",
+    "benchmark.description_spatial_cantilever_y": (
+        "Voladizo de {length:g} m de O a J en +Y, empotrado en O. En J, el equivalente global "
+        "de la carga local N = {n_kn:g} kN, Py = {py_kn:g} kN, Pz = {pz_kn:g} kN y "
+        "T = {t_knm:g} kN·m."
+    ),
+    "benchmark.description_spatial_cantilever_oblique": (
+        "Voladizo de {length:g} m de O al punto J ({x:g}, {y:g}, {z:g}) m, con alfa = {alpha:g} "
+        "rad y empotrado en O. En J, el equivalente global de la carga local N = {n_kn:g} kN, "
+        "Py = {py_kn:g} kN, Pz = {pz_kn:g} kN y T = {t_knm:g} kN·m."
+    ),
+    "benchmark.description_bracket_vertical": (
+        "Ménsula acodada empotrada en O: B1 = O→A en +X ({l1:g} m) y B2 = A→C en +Y "
+        "({l2:g} m). Carga P = {load_kn:g} kN hacia −Z en C (flexión y torsión)."
+    ),
+    "benchmark.description_bracket_horizontal": (
+        "Ménsula acodada empotrada en O: B1 = O→A en +X ({l1:g} m) y B2 = A→C en +Y "
+        "({l2:g} m). Carga H = {load_kn:g} kN en +X en C (Iz, A y el signo de ey = −X en B2)."
+    ),
+    "benchmark.description_portal_in_plane": (
+        "Pórtico en XZ de {span:g} m de luz y {height:g} m de altura, con bases empotradas. "
+        "H/2 en +X en cada nudo de dintel (H = {load_kn:g} kN), con deformación axil."
+    ),
+    "benchmark.description_portal_out_of_plane": (
+        "Pórtico en XZ de {span:g} m de luz y {height:g} m de altura, con bases empotradas. "
+        "P = {load_kn:g} kN en +Y solo en A1: flexión débil de los pilares acoplada con la "
+        "torsión del dintel."
+    ),
+    "benchmark.description_oblique_self_weight": (
+        "Voladizo oblicuo de {length:g} m con alfa = {alpha:g} rad, empotrado en O, bajo su peso "
+        "propio (ρ·A·g del modelo)."
+    ),
+    "benchmark.description_oblique_member_loads": (
+        "Voladizo oblicuo de {length:g} m con alfa = {alpha:g} rad, empotrado en O. Carga "
+        "uniforme LOCAL ({local_kn_m}) kN/m y GLOBAL ({global_kn_m}) kN/m, con Wx ≠ 0."
+    ),
+    "benchmark.note_cross_planar": (
+        "Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. "
+        "Fórmulas sobre el 3D con 1e-9, y 3D frente a plano con {tolerance:g}; fuera del plano, "
+        "frente a 0."
+    ),
     "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",
     "section.property_unrepresentable": (
         "La propiedad {property} no es representable como valor positivo en doble precisión "

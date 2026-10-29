@@ -51,6 +51,7 @@ validado.
 
 import argparse
 import io
+import itertools
 import math
 import platform
 import re
@@ -120,6 +121,11 @@ from veritas.fem import (
     analyze_planar_xz,
     benchmarks,
     normalize_planar_xz,
+)
+from veritas.fem.spatial import (
+    SpatialAnalysisConfiguration,
+    SpatialAnalysisRun,
+    analyze_spatial,
 )
 
 EXPERIMENTAL_WARNING: Final = (
@@ -274,7 +280,9 @@ def _add_connection_parser(
 def _add_analyze_parser(
     subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]", profile_names: list[str]
 ) -> None:
-    analyze_parser = subparsers.add_parser("analyze", help="Análisis FEM plano XZ (OpenSeesPy).")
+    analyze_parser = subparsers.add_parser(
+        "analyze", help="Análisis FEM (OpenSeesPy): plano XZ y espacial."
+    )
     analyze_sub = analyze_parser.add_subparsers(
         dest="analyze_command", metavar="ACCIÓN", required=True
     )
@@ -316,6 +324,21 @@ def _add_analyze_parser(
         "--timeout", default="60", help="Tiempo máximo de cada corrida en s (por defecto 60)."
     )
     references.add_argument(
+        "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
+    )
+    spatial = analyze_sub.add_parser(
+        "espacial",
+        help="Adaptador espacial de seis GDL: referencias T-FEM3D, contraste con el plano y "
+        "un mecanismo de torsión (T-018).",
+        description=SPATIAL_DESCRIPTION,
+        epilog=SPATIAL_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    spatial.add_argument("--caso", default=SPATIAL_REFERENCES, choices=SPATIAL_CHOICES)
+    spatial.add_argument(
+        "--timeout", default="60", help="Tiempo máximo de cada corrida en s (por defecto 60)."
+    )
+    spatial.add_argument(
         "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
     )
 
@@ -1288,7 +1311,7 @@ def _raw(value: float | None) -> str:
     return "—" if value is None else f"{value:.6e}"
 
 
-def _run_lines(run: AnalysisRun, labels: dict[UUID, str]) -> list[str]:
+def _run_lines(run: AnalysisRun | SpatialAnalysisRun, labels: dict[UUID, str]) -> list[str]:
     versions = " · ".join(f"{key} {value or '—'}" for key, value in run.versions.items())
     lines = [
         f"Estado: {run.status}",
@@ -1622,12 +1645,14 @@ def _mechanism_dof_text(item: MechanismDof, labels: dict[UUID, str]) -> str:
         where = f"extremo {item.end} de {member}, {item.component}"
     elif item.component == "t":
         where = f"nudo {node}, traslación tangente del apoyo"
+    elif item.component in _OBLIQUE_COMPONENTS:  # Solo el análisis espacial (T-018, O3).
+        where = f"nudo {node}, {_OBLIQUE_COMPONENTS[item.component]} {item.component}"
     else:
         where = f"nudo {node}, {item.component}"
     return f"{where} ({item.participation:.3g})"
 
 
-def _mechanism_lines(run: AnalysisRun, labels: dict[UUID, str]) -> list[str]:
+def _mechanism_lines(run: AnalysisRun | SpatialAnalysisRun, labels: dict[UUID, str]) -> list[str]:
     """Modo de mecanismo de la salvaguarda (T-017, D3): nulidad y participantes."""
     pivot = run.pivot
     if pivot is None or pivot.nullity is None:
@@ -2030,9 +2055,10 @@ def _text(text: benchmarks.Text) -> str:
     return render_text(text.key, dict(text.params))
 
 
-def _reference_table(
-    outcome: benchmarks.ReferenceOutcome, profile: PresentationProfile
-) -> list[str]:
+_Outcome = benchmarks.ReferenceOutcome | benchmarks.SpatialReferenceOutcome
+
+
+def _reference_table(outcome: _Outcome, profile: PresentationProfile) -> list[str]:
     def shown(check: benchmarks.ReferenceCheck, value: float | None) -> str:
         # Seis cifras significativas: los decimales fijos ocultan giros y desplazamientos
         # pequeños (p. ej. 0,001 rad). Un 0 solo aparece si el valor es exactamente 0.
@@ -2057,15 +2083,15 @@ def _reference_table(
     return _table(header, rows).splitlines()
 
 
-def _reference_lines(
-    outcome: benchmarks.ReferenceOutcome, profile: PresentationProfile
-) -> list[str]:
+def _reference_lines(outcome: _Outcome, profile: PresentationProfile) -> list[str]:
     lines = [
         f"== {outcome.case_id} — {_text(outcome.title)} ==",
         _text(outcome.description),
         "",
     ]
     lines += _run_lines(outcome.run, outcome.labels)
+    if isinstance(outcome, benchmarks.SpatialReferenceOutcome) and outcome.planar is not None:
+        lines += _planar_contrast_lines(outcome.planar)
     if outcome.run.status is not RunStatus.SUCCEEDED:
         return [*lines, NO_RESULTS_FAILED, f"{outcome.case_id}: {REFERENCE_NO_RESULTS}"]
     if outcome.failure is not None:
@@ -2090,8 +2116,23 @@ def format_reference_outcomes(
     outcomes: Sequence[benchmarks.ReferenceOutcome], profile: PresentationProfile
 ) -> tuple[str, int]:
     """Texto del contraste y código de salida (0 si todo coincide; si no, 3)."""
-    lines = ["Referencias analíticas (planes T-009 y T-010):"]
-    lines += [f"  - {_text(text)}" for text in benchmarks.HYPOTHESES]
+    return _format_outcomes(
+        outcomes,
+        profile,
+        "Referencias analíticas (planes T-009 y T-010):",
+        benchmarks.HYPOTHESES,
+    )
+
+
+def _format_outcomes(
+    outcomes: Sequence[_Outcome],
+    profile: PresentationProfile,
+    header: str,
+    hypotheses: Sequence[benchmarks.Text],
+    agreement: str = "con su referencia analítica dentro de la tolerancia",
+) -> tuple[str, int]:
+    lines = [header]
+    lines += [f"  - {_text(text)}" for text in hypotheses]
     lines.append("")
     for outcome in outcomes:
         lines += [*_reference_lines(outcome, profile), ""]
@@ -2106,10 +2147,7 @@ def format_reference_outcomes(
     if not failed:
         count = len(outcomes)
         subject = "La variante coincide" if count == 1 else f"Las {count} variantes coinciden"
-        lines.append(
-            f"{subject} con su referencia analítica dentro de la tolerancia; no valida la "
-            "aplicación."
-        )
+        lines.append(f"{subject} {agreement}; no valida la aplicación.")
     lines.extend(["", EXPERIMENTAL_WARNING])
     return "\n".join(lines), EXIT_ANALYSIS_FAILED if failed else EXIT_OK
 
@@ -2123,6 +2161,127 @@ def run_analyze_references(
     cases = benchmarks.CASES if case == REFERENCES_ALL else (case,)
     outcomes = [outcome for item in cases for outcome in benchmarks.run_reference(item, timeout)]
     return format_reference_outcomes(outcomes, profile)
+
+
+# --- Adaptador espacial (T-018, D7-A) -----------------------------------------------------
+
+SPATIAL_REFERENCES: Final = "referencias"
+SPATIAL_CROSS: Final = "contraste-plano"
+SPATIAL_TORSION: Final = "mecanismo-torsion"
+SPATIAL_CHOICES: Final = (SPATIAL_REFERENCES, SPATIAL_CROSS, SPATIAL_TORSION)
+SPATIAL_DESCRIPTION: Final = (
+    "Análisis espacial de seis GDL por nudo (ADR-003), en tres casos:\n"
+    "  referencias        T-FEM3D-01, 02, 03 y 05 frente a fórmulas cerradas (plan T-018).\n"
+    "  contraste-plano    T-FEM-001…004 con Uy, Rx y Rz fijos: fórmulas en 3D y 3D frente\n"
+    "                     al adaptador plano.\n"
+    "  mecanismo-torsion  biapoyada sin restricción de torsión: ANALYSIS_SINGULAR con su modo."
+)
+SPATIAL_EPILOG: Final = (
+    "Componentes del modo de mecanismo: Ux…Rz son GDL globales de un nudo; t1/t2 (traslación) "
+    "y r1/r2 (giro) son coordenadas oblicuas del nudo, que no coinciden con un eje global "
+    "porque una restricción inclinada fija las demás direcciones. Códigos de salida: 0 todo "
+    "coincide; 2 diagnóstico de entrada; 3 corrida FAILED o contraste no superado."
+)
+_OBLIQUE_COMPONENTS: Final = {
+    "t1": "traslación oblicua",
+    "t2": "traslación oblicua",
+    "r1": "giro oblicuo",
+    "r2": "giro oblicuo",
+}
+TORSION_SPAN: Final = 5.0  # m
+TORSION_LOAD: Final = 10_000.0  # N, hacia −Z en el centro
+SPATIAL_TORSION_EXPECTED: Final = (
+    "Mecanismo detectado, como se esperaba: el análisis no publica resultados (salida 3)."
+)
+SPATIAL_TORSION_MISSED: Final = "ERROR: la corrida no detectó el mecanismo esperado."
+
+
+def _planar_contrast_lines(planar: benchmarks.ReferenceOutcome) -> list[str]:
+    """Estado de la corrida plana del contraste (D1); sin resultados, «SIN RESULTADOS»."""
+    if planar.results is None:
+        verdict = REFERENCE_NO_RESULTS
+    else:
+        verdict = REFERENCE_MATCH if planar.matches else REFERENCE_MISMATCH
+    return [
+        f"Corrida plana del contraste: {planar.run.status} · run_id {planar.run.run_id} · "
+        f"fórmulas del plano: {verdict}"
+    ]
+
+
+def run_analyze_spatial(case: str, timeout_text: str, profile_name: str = "SI") -> tuple[str, int]:
+    """``veritas analyze espacial``: (texto, código de salida 0 o 3)."""
+    timeout = _parse_number(timeout_text)
+    profile = _profile(profile_name)
+    if case == SPATIAL_TORSION:
+        return _spatial_torsion(timeout)
+    if case == SPATIAL_CROSS:
+        outcomes = [
+            o for item in benchmarks.CROSS_CASES for o in benchmarks.run_cross_planar(item, timeout)
+        ]
+        return _format_outcomes(
+            outcomes,
+            profile,
+            "Contraste espacial-plano de T-FEM-001…004 (plan T-018, D1):",
+            benchmarks.SPATIAL_HYPOTHESES,
+            "con las fórmulas del caso plano y con el adaptador plano dentro de la tolerancia",
+        )
+    outcomes = [
+        o
+        for item in benchmarks.SPATIAL_CASES
+        for o in benchmarks.run_spatial_reference(item, timeout)
+    ]
+    return _format_outcomes(
+        outcomes,
+        profile,
+        "Referencias analíticas espaciales (plan T-018, D8):",
+        benchmarks.SPATIAL_HYPOTHESES,
+    )
+
+
+def _spatial_torsion(timeout: float) -> tuple[str, int]:
+    """Biapoyada con traslaciones fijas y Rx libre en ambos extremos: mecanismo de torsión."""
+    model = StructuralModel()
+    material = _steel(model)
+    section = model.add_rectangular_section(
+        b=u.Quantity.of(200, "mm"), h=u.Quantity.of(400, "mm"), name="R 200×400"
+    )
+    case = model.add_load_case("Q", LoadCategory.VARIABLE)
+    m = u.Quantity.of
+    zero = m(0, "m")
+    nodes = [
+        model.add_node(m(x, "m"), zero, zero, label=f"N{i}")
+        for i, x in enumerate((0.0, TORSION_SPAN / 2, TORSION_SPAN), start=1)
+    ]
+    members = [
+        model.add_member(a.id, b.id, material=material.ref, section=section.ref, label=f"B{i}")
+        for i, (a, b) in enumerate(itertools.pairwise(nodes), start=1)
+    ]
+    for node in (nodes[0], nodes[2]):
+        model.set_support(node.id, pinned_restraints(), label=f"Articulación {node.label}")
+    model.add_nodal_load(case.id, nodes[1].id, fz=m(-TORSION_LOAD, "N"))
+    labels = {n.id: n.label for n in nodes} | {b.id: b.label for b in members}
+    labels |= {s.id: s.label for s in model.supports.values()}
+    run = analyze_spatial(model, SpatialAnalysisConfiguration(case.id, timeout_s=timeout))
+    singular = run.status is RunStatus.FAILED and any(
+        d.code is DiagnosticCode.ANALYSIS_SINGULAR for d in run.diagnostics
+    )
+    lines = [
+        f"Mecanismo de torsión (plan T-018, D7): biapoyada de {TORSION_SPAN:g} m en +X en dos "
+        f"barras, P = {TORSION_LOAD / 1000:g} kN hacia −Z en N2. Traslaciones fijas en N1 y "
+        "N3; ningún apoyo restringe Rx, así que la viga puede girar libre alrededor de su eje.",
+        "",
+        *_run_lines(run, labels),
+        *_mechanism_lines(run, labels),
+        *_hypothesis_lines(run.hypotheses),
+        "",
+        NO_RESULTS_FAILED if run.status is not RunStatus.SUCCEEDED else SPATIAL_TORSION_MISSED,
+        *([SPATIAL_TORSION_EXPECTED] if singular else []),
+        *([SPATIAL_TORSION_MISSED] if run.status is RunStatus.FAILED and not singular else []),
+        "",
+        EXPERIMENTAL_WARNING,
+    ]
+    # Salida 3 siempre: un mecanismo es una corrida FAILED (D7); si no se detectara, también.
+    return "\n".join(lines), EXIT_ANALYSIS_FAILED
 
 
 def _tolerant_streams() -> None:
@@ -2177,6 +2336,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "analyze":
             if args.analyze_command == "referencias":
                 text, code = run_analyze_references(args.caso, args.timeout, args.profile)
+            elif args.analyze_command == "espacial":
+                text, code = run_analyze_spatial(args.caso, args.timeout, args.profile)
             elif args.analyze_command == "uniones":
                 text, code = run_analyze_unions(args.timeout, args.profile)
             elif args.caso == "tres-materiales":

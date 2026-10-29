@@ -1,0 +1,24 @@
+Mecanismo: la misma barra sobre dos rodillos verticales, sin restricción en X.
+
+Estado: FAILED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos:
+ERROR ANALYSIS_SINGULAR: Rigidez singular o extremadamente mal condicionada (pivote escalado # ≤ #, componente Ux): posible mecanismo o apoyos insuficientes. No se calcula.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rx: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rz: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Uy: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+
+Sin resultados: la corrida no es SUCCEEDED.
+
+AVISO: aplicación experimental. No apta para justificar obras reales sin validación independiente por profesionales competentes.
+--- stderr
+
+--- 3

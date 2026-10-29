@@ -1,0 +1,30 @@
+Viga N1-N3-N2 de # m (B1 = N1→N3, B2 = N3→N2), R #×# de acero, empotrada en N1 y N2, P = # kN en Z en N3. Se cambia solo el extremo J de B2 (sobre N2): rígido, giro Ry liberado o resorte k = #·EI/L = # N·m/rad.
+Perfil de unidades: SI
+
+[Rígida] Estado: SUCCEEDED
+[Liberada] Estado: SUCCEEDED
+[Resorte] Estado: SUCCEEDED
+
+Magnitud Rígida Liberada Resorte Ref. Rígida Ref. Liberada Coincide Err. rel. máx.
+--- --- --- --- --- --- --- ---
+Uz N3 (centro) # m # m # m # m # m sí #
+RZ N1 # N # N # N # N # N sí #
+RZ N2 # N # N # N # N # N sí #
+MY N1 (reacción) # N·m # N·m # N·m # N·m # N·m sí #
+MY N2 (reacción) # N·m # N·m # N·m # N·m # N·m sí #
+My extremo J de B2 # N·m # N·m # N·m # N·m # N·m sí #
+Referencias a mano: Rígida = biempotrada (PL/#, PL³/(#EI)); Liberada = empotrada-articulada (#PL/#, #PL³/(#EI), reacciones #P/# y #P/#). Contraste automático (T-017, D4): Rígida y Liberada con su referencia, error relativo ≤ # sobre la mayor referencia del mismo tipo (momentos: al menos PL/#). El resorte no tiene fórmula cerrada revisada: cada magnitud debe quedar entre Rígida y Liberada y el cociente s = (x_res − x_lib)/(x_ríg − x_lib) debe ser común a todas, como corresponde a un único resorte.
+Resorte: s = # (dispersión #, tolerancia #); entre Rígida y Liberada: sí.
+Contraste de uniones: coincide.
+Comparación de variantes del mismo modelo; «—» = sin valor (no aplicable o corrida fallida). Los valores no están validados (aplicación experimental).
+
+Mecanismo: la misma viga sobre articulación (N1) y rodillo (N2) con el extremo J de B1 también liberado (rótula en N3).
+[Mecanismo] Estado: FAILED
+ERROR ANALYSIS_SINGULAR: Rigidez singular (pivote escalado # ≤ #): mecanismo en el que participa el giro del extremo J de la barra B1. Los GDL que participan se registran con el modo de mecanismo; si el modo no es concluyente, la ubicación es orientativa (un GDL del mecanismo). No se calcula.
+Ubicación (GDL del modo): B1
+Modo de mecanismo (nulidad #; participación ≥ #): extremo J de B1, Ry (#); nudo N1, Ry (#); nudo N2, Ry (#); nudo N3, Uz (#); nudo N3, Ry (#).
+
+AVISO: aplicación experimental. No apta para justificar obras reales sin validación independiente por profesionales competentes.
+--- stderr
+
+--- 0

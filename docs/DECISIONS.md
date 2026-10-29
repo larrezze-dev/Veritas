@@ -24,6 +24,16 @@ Fecha de base: 2026-10-24. Fuente: decisiones del Product Owner incorporadas en 
 | [ADR-002](adr/ADR-002-adaptador-plano-proceso-solver.md) | Primer adaptador FEM limitado al plano XZ, worker OpenSeesPy en proceso aislado por corrida con el mismo intérprete 3.12 (revisión DEC-011) y procedencia en memoria sin hash canónico (excepción incremental) | ACCEPTED — aprobado por el usuario el 2026-10-27, incluida la revisión DEC-011; implementación en T-007 |
 | [ADR-003](adr/ADR-003-adaptador-espacial-3d.md) | Adaptador FEM espacial de seis GDL por nudo junto al plano (contraste cruzado), protocolo y worker propios, restricciones exactas donde se pueda (Lagrange para el rodillo inclinado), configuración espacial y extensión de la excepción de procedencia de ADR-002 | ACCEPTED — aprobado por el usuario el 2026-10-28 («aprobado», con el plan T-018, D1–D10 = A); implementación en T-018 |
 
+**Aprobaciones de implementación de T-018 (E1)**, registradas en el [plan T-018](../plans/T-018.md) (sección de cada desviación o propuesta y su Historial). No son decisiones de producto ni crean ADR; el ADR-003 no cambia.
+- DEV-1 (aprobada 2026-10-28): precisión de 1e-7 en la batería con L/h > 1000; el resto sigue en 1e-9.
+- PROP-1 (aprobada 2026-10-28): complemento alineado en D4; `fix` en dos ejes globales cuando la tercera fila es un eje global.
+- Cota de `tol_axis` ≤ 1e-6 (aprobada 2026-10-28).
+- PROP-2 (aprobada 2026-10-28): término a priori eps·`penalty_factor`·‖θ‖∞ en el estimador de penalización.
+- DEV-2 (aprobada 2026-10-28): escala del alias de la cadena, c_alias·eps·máx(‖u_tras‖∞, a·‖θ‖∞).
+- `inertia_axis` = "3D" en el análisis espacial (aprobada 2026-10-29).
+- Nueva ayuda del grupo `analyze` (aprobada 2026-10-29).
+- Calibración de penalización (`penalty_factor` = 1e8, `tol_penalty` = 1e-6, alpha = D), dada por buena el 2026-10-28.
+
 Los ADR complementan DEC-001…010 sin sustituirlas. Aprobar un ADR no declara implementadas sus capacidades ni valida un solver. Al aprobar o rechazar un ADR, actualizar su estado aquí y en el propio ADR con fecha y referencia a la aprobación expresa del usuario.
 
 No desarrollar verificación normativa de aluminio bajo etiqueta «CTE»: no existe un DB-SE específico de aluminio equivalente a acero/madera. El análisis FEM seguirá disponible; mostrar NO_COMPROBADO hasta seleccionar/validar normativa.

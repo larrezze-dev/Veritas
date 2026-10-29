@@ -1,0 +1,4 @@
+
+--- stderr
+UNSUPPORTED_CONFIGURATION: Todos los GDL del modelo plano están restringidos (ningún GDL libre): el análisis plano no resuelve esta estructura en esta versión. No se calcula.
+--- 2

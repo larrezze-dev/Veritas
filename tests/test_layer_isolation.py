@@ -161,11 +161,13 @@ def test_loads_module_is_scanned_and_isolated() -> None:
 
 
 WORKER_FILE = PACKAGE_ROOT / "fem" / "adapters" / "opensees_worker.py"
+WORKER_3D_FILE = PACKAGE_ROOT / "fem" / "adapters" / "opensees_worker_3d.py"
 
 
-def test_worker_imports_only_stdlib_and_openseespy() -> None:
-    """El worker no importa ``veritas`` ni dependencias ajenas (ADR-002 §4, plan T-007)."""
-    tops = {name.split(".")[0] for name in imported_modules(WORKER_FILE, PACKAGE_ROOT)}
+@pytest.mark.parametrize("worker", [WORKER_FILE, WORKER_3D_FILE], ids=["plano", "3d"])
+def test_worker_imports_only_stdlib_and_openseespy(worker: Path) -> None:
+    """Los workers no importan ``veritas`` ni dependencias ajenas (ADR-002 §4, ADR-003)."""
+    tops = {name.split(".")[0] for name in imported_modules(worker, PACKAGE_ROOT)}
     assert "veritas" not in tops
     assert tops - {"openseespy"} <= sys.stdlib_module_names
 
@@ -176,4 +178,4 @@ def test_only_the_worker_imports_openseespy() -> None:
         for path in PACKAGE_ROOT.rglob("*.py")
         if any(name.split(".")[0] == "openseespy" for name in imported_modules(path, PACKAGE_ROOT))
     }
-    assert importers == {"fem/adapters/opensees_worker.py"}
+    assert importers == {"fem/adapters/opensees_worker.py", "fem/adapters/opensees_worker_3d.py"}

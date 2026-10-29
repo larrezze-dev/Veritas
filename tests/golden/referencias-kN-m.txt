@@ -1,0 +1,307 @@
+Referencias analíticas (planes T-009 y T-010):
+- Euler-Bernoulli #D sin deformación por cortante, geomTransf Linear, estática lineal, EI y EA constantes y cargas consistentes: las fórmulas son exactas en nudos y extremos.
+- Acero E = # GPa, R #×# (Iy = b·h³/#, A = b·h).
+
+== T-FEM-001 — Biapoyada con P central ==
+Biapoyada de # m en +X (B1 = N1→N2, B2 = N2→N3), P = # kN hacia −Z como carga nodal en N2, articulación en N1. Rodillo vertical (Uz) en N3.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos:
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rx: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rz: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +P/# # kN # kN # # coincide
+R_Z N3 +P/# # kN # kN # # coincide
+R_X N1 # # kN # kN # # coincide
+My(L−) B1 −PL/# # kN·m # kN·m # # coincide
+My(#+) B2 −PL/# # kN·m # kN·m # # coincide
+Vz(L−) B1 −P/# # kN # kN # # coincide
+Vz(#+) B2 +P/# # kN # kN # # coincide
+Uz N2 −PL³/(#EI) # mm # mm # # coincide
+Ry N1 +PL²/(#EI) # rad # rad # # coincide
+Ry N3 −PL²/(#EI) # rad # rad # # coincide
+Ry N2 # # rad # rad # # coincide
+T-FEM-001: #/# magnitudes, coincide.
+
+== T-FEM-002 — Voladizo con carga uniforme ==
+Voladizo de # m en +X en dos barras (nudo interior a = L/#), empotrado en N1, q = # kN/m en Z sobre B1 y B2.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +wL # kN # kN # # coincide
+R_My N1 −wL²/# # kN·m # kN·m # # coincide
+My(#+) B1 +wL²/# # kN·m # kN·m # # coincide
+Vz(#+) B1 −wL # kN # kN # # coincide
+My(#+) B2 +w(L−a)²/# # kN·m # kN·m # # coincide
+My(L−) B2 # # kN·m # kN·m # # coincide
+Uz N2 −wa²(#L²−4La+a²)/(#EI) # mm # mm # # coincide
+Uz N3 −wL⁴/(#EI) # mm # mm # # coincide
+Ry N3 +wL³/(#EI) # rad # rad # # coincide
+T-FEM-002: #/# magnitudes, coincide.
+
+== T-FEM-003 a — Resorte traslacional en base global ==
+Biapoyada de # m en +X (B1 = N1→N2, B2 = N2→N3), P = # kN hacia −Z como carga nodal en N2, articulación en N1. Resorte k = # N/m en Uz de N3 (isostática).
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos:
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rx: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rz: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +P/# # kN # kN # # coincide
+R_Z N3 +P/# # kN # kN # # coincide
+Uz N3 −P/(#k) # mm # mm # # coincide
+Uz N2 −PL³/(#EI) − P/(#k) # mm # mm # # coincide
+Ry N1 +PL²/(#EI) + P/(#kL) # rad # rad # # coincide
+T-FEM-003 a: #/# magnitudes, coincide.
+
+== T-FEM-003 b — Resorte traslacional en base inclinada ==
+Biapoyada de # m en +X (B1 = N1→N2, B2 = N2→N3), P = # kN hacia −Z como carga nodal en N2, articulación en N1. Resorte k = # N/m en Uz′ de N3, base a #° (ex′ = (cos, #, sin), ez′ = (−sin, #, cos)); Ux′ libre.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos:
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rx: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rz: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+- Reacción en base del apoyo inclinado: Q_apoyo·R con Y, Mx y Mz tomados como # (no calculados); su efecto en Ux′/Uz′ es ≤ tol_axis·|R fuera del plano|.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_z′ N3 P/(#·cos30°) # kN # kN # # coincide
+R_X N1 +(P/#)·tan30° # kN # kN # # coincide
+R_Z N3 +P/# # kN # kN # # coincide
+u·ez′ N3 −R_z′/k # mm # mm # # coincide
+R_x′ en N3: no aplicable (GDL libre); la reacción no tiene componente en el plano de rodadura.
+T-FEM-003 b: #/# magnitudes, coincide.
+
+== T-FEM-004 — Rodillo inclinado ==
+Biapoyada de # m en +X (B1 = N1→N2, B2 = N2→N3), P = # kN hacia −Z como carga nodal en N2, articulación en N1. Rodillo rígido sobre un plano a #° en N3 (Uz′ fijo por penalización, Ux′ libre).
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos:
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rx: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rz: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Al menos un apoyo inclinado rígido se representa por penalización (error relativo del orden de # en la dirección restringida).
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+- Reacción en base del apoyo inclinado: Q_apoyo·R con Y, Mx y Mz tomados como # (no calculados); su efecto en Ux′/Uz′ es ≤ tol_axis·|R fuera del plano|.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_z′ N3 P/(#·cos30°) # kN # kN # # coincide
+R global N3 · ex′ # # kN # kN # # coincide
+R_X N1 +(P/#)·tan30° # kN # kN # # coincide
+R_Z N1 +P/# # kN # kN # # coincide
+N(#+) B1 −(P/#)·tan30° # kN # kN # # coincide
+Ux N3 N·L/(EA) # mm # mm # # coincide
+Uz N3 tan30°·Ux # mm # mm # # coincide
+Uz N2 −PL³/(#EI) + Uz(N3)/# # mm # mm # # coincide
+R_x′ en N3: no aplicable (GDL libre); la reacción no tiene componente en el plano de rodadura.
+T-FEM-004: #/# magnitudes, coincide.
+
+== T-CON-REF-01 a — Empotrada-deslizadera con extremo I liberado ==
+Barra de # m, empotramiento en N1 y deslizadera Uz en N2, carga # kN/m hacia −Z; giro Ry del extremo I liberado (equivale a biapoyada). T-CON-002/#.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Extremos de barra con giro liberado o resorte: nudo auxiliar con las traslaciones del nudo (equalDOF) y giro propio; resorte rotacional lineal, elástico y bilateral.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 wL/# + M_I/L # kN # kN # # coincide
+R_Z N2 wL/# − M_I/L # kN # kN # # coincide
+R_My N1 −M_I # kN·m # kN·m # # coincide
+|M| extremo I B1 M_I # kN·m # kN·m # # coincide
+Ry N2 −wL³/(#EI) + M_I·L/(#EI) # rad # rad # # coincide
+T-CON-REF-01 a: #/# magnitudes, coincide.
+
+== T-CON-REF-01 b — Empotrada-deslizadera con resorte en el extremo I ==
+Barra de # m, empotramiento en N1 y deslizadera Uz en N2, carga # kN/m hacia −Z; resorte rotacional en el extremo I con k·L/(EI) = #: M_I = (wL²/#)/(# + #EI/(kL)). T-CON-003.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Extremos de barra con giro liberado o resorte: nudo auxiliar con las traslaciones del nudo (equalDOF) y giro propio; resorte rotacional lineal, elástico y bilateral.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 wL/# + M_I/L # kN # kN # # coincide
+R_Z N2 wL/# − M_I/L # kN # kN # # coincide
+R_My N1 −M_I # kN·m # kN·m # # coincide
+|M| extremo I B1 M_I # kN·m # kN·m # # coincide
+Ry N2 −wL³/(#EI) + M_I·L/(#EI) # rad # rad # # coincide
+T-CON-REF-01 b: #/# magnitudes, coincide.
+
+== T-CON-REF-02 — Voladizo con resorte en el extremo I ==
+Voladizo de # m empotrado en N1 con resorte rotacional en el extremo I (k·L/(EI) = #) y P = # kN hacia −Z en N2: δ = PL³/(#EI) + PL²/k.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Extremos de barra con giro liberado o resorte: nudo auxiliar con las traslaciones del nudo (equalDOF) y giro propio; resorte rotacional lineal, elástico y bilateral.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +P # kN # kN # # coincide
+R_My N1 −PL # kN·m # kN·m # # coincide
+Uz N2 −(PL³/(#EI) + PL²/k) # mm # mm # # coincide
+Ry N2 +(PL²/(#EI) + PL/k) # rad # rad # # coincide
+T-CON-REF-02: #/# magnitudes, coincide.
+
+== T-CON-REF-03 — Rótula interior (extremo J liberado) ==
+Dos barras de # m; empotramiento en N1, rótula en N2 (extremo J de B1 liberado), deslizadera Uz en N3; P = # kN hacia −Z en N2. Isostática.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Extremos de barra con giro liberado o resorte: nudo auxiliar con las traslaciones del nudo (equalDOF) y giro propio; resorte rotacional lineal, elástico y bilateral.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +P # kN # kN # # coincide
+R_Z N3 # # kN # kN # # coincide
+R_My N1 −PL # kN·m # kN·m # # coincide
+M extremo J B1 (rótula) # # kN·m # kN·m # # coincide
+M extremo I B2 # # kN·m # kN·m # # coincide
+Uz N2 −PL³/(#EI) # mm # mm # # coincide
+Ry N3 −PL²/(#EI) # rad # rad # # coincide
+T-CON-REF-03: #/# magnitudes, coincide.
+
+== T-CON-REF-04 — Cercha triangular articulada ==
+Cercha N1–N2–N3 de # m de luz y # m de flecha, todos los extremos con el giro liberado; articulación en N1, rodillo en N2 y P = # kN hacia −Z en N3. Axiles por equilibrio de nudos; flecha por trabajos virtuales.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos:
+WARNING UNSUPPORTED_CONFIGURATION: En el nudo N1 todas las barras tienen el giro liberado y ningún apoyo lo restringe: ese giro no tiene rigidez ni carga y se restringe para el cálculo. No es una reacción y el giro del nudo no se publica.
+WARNING UNSUPPORTED_CONFIGURATION: En el nudo N2 todas las barras tienen el giro liberado y ningún apoyo lo restringe: ese giro no tiene rigidez ni carga y se restringe para el cálculo. No es una reacción y el giro del nudo no se publica.
+WARNING UNSUPPORTED_CONFIGURATION: En el nudo N3 todas las barras tienen el giro liberado y ningún apoyo lo restringe: ese giro no tiene rigidez ni carga y se restringe para el cálculo. No es una reacción y el giro del nudo no se publica.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rx: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rz: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Extremos de barra con giro liberado o resorte: nudo auxiliar con las traslaciones del nudo (equalDOF) y giro propio; resorte rotacional lineal, elástico y bilateral.
+- Giros de nudo sin rigidez ni carga (todas las barras liberadas) restringidos para el cálculo; no son reacciones.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +P/# # kN # kN # # coincide
+R_Z N2 +P/# # kN # kN # # coincide
+R_X N1 # # kN # kN # # coincide
+N B1 +P/(#·tan a) # kN # kN # # coincide
+N B2 −P/(#·sin a) # kN # kN # # coincide
+N B3 −P/(#·sin a) # kN # kN # # coincide
+Uz N3 −Σ N²L/(P·EA) # mm # mm # # coincide
+M extremo I B1 # # kN·m # kN·m # # coincide
+M extremo J B1 # # kN·m # kN·m # # coincide
+M extremo I B2 # # kN·m # kN·m # # coincide
+M extremo J B2 # # kN·m # kN·m # # coincide
+M extremo I B3 # # kN·m # kN·m # # coincide
+M extremo J B3 # # kN·m # kN·m # # coincide
+Giros de nudo sin rigidez restringidos para el cálculo en # nudos (D3-A del plan T-010); su giro se publica como no aplicable.
+T-CON-REF-04: #/# magnitudes, coincide.
+
+«coincide» = |calculado − referencia| ≤ tolerancia · max(|referencia|, S), con S la mayor |referencia| de la misma magnitud en el caso. Coincidir con la referencia analítica dentro de la tolerancia no valida la aplicación.
+Las # variantes coinciden con su referencia analítica dentro de la tolerancia; no valida la aplicación.
+
+AVISO: aplicación experimental. No apta para justificar obras reales sin validación independiente por profesionales competentes.
+--- stderr
+
+--- 0

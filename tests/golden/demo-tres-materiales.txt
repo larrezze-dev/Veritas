@@ -1,0 +1,33 @@
+Pórtico N1-N2-N3-N4 (pilares de # m, dintel de # m), empotrado en N1 y N4, carga nodal H = # kN en X en N2. Un material y una sección por barra; uniones rígidas I/J y, después, el giro Ry del extremo J del dintel B2 (sobre N3) liberado.
+Los dos aceros tienen el mismo E: la diferencia de rigidez la marca el aluminio (D5-A).
+Perfil de unidades: SI
+
+Barra Material E Sección
+--- --- --- ---
+B1 Acero S235 (ejemplo) [STEEL] rev # # Pa R #×# rev #
+B2 Aluminio, valores comunes (ejemplo) [ALUMINIUM] rev # # Pa R #×# rev #
+B3 Acero S355 (ejemplo) [STEEL] rev # # Pa R #×# rev #
+
+[Rígidas] Estado: SUCCEEDED
+[J de B2 liberado] Estado: SUCCEEDED
+
+Magnitud Rígidas J de B2 liberado
+--- --- ---
+Ux N2 # m # m
+Ux N3 # m # m
+Uz N3 # m # m
+Ry N2 # rad # rad
+Ry N3 # rad # rad
+RX N1 # N # N
+RZ N1 # N # N
+MY N1 # N·m # N·m
+RX N4 # N # N
+RZ N4 # N # N
+MY N4 # N·m # N·m
+My extremo J de B2 # N·m # N·m
+Comparación de variantes del mismo modelo; «—» = sin valor (no aplicable o corrida fallida). Los valores no están validados (aplicación experimental).
+
+AVISO: aplicación experimental. No apta para justificar obras reales sin validación independiente por profesionales competentes.
+--- stderr
+
+--- 0

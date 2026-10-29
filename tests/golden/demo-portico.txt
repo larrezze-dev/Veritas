@@ -1,0 +1,68 @@
+Pórtico N1-N2-N3-N4 (pilares de # m, dintel de # m), R #×# de acero. Articulación en N1; en N4, rodillo sobre plano a #° (Uz′ fijo) con resorte de giro k = # N·m/rad. q = # kN/m en Z sobre B2 y H = # kN en X en N2.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos:
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rx: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rz: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Al menos un apoyo inclinado rígido se representa por penalización (error relativo del orden de # en la dirección restringida).
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+- Reacción en base del apoyo inclinado: Q_apoyo·R con Y, Mx y Mz tomados como # (no calculados); su efecto en Ux′/Uz′ es ≤ tol_axis·|R fuera del plano|.
+
+RESULTADOS normalizados a ADR-001 (Z arriba; reacción = acción del apoyo sobre la estructura; pI/pJ = acción del nudo sobre la barra en base local; N > # tracción). Formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); no validados.
+Perfil de unidades: SI
+
+Desplazamientos y giros de nudo (base GLOBAL):
+Nudo Ux Uy Uz Rx Ry Rz
+--- --- --- --- --- --- ---
+N1 # m n/c # m n/c # rad n/c
+N2 # m n/c # m n/c # rad n/c
+N3 # m n/c # m n/c # rad n/c
+N4 # m n/c # m n/c # rad n/c
+
+Nota: en un rodillo inclinado rígido (penalización) el desplazamiento en la dirección restringida es del orden de R/k_pen, no exactamente #.
+
+Reacciones (base GLOBAL):
+Apoyo Nudo RX RY RZ MX MY MZ
+--- --- --- --- --- --- --- ---
+Articulación N1 # N n/c # N n/c — n/c
+Rodillo #° N4 # N n/c # N n/c # N·m n/c
+
+Reacciones en la base del apoyo inclinado (x′, y′, z′):
+Apoyo Rx′ Ry′ Rz′ Mx′ My′ Mz′ Origen
+--- --- --- --- --- --- --- ---
+Rodillo #° — n/c # N n/c # N·m n/c Uz′: penalización, Ry′: resorte
+
+Fuerzas de extremo pI/pJ (acción del nudo sobre la barra, base LOCAL):
+Barra Extremo Fx Fy Fz Mx My Mz
+--- --- --- --- --- --- --- ---
+B1 I # N n/c # N n/c # N·m n/c
+B1 J # N n/c # N n/c # N·m n/c
+B2 I # N n/c # N n/c # N·m n/c
+B2 J # N n/c # N n/c # N·m n/c
+B3 I # N n/c # N n/c # N·m n/c
+B3 J # N n/c # N n/c # N·m n/c
+
+Esfuerzos de sección en los extremos q(#+) = −pI, q(L−) = pJ (base LOCAL):
+Barra Corte N Vy Vz T My Mz
+--- --- --- --- --- --- --- ---
+B1 #+ # N n/c # N n/c # N·m n/c
+B1 L− # N n/c # N n/c # N·m n/c
+B2 #+ # N n/c # N n/c # N·m n/c
+B2 L− # N n/c # N n/c # N·m n/c
+B3 #+ # N n/c # N n/c # N·m n/c
+B3 L− # N n/c # N n/c # N·m n/c
+(— = GDL libre del apoyo: reacción no aplicable, no es cero; n/c = fuera del plano XZ: no calculado por el análisis plano. En un apoyo inclinado, RX y RZ son proyecciones de la reacción calculada: un # en ellas es un valor real. RY/MY = reacción; Ry = giro.)
+
+AVISO: aplicación experimental. No apta para justificar obras reales sin validación independiente por profesionales competentes.
+--- stderr
+
+--- 0

@@ -1,5 +1,6 @@
 # CI de T-001. Repositorio público larrezze-dev/Veritas.
 # windows-latest no equivale a Windows 11 (NFR-001 se verifica localmente).
+# ubuntu-latest desde T-018 E1 (D-e): el worker y el golden de la CLI también en Linux.
 name: ci
 
 on:
@@ -8,7 +9,11 @@ on:
 
 jobs:
   checks:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
