@@ -22,7 +22,12 @@ from veritas.core.units import Quantity
 from veritas.fem import spatial
 from veritas.fem.adapters import singularity
 from veritas.fem.results.run import RunStatus
-from veritas.fem.spatial import WORKER_3D_PATH, analyze_spatial, provenance_constants
+from veritas.fem.spatial import (
+    LINUX_EXIT_BANNER,
+    WORKER_3D_PATH,
+    analyze_spatial,
+    provenance_constants,
+)
 from veritas.fem.spatial.config import SpatialAnalysisConfiguration
 from veritas.fem.spatial.postconditions import CONTROL_CHAIN_SUPPORT_MOMENT
 from veritas.fem.spatial.results import (
@@ -107,7 +112,7 @@ def test_successful_run_has_raw_results_and_provenance() -> None:
         run.hypotheses
         == translate_spatial(frame.model, SpatialAnalysisConfiguration(frame.case_id)).hypotheses
     )
-    assert run.worker_stderr == ""
+    assert run.worker_stderr.strip() in ("", LINUX_EXIT_BANNER)  # Bruto, en la procedencia.
 
 
 @pytest.mark.parametrize(
