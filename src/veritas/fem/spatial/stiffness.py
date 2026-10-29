@@ -373,11 +373,16 @@ def validate_request(request: SpatialRequest) -> None:
 
 
 def solver_free_dofs(request: SpatialRequest) -> int:
-    """GDL libres del modelo del solver (D6): nudos de dominio no fijados por ``fix`` y
-    ``CHAIN_SOLVER_DOFS`` por cadena; las tierras están fijas y los multiplicadores no
-    cuentan. Cota de ``max_free_dofs``; la reducida nunca es mayor."""
-    fixed = sum(sum(fix.fixity) for fix in request.fixes)
-    return DOFS_PER_NODE * len(request.nodes) - fixed + CHAIN_SOLVER_DOFS * len(request.chains)
+    """GDL libres del modelo del solver (D6): nudos de dominio y aux no fijados por ``fix``
+    (apoyo o huérfano) y ``CHAIN_SOLVER_DOFS`` por cadena; las tierras están fijas y los
+    multiplicadores no cuentan. Cota de ``max_free_dofs``; la reducida nunca es mayor."""
+    fixed: dict[int, list[int]] = {fix.node: list(fix.fixity) for fix in request.fixes}
+    for orphan in request.orphan_fixes:
+        bits = fixed.setdefault(orphan.node, [0] * DOFS_PER_NODE)
+        bits[AXES:] = [max(a, b) for a, b in zip(bits[AXES:], orphan.rotations, strict=True)]
+    nodes = len(request.nodes) + len(request.aux_nodes)
+    blocked = sum(sum(bits) for bits in fixed.values())
+    return DOFS_PER_NODE * nodes - blocked + CHAIN_SOLVER_DOFS * len(request.chains)
 
 
 @dataclass(frozen=True, slots=True)

@@ -323,7 +323,9 @@ def analyze_spatial(  # noqa: PLR0911 (un retorno por causa de fallo)
     ``worker`` solo se sustituye en pruebas.
     """
     run = _Run(model, config)
-    run.translation = translation = translate_spatial(model, config)
+    # E2.2-d: el rechazo de E1 hasta que la salvaguarda (E2.3) y la normalización (E2.5)
+    # admitan extremos no rígidos, en el mismo punto de la traducción que en E1.
+    run.translation = translation = translate_spatial(model, config, e1_end_guard=True)
     request = translation.request
     run.case_revision = request.case_revision
     try:

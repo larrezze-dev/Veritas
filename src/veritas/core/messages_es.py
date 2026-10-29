@@ -266,6 +266,34 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "El extremo {end} de la barra {member} no es rígido ({dof}: {state}); el análisis "
         "espacial solo admite por ahora extremos rígidos."
     ),
+    "fem3d.end_axial_with_axial_load": (
+        "La barra {member} tiene Ux de extremo liberado o con resorte y carga axial distribuida "
+        "en el caso (Wx = {wx} N/m, incluido el peso propio de una barra inclinada); el "
+        "análisis espacial no admite esa combinación."
+    ),
+    "fem3d.end_spring_near_rigid": (
+        "El resorte {dof} del extremo {end} de la barra {member} es casi rígido (cociente "
+        "{ratio} > {limit}); puede empeorar el condicionamiento: considere declararlo rígido."
+    ),
+    "fem3d.orphan_rotation_restrained": (
+        "El nudo {node} no tiene rigidez de giro en {rotations} (todas las barras liberadas y "
+        "sin apoyo de giro); esos giros se fijan sin reacción."
+    ),
+    "fem3d.hypothesis_end_releases": (
+        "Giros de flexión liberados en los extremos representados por la condensación del "
+        "propio elemento de barra (exacta, también con cargas de barra)."
+    ),
+    "fem3d.hypothesis_end_series": (
+        "Torsión y axil de extremo liberados o con resorte representados con J y A efectivos "
+        "en serie (exacto: torsor y axil constantes en la barra)."
+    ),
+    "fem3d.hypothesis_end_links": (
+        "Extremos con resorte o traslación liberada representados con nudos auxiliares que no "
+        "forman parte de los resultados."
+    ),
+    "fem3d.hypothesis_orphan_rotation": (
+        "Giros sin rigidez en algún nudo fijados en ejes globales, sin reacción (ver avisos)."
+    ),
     "fem3d.load_type_unsupported": (
         "Carga de tipo {type} que el análisis espacial no admite; no se ignora."
     ),
@@ -286,8 +314,9 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "penalización, con nudos auxiliares que no forman parte de los resultados."
     ),
     "fem3d.hypothesis_penalty": (
-        "Al menos un giro fijo parcial en base oblicua se representa por penalización; el "
-        "resultado lleva la tolerancia de penalización."
+        "Al menos un giro fijo parcial en base oblicua o una componente rígida de un extremo "
+        "oblicuo se representa por penalización; el resultado lleva la tolerancia de "
+        "penalización."
     ),
     "fem3d.hypothesis_normalized": (
         "Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis "

@@ -14,8 +14,10 @@ import pytest
 
 import test_fem3d_singularity as cases
 from fem_support import Frame
+from veritas.core.connections.end import EndConnection, MemberEnd
 from veritas.core.diagnostics import DiagnosticCode, InputValueError, Severity
 from veritas.core.geometry.entities import Node
+from veritas.core.materials.material import MaterialFamily
 from veritas.core.messages_es import render_message
 from veritas.core.supports.support import build_restraints, fixed_restraints, pinned_restraints
 from veritas.core.units import Quantity
@@ -278,6 +280,37 @@ def test_structure_without_free_dofs_is_rejected() -> None:
     assert error.value.diagnostic.message_key == "fem.no_free_dofs"
 
 
+def test_non_rigid_ends_keep_the_e1_rejection_until_e2_5() -> None:
+    """E2.2-d: el traductor admite extremos, pero la corrida los rechaza como en E1, antes
+    de la salvaguarda (nunca FAILED ``fem.invalid_stiffness`` ni OK)."""
+    frame = Frame()
+    a, b = frame.node(0.0, 0.0), frame.node(2.0, 0.0)
+    member = frame.member(a, b)
+    frame.support(a, fixed_restraints())
+    frame.nodal(b, fz=-1000.0)
+    frame.model.set_member_end(member.id, MemberEnd.J, EndConnection.pinned())
+    translate_spatial(frame.model, SpatialAnalysisConfiguration(frame.case_id))
+    with pytest.raises(InputValueError) as error:
+        analyze(frame)
+    assert error.value.diagnostic.code is DiagnosticCode.UNSUPPORTED_CONFIGURATION
+    assert error.value.diagnostic.message_key == "fem3d.member_end_not_rigid"
+    assert error.value.diagnostic.params_dict()["end"] == "J"
+
+
+def test_e1_rejection_order_is_kept() -> None:
+    """E2.2-d (revisión, m1): material no admitido y extremo no rígido en la misma barra; como
+    en E1, gana el material, que se comprueba antes que los extremos."""
+    frame = Frame(MaterialFamily.TIMBER)
+    a, b = frame.node(0.0, 0.0), frame.node(2.0, 0.0)
+    member = frame.member(a, b)
+    frame.support(a, fixed_restraints())
+    frame.nodal(b, fz=-1000.0)
+    frame.model.set_member_end(member.id, MemberEnd.J, EndConnection.pinned())
+    with pytest.raises(InputValueError) as error:
+        analyze(frame)
+    assert error.value.diagnostic.message_key == "fem.material_family_unsupported"
+
+
 def test_inconclusive_mode_falls_back_to_pivot_with_warning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -302,8 +335,8 @@ def test_invalid_stiffness_is_failed(monkeypatch: pytest.MonkeyPatch) -> None:
     """Revisión de E1, M1: una petición que la salvaguarda rechaza da FAILED, no excepción."""
     real = translate_spatial
 
-    def zero_area(model: object, config: SpatialAnalysisConfiguration) -> object:
-        translation = real(model, config)  # type: ignore[arg-type]
+    def zero_area(model: object, config: SpatialAnalysisConfiguration, **kwargs: bool) -> object:
+        translation = real(model, config, **kwargs)  # type: ignore[arg-type]
         request = translation.request
         beams = (dataclasses.replace(request.beams[0], area=0.0), *request.beams[1:])
         return dataclasses.replace(translation, request=dataclasses.replace(request, beams=beams))

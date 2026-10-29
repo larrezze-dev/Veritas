@@ -219,11 +219,21 @@ def test_empty_case_rejected() -> None:
     [EndConnection.pinned(), EndConnection.rigid().with_dof(Dof.RX, DofState.RELEASED)],
     ids=["articulado", "torsion"],
 )
-def test_non_rigid_end_rejected_in_e1(end: MemberEnd, connection: EndConnection) -> None:
+def test_non_rigid_end_guard_keeps_the_e1_rejection(
+    end: MemberEnd, connection: EndConnection
+) -> None:
+    """E2.2-d: el traductor ya admite extremos; la guarda de orquestación conserva el
+    rechazo de E1, con sus parámetros, hasta E2.5."""
     frame = cantilever(Frame())
     (member_id,) = frame.model.members
     frame.model.set_member_end(member_id, end, connection)
-    rejected(frame, "fem3d.member_end_not_rigid")
+    translate(frame)
+    with pytest.raises(InputValueError) as info:
+        translate_spatial(frame.model, config(frame), e1_end_guard=True)
+    assert info.value.code is D.UNSUPPORTED_CONFIGURATION
+    assert info.value.diagnostic.message_key == "fem3d.member_end_not_rigid"
+    assert info.value.diagnostic.params_dict()["end"] == str(end)
+    assert "{" not in render_message(info.value.diagnostic)
 
 
 def _with_property(frame: Frame, name: str, value: float | None) -> None:

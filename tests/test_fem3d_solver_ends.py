@@ -100,7 +100,17 @@ ORIENTATIONS = [
 class EndModel:
     """B1 (I→J, extremo no rígido) + B2 rígida (J→K); ``propped``: J empotrado y sin B2."""
 
-    def __init__(self, direction: Triple, alpha: float, w: Triple = W, *, propped: bool = False):
+    def __init__(  # noqa: PLR0913 (geometría y sección de la referencia, por nombre)
+        self,
+        direction: Triple,
+        alpha: float,
+        w: Triple = W,
+        *,
+        propped: bool = False,
+        b2_vecxz: Triple = B2_VECXZ,
+        torsion: float = J,
+    ):
+        self.b2_vecxz, self.torsion = b2_vecxz, torsion
         self.xj = _tip(direction)
         self.xk: Triple = (
             self.xj[0] + B2_OFFSET[0],
@@ -121,10 +131,11 @@ class EndModel:
         extras: Extras,
         *,
         area: float = A,
-        torsion: float = J,
+        torsion: float | None = None,
         normals: Sequence[Triple] = (),
     ) -> "Reference":
         """z = [u_J (6, global; ninguno si ``propped``), extras]; restricciones n·u_J = 0."""
+        torsion = self.torsion if torsion is None else torsion
         beam = SpatialBeam(1, "b1", 1, 2, area, E, G, torsion, IY, IZ, self.vecxz)
         k = local_beam_stiffness(beam, self.length)
         p0 = fixed_end_forces(SpatialBeamLoad(1, *self.w), self.length)
@@ -147,8 +158,8 @@ class EndModel:
         ]
         f = [-sum(m[r][a] * p0[r] for r in range(12)) for a in range(size)]
         if free:
-            b2 = SpatialBeam(2, "b2", 2, 3, A, E, G, J, IY, IZ, B2_VECXZ)
-            length2, axes2 = beam_axes(self.xj, self.xk, B2_VECXZ)
+            b2 = SpatialBeam(2, "b2", 2, 3, A, E, G, self.torsion, IY, IZ, self.b2_vecxz)
+            length2, axes2 = beam_axes(self.xj, self.xk, self.b2_vecxz)
             k2, t2 = local_beam_stiffness(b2, length2), beam_transformation(axes2)
             for a in range(6):
                 f[a] += LOAD[a]

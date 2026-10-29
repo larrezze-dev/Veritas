@@ -1,8 +1,15 @@
 """Traductor determinista del modelo de dominio a una petición espacial (plan T-018, D3-D4).
 
 Función pura: no importa OpenSeesPy ni hace E/S y no modifica el modelo. Rechaza con
-``UNSUPPORTED_CONFIGURATION`` todo lo que E1 no admite (madera, propiedad no disponible,
-Iyz ≠ 0, extremo no rígido, tipo de carga desconocido); nunca lo ignora en silencio.
+``UNSUPPORTED_CONFIGURATION`` todo lo que no admite (madera, propiedad no disponible,
+Iyz ≠ 0, Ux de extremo no rígido con carga axial distribuida, tipo de carga desconocido);
+nunca lo ignora en silencio.
+
+Extremos (D5-A, E2-a, plan T-018 pieza E2.2), una representación por componente: Ry/Rz
+liberados con ``-releasey``/``-releasez``; Rx y Ux liberados o con resorte en serie (J y A
+efectivos); Uy/Uz no rígidos y Ry/Rz con resorte en un nudo aux, exacto si sus direcciones
+generan un subespacio coordenado global y, si no, con penalización en las rígidas. Los
+giros huérfanos coordenados sin momento se fijan con aviso (R4).
 
 Mapeo: base global de ADR-001 con seis GDL por nudo; ``vecxz`` = ez de la barra (hecho 1);
 carga nodal global (Fx, Fy, Fz, Mx, My, Mz); carga de barra ``-beamUniform`` (Wy, Wz, Wx)
@@ -15,17 +22,25 @@ nudos y barras por orden del texto UUID canónico; los nudos auxiliares (tierras
 los elementos de apoyo siguen, en el orden de tag de su nudo.
 """
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, replace
 from typing import Final
 from uuid import UUID
 
-from veritas.core.connections.end import Dof, DofState
-from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError, Location
+from veritas.core.connections.end import Dof, DofState, EndConnection, MemberEnd
+from veritas.core.diagnostics import (
+    Diagnostic,
+    DiagnosticCode,
+    InputValueError,
+    Location,
+    Severity,
+)
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
 from veritas.core.loads.loads import LoadBasis, MemberUniformLoad, NodalLoad, SelfWeight
 from veritas.core.supports.support import RestraintKind, Support, SupportDof
 from veritas.fem.adapters.planar_xz import (
+    NEAR_RIGID_RATIO,
     SUPPORTED_FAMILIES,
     _available,
     _ordered,
@@ -34,21 +49,37 @@ from veritas.fem.adapters.planar_xz import (
 from veritas.fem.spatial.config import SpatialAnalysisConfiguration
 from veritas.fem.spatial.protocol import (
     AXES,
+    SpatialAuxNode,
     SpatialBeam,
     SpatialBeamLoad,
     SpatialChain,
+    SpatialEndEqual,
+    SpatialEndSpring,
     SpatialFix,
     SpatialNodalLoad,
     SpatialNode,
+    SpatialOrphanFix,
     SpatialRequest,
     SpatialSpring,
 )
+from veritas.fem.spatial.protocol import Vec3 as Triple
+from veritas.fem.spatial.stiffness import UNIT_AXES, beam_axes, cross, dot, spring_direction
 
 HYPOTHESIS_SPATIAL: Final = "fem3d.hypothesis_spatial"
 HYPOTHESIS_BEAM: Final = "fem3d.hypothesis_euler_bernoulli"
 HYPOTHESIS_LAGRANGE: Final = "fem3d.hypothesis_lagrange"
 HYPOTHESIS_CHAIN: Final = "fem3d.hypothesis_inclined_chain"
 HYPOTHESIS_PENALTY: Final = "fem3d.hypothesis_penalty"
+HYPOTHESIS_END_RELEASES: Final = "fem3d.hypothesis_end_releases"
+HYPOTHESIS_END_SERIES: Final = "fem3d.hypothesis_end_series"
+HYPOTHESIS_END_LINKS: Final = "fem3d.hypothesis_end_links"
+HYPOTHESIS_ORPHAN: Final = "fem3d.hypothesis_orphan_rotation"
+# E2.2-a (R9): Wx = 0 de una barra con Ux de extremo no rígido, relativo a Σ|q| de sus cargas.
+TOL_AXIAL_LOAD: Final = 1e-9
+# Componentes que representa el aux (E2-a, R3): Uy/Uz no rígidos y Ry/Rz con resorte.
+AUX_TRANSLATIONS: Final = (Dof.UY, Dof.UZ)
+AUX_ROTATIONS: Final = (Dof.RY, Dof.RZ)
+DOFS: Final = tuple(Dof)  # Orden local de ADR-001: Ux, Uy, Uz, Rx, Ry, Rz.
 
 type Fixity = tuple[int, int, int, int, int, int]
 
@@ -65,6 +96,7 @@ class SpatialTranslation:
     hypotheses: tuple[str, ...]
     max_diagonal: float
     chain_length: float
+    orphan_loaded: tuple[UUID, ...] = ()
 
 
 def aligned_axis(row: Vec3, tol_axis: float) -> int | None:
@@ -79,18 +111,147 @@ def aligned_axis(row: Vec3, tol_axis: float) -> int | None:
     return k if (others[0] ** 2 + others[1] ** 2) ** 0.5 <= tol_axis else None
 
 
+def coordinate_axes(directions: list[Triple], tol_axis: float) -> frozenset[int] | None:
+    """Ejes globales cuyo subespacio generan una o dos direcciones ortonormales, o ``None``.
+
+    Una dirección: el eje con el que está alineada. Dos: los dos ejes ortogonales a su
+    normal, si la normal está alineada (E2-a). Mismo criterio seno que D4 (``tol_axis``).
+    """
+    if len(directions) == 1:
+        k = aligned_axis(Vec3(*directions[0]), tol_axis)
+        return None if k is None else frozenset({k})
+    first, second = directions
+    k = aligned_axis(Vec3(*cross(first, second)), tol_axis)
+    return None if k is None else frozenset(range(AXES)) - {k}
+
+
+def end_released(code: int, end: str) -> bool:
+    """True si el código de ``-release*`` (0-3) libera ese extremo (bit 1 = I, bit 2 = J)."""
+    return bool(code & (1 if end == "I" else 2))
+
+
+def _span(directions: list[Triple], tol_axis: float) -> list[Triple]:
+    """Base ortonormal de lo que generan las direcciones (Gram-Schmidt, dos pasadas).
+
+    Una dirección con residuo ≤ ``tol_axis`` cuenta como dependiente (E2.2-b)."""
+    basis: list[Triple] = []
+    for direction in directions:
+        residual = direction
+        for _ in range(2):
+            for b in basis:
+                c = dot(residual, b)
+                residual = (residual[0] - c * b[0], residual[1] - c * b[1], residual[2] - c * b[2])
+        norm = math.sqrt(dot(residual, residual))
+        if norm > tol_axis:
+            basis.append((residual[0] / norm, residual[1] / norm, residual[2] / norm))
+        if len(basis) == AXES:
+            break
+    return basis
+
+
+@dataclass(frozen=True, slots=True)
+class OrphanRotation:
+    """Subespacio de giro sin rigidez de un nudo (R1, R4): base ortonormal y, si es
+    coordenado global, sus ejes (0-2); ``None`` si es oblicuo (mecanismo en E2.3)."""
+
+    node: int
+    basis: tuple[Triple, ...]
+    axes: frozenset[int] | None
+
+
+def orphan_rotations(request: SpatialRequest, tol_axis: float) -> tuple[OrphanRotation, ...]:
+    """Giros huérfanos por nudo de dominio, como subespacio (plan T-018, E2.2; R1).
+
+    Dan rigidez de giro: cada extremo incidente en sus direcciones locales no liberadas
+    (ex solo si la barra entera tiene J > 0, R1; ey/ez salvo ``-release*`` en ese extremo;
+    los resortes del aux sí cuentan) y cada apoyo en sus giros fijos o con resorte.
+    """
+    coordinates = {n.tag: (n.x, n.y, n.z) for n in request.nodes}
+    stiff: dict[int, list[Triple]] = {tag: [] for tag in coordinates}
+    for fix in request.fixes:
+        stiff[fix.node] += [UNIT_AXES[k] for k in range(AXES) if fix.fixity[AXES + k]]
+    for spring in request.springs:
+        if spring.dof > AXES:
+            stiff[spring.node].append(spring_direction(spring.axis_x, spring.axis_yp, spring.dof))
+    for beam in request.beams:
+        _, (ex, ey, ez) = beam_axes(coordinates[beam.node_i], coordinates[beam.node_j], beam.vecxz)
+        for end, node in (("I", beam.node_i), ("J", beam.node_j)):
+            if beam.torsion_constant > 0.0:
+                stiff[node].append(ex)
+            if not end_released(beam.release_y, end):
+                stiff[node].append(ey)
+            if not end_released(beam.release_z, end):
+                stiff[node].append(ez)
+    result: list[OrphanRotation] = []
+    for node in sorted(stiff):
+        span = _span(stiff[node], tol_axis)
+        if len(span) == AXES:
+            continue
+        orphan = _complement(span)
+        axes = frozenset(range(AXES)) if not span else coordinate_axes(orphan, tol_axis)
+        result.append(OrphanRotation(node, tuple(orphan), axes))
+    return tuple(result)
+
+
+def _complement(span: list[Triple]) -> list[Triple]:
+    """Base ortonormal del complemento de un subespacio de dimensión 0, 1 o 2."""
+    if not span:
+        return list(UNIT_AXES)
+    if len(span) == AXES - 1:
+        normal = cross(span[0], span[1])
+        norm = math.sqrt(dot(normal, normal))
+        return [(normal[0] / norm, normal[1] / norm, normal[2] / norm)]
+    (s,) = span
+    # El eje global menos alineado con s da el residuo mejor condicionado.
+    axis = min(UNIT_AXES, key=lambda a: abs(dot(a, s)))
+    c = dot(axis, s)
+    first = (axis[0] - c * s[0], axis[1] - c * s[1], axis[2] - c * s[2])
+    norm = math.sqrt(dot(first, first))
+    first = (first[0] / norm, first[1] / norm, first[2] / norm)
+    return [first, cross(s, first)]
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingEnd:
+    """Extremo con aux pendiente de tags (tras los auxiliares de apoyo)."""
+
+    member_id: UUID
+    label: str
+    beam: int
+    end: MemberEnd
+    master: int
+    connection: EndConnection
+    axes: tuple[Triple, Triple, Triple]
+    length: float
+    elastic_modulus: float
+    inertia_y: float
+    inertia_z: float
+
+
 class _Builder:
-    def __init__(self, model: StructuralModel, config: SpatialAnalysisConfiguration) -> None:
+    def __init__(
+        self, model: StructuralModel, config: SpatialAnalysisConfiguration, *, e1_end_guard: bool
+    ) -> None:
         self.model = model
         self.config = config
+        self.e1_end_guard = e1_end_guard
         self.node_tags: dict[UUID, int] = {}
         self.beam_tags: dict[UUID, int] = {}
         self.fixity: dict[int, list[int]] = {}
         self.springs: list[SpatialSpring] = []
         self.chains: list[SpatialChain] = []
         self.grounds: dict[int, int] = {}  # Una tierra por nudo apoyado, con el primer resorte.
-        # Escala de la penalización de giro por nudo: Σ máx(4EIy/L, 4EIz/L, GJ/L).
+        # Escala de la penalización de giro por nudo: Σ máx(4EIy/L, 4EIz/L, GJ/L); de
+        # traslación (E2-a): Σ máx(EA/L, 12EIy/L³, 12EIz/L³). Con A y J de la sección.
         self.rotation_scale: dict[int, float] = {}
+        self.translation_scale: dict[int, float] = {}
+        self.pending_ends: list[_PendingEnd] = []
+        self.axial_ends: dict[int, UUID] = {}  # Barras con Ux de extremo no rígido (E2-d).
+        self.aux_nodes: list[SpatialAuxNode] = []
+        self.end_equals: list[SpatialEndEqual] = []
+        self.end_springs: list[SpatialEndSpring] = []
+        self.end_warnings: list[Diagnostic] = []
+        self.uses_series = False
         self.max_diagonal = 0.0
         self.chain_length = 0.0
         self.next_node = 0
@@ -137,19 +298,8 @@ class _Builder:
                 raise _unsupported(
                     "fem.section_coupled_bending", {"member": label, "iyz": iyz}, location
                 )
-            for end, connection in (("I", member.end_i), ("J", member.end_j)):
-                if not connection.is_rigid:  # E1 (D9-A): los extremos llegan en E2.
-                    dof = next(d for d in Dof if connection.state(d) is not DofState.RIGID)
-                    raise _unsupported(
-                        "fem3d.member_end_not_rigid",
-                        {
-                            "member": label,
-                            "end": end,
-                            "dof": str(dof),
-                            "state": str(connection.state(dof)),
-                        },
-                        location,
-                    )
+            if self.e1_end_guard:  # E2.2-d: el rechazo de E1, en el mismo punto que en E1.
+                _reject_non_rigid_end(member.end_i, member.end_j, label, location)
             axes = self.model.axes(member_id)
             e, g, length = material.elastic_modulus, material.shear_modulus, axes.length
             node_i, node_j = self.node_tags[member.node_i], self.node_tags[member.node_j]
@@ -165,22 +315,57 @@ class _Builder:
                 g * torsion / length,
             )
             rotation = max(4.0 * e * inertia_y, 4.0 * e * inertia_z, g * torsion) / length
+            translation = max(e * area / length, 12.0 * e * max(inertia_y, inertia_z) / length**3)
             for node in (node_i, node_j):
                 self.rotation_scale[node] = self.rotation_scale.get(node, 0.0) + rotation
+                self.translation_scale[node] = self.translation_scale.get(node, 0.0) + translation
             self.chain_length = max(self.chain_length, length)
+            ends = ((MemberEnd.I, member.end_i, node_i), (MemberEnd.J, member.end_j, node_j))
+            frame = (axes.ex.components(), axes.ey.components(), axes.ez.components())
+            for end, connection, node in ends:
+                if any(_represented(connection, d) for d in (*AUX_TRANSLATIONS, *AUX_ROTATIONS)):
+                    self.pending_ends.append(
+                        _PendingEnd(
+                            member_id,
+                            label,
+                            tag,
+                            end,
+                            node,
+                            connection,
+                            frame,
+                            length,
+                            e,
+                            inertia_y,
+                            inertia_z,
+                        )
+                    )
+            connections = (member.end_i, member.end_j)
+            # Por estado, nunca comparando floats (revisión de E2.2, M1): un extremo rígido
+            # conserva el valor de la sección bit a bit, como en E1.
+            axial = _non_rigid(connections, Dof.UX)
+            twist = _non_rigid(connections, Dof.RX)
+            effective_area = _effective(connections, Dof.UX, length, area, e)
+            effective_torsion = _effective(connections, Dof.RX, length, torsion, g)
+            if axial:
+                self.axial_ends[tag] = member_id
+            self.uses_series |= axial or twist
             result.append(
                 SpatialBeam(
                     tag,
                     str(member_id),
                     node_i,
                     node_j,
-                    area,
+                    effective_area,
                     e,
                     g,
-                    torsion,
+                    effective_torsion,
                     inertia_y,
                     inertia_z,
                     axes.ez.components(),
+                    _release_code(connections, Dof.RY),
+                    _release_code(connections, Dof.RZ),
+                    _released_any(connections, Dof.UX),
+                    _released_any(connections, Dof.RX),
                 )
             )
         self.next_element = len(result) + 1
@@ -288,6 +473,108 @@ class _Builder:
             )
         )
 
+    def finish_ends(self) -> None:
+        """Aux de extremo tras los auxiliares de apoyo, por (barra, extremo) (E2-a, R3)."""
+        for pending in sorted(self.pending_ends, key=lambda p: (p.beam, str(p.end))):
+            aux = self._node_tag()
+            self.aux_nodes.append(
+                SpatialAuxNode(aux, pending.master, pending.beam, str(pending.end))
+            )
+            equal: list[int] = []
+            for offset, dofs in ((0, AUX_TRANSLATIONS), (AXES, AUX_ROTATIONS)):
+                equal += self._terna(pending, aux, offset, dofs)
+            if equal:
+                self.end_equals.append(SpatialEndEqual(aux, tuple(sorted(equal))))
+
+    def _terna(
+        self, pending: _PendingEnd, aux: int, offset: int, dofs: tuple[Dof, ...]
+    ) -> list[int]:
+        """Una terna del aux; devuelve sus GDL globales (1-6) atados con ``equalDOF``."""
+        connection = pending.connection
+        represented = [d for d in dofs if _represented(connection, d)]
+        if not represented:
+            return [offset + k + 1 for k in range(AXES)]
+        directions = [pending.axes[d.position - offset] for d in represented]
+        coordinate = coordinate_axes(directions, self.config.tol_axis)
+        if coordinate is not None:  # Exacto: los rígidos son los ejes globales restantes.
+            for d in represented:
+                self._end_spring(pending, aux, d)
+            return [offset + k + 1 for k in range(AXES) if k not in coordinate]
+        for position in range(offset, offset + AXES):  # Penalización en las rígidas (E2-a).
+            d = DOFS[position]
+            if d in represented:
+                self._end_spring(pending, aux, d)
+            else:
+                scale = self.rotation_scale if offset else self.translation_scale
+                stiffness = self.config.penalty_factor * scale[pending.master]
+                self._add_end_spring(pending, aux, position + 1, stiffness, penalty=True)
+        return []
+
+    def _end_spring(self, pending: _PendingEnd, aux: int, dof: Dof) -> None:
+        stiffness = pending.connection.stiffness[dof.position]
+        if stiffness is None:  # Uy/Uz liberados: el aux no tiene resorte en esa dirección.
+            return
+        self._add_end_spring(pending, aux, dof.position + 1, stiffness, penalty=False)
+        self._near_rigid(pending, dof, stiffness)
+
+    def _add_end_spring(
+        self, pending: _PendingEnd, aux: int, dof: int, stiffness: float, *, penalty: bool
+    ) -> None:
+        self.end_springs.append(
+            SpatialEndSpring(
+                self._element_tag(),
+                aux,
+                dof,
+                stiffness,
+                pending.axes[0],
+                pending.axes[1],
+                penalty,
+            )
+        )
+
+    def _near_rigid(self, pending: _PendingEnd, dof: Dof, stiffness: float) -> None:
+        """E2.2-c: resorte de aux casi rígido (Uy flecta con Iz y Uz con Iy)."""
+        e, ell = pending.elastic_modulus, pending.length
+        reference = {
+            Dof.RY: e * pending.inertia_y / ell,
+            Dof.RZ: e * pending.inertia_z / ell,
+            Dof.UY: 12.0 * e * pending.inertia_z / ell**3,
+            Dof.UZ: 12.0 * e * pending.inertia_y / ell**3,
+        }[dof]
+        ratio = stiffness / reference
+        if ratio <= NEAR_RIGID_RATIO:
+            return
+        member = self.model.member(pending.member_id)
+        self.end_warnings.append(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                "fem3d.end_spring_near_rigid",
+                {
+                    "member": pending.label,
+                    "end": str(pending.end),
+                    "dof": str(dof),
+                    "ratio": ratio,
+                    "limit": NEAR_RIGID_RATIO,
+                },
+                severity=Severity.WARNING,
+                location=Location(entity_id=member.id, revision=member.revision),
+            )
+        )
+
+    def check_axial_loads(self, beam_loads: list[SpatialBeamLoad]) -> None:
+        """E2-d (R9): Ux de extremo no rígido exige Wx = 0 en el caso activo."""
+        for beam, member_id in sorted(self.axial_ends.items()):
+            loads = [w for w in beam_loads if w.beam == beam]
+            wx = sum(w.wx for w in loads)
+            total = sum(math.sqrt(w.wx**2 + w.wy**2 + w.wz**2) for w in loads)
+            if abs(wx) > TOL_AXIAL_LOAD * total:
+                member = self.model.member(member_id)
+                raise _unsupported(
+                    "fem3d.end_axial_with_axial_load",
+                    {"member": member.label or str(member_id), "wx": wx},
+                    Location(entity_id=member_id, revision=member.revision),
+                )
+
     def loads(self, case_id: UUID) -> tuple[list[SpatialNodalLoad], list[SpatialBeamLoad]]:
         loads = sorted(self.model.loads_in_case(case_id), key=lambda load: str(load.id))
         case = self.model.load_case(case_id)
@@ -330,19 +617,24 @@ class _Builder:
 
 
 def translate_spatial(
-    model: StructuralModel, config: SpatialAnalysisConfiguration
+    model: StructuralModel, config: SpatialAnalysisConfiguration, *, e1_end_guard: bool = False
 ) -> SpatialTranslation:
-    """Traduce el modelo y el caso ``config.load_case_id`` a una petición espacial."""
+    """Traduce el modelo y el caso ``config.load_case_id`` a una petición espacial.
+
+    ``e1_end_guard`` (E2.2-d, hasta E2.5): rechaza los extremos no rígidos como en E1, en el
+    mismo punto y orden; lo activa ``analyze_spatial``."""
     if not isinstance(model, StructuralModel):
         raise TypeError("model debe ser StructuralModel")
     if not isinstance(config, SpatialAnalysisConfiguration):
         raise TypeError("config debe ser SpatialAnalysisConfiguration")
     case = model.load_case(config.load_case_id)
-    builder = _Builder(model, config)
+    builder = _Builder(model, config, e1_end_guard=e1_end_guard)
     nodes = builder.nodes()
     beams = builder.beams()
     builder.supports()
+    builder.finish_ends()
     nodal, beam_loads = builder.loads(case.id)
+    builder.check_axial_loads(beam_loads)
     fixity = sorted(builder.fixity.items())
     fixes = tuple(SpatialFix(node, _fixity(bits)) for node, bits in fixity if any(bits))
     # Lagrange con alphaSP = alphaMP = D (calibración de D3, hecho 13).
@@ -359,18 +651,136 @@ def translate_spatial(
         tuple(builder.chains),
         tuple(nodal),
         tuple(beam_loads),
+        aux_nodes=tuple(builder.aux_nodes),
+        end_equals=tuple(builder.end_equals),
+        end_springs=tuple(builder.end_springs),
     )
+    restrained, loaded = _orphan_fixes(request, config.tol_axis)
+    request = replace(request, orphan_fixes=restrained)
+    node_ids = {tag: node_id for node_id, tag in builder.node_tags.items()}
+    orphan_warnings = [_orphan_warning(model, node_ids[o.node], o.rotations) for o in restrained]
     hypotheses = [HYPOTHESIS_SPATIAL, HYPOTHESIS_BEAM, HYPOTHESIS_LAGRANGE]
     if builder.chains:
         hypotheses.append(HYPOTHESIS_CHAIN)
-    if any(s.penalty for s in builder.springs):
+    if any(s.penalty for s in builder.springs) or any(s.penalty for s in builder.end_springs):
         hypotheses.append(HYPOTHESIS_PENALTY)
+    if any(b.release_y or b.release_z for b in beams):
+        hypotheses.append(HYPOTHESIS_END_RELEASES)
+    if builder.uses_series:
+        hypotheses.append(HYPOTHESIS_END_SERIES)
+    if builder.aux_nodes:
+        hypotheses.append(HYPOTHESIS_END_LINKS)
+    if restrained:
+        hypotheses.append(HYPOTHESIS_ORPHAN)
     return SpatialTranslation(
         request,
-        (),
+        (*builder.end_warnings, *orphan_warnings),
         tuple(hypotheses),
         builder.max_diagonal,
         builder.chain_length,
+        tuple(node_ids[tag] for tag in loaded),
+    )
+
+
+def _reject_non_rigid_end(
+    end_i: EndConnection, end_j: EndConnection, label: str, location: Location
+) -> None:
+    """Guarda hasta E2.5 (plan T-018, E2.2-d): el rechazo de E1, sin cambios ni de orden."""
+    for end, connection in (("I", end_i), ("J", end_j)):
+        if not connection.is_rigid:
+            dof = next(d for d in Dof if connection.state(d) is not DofState.RIGID)
+            raise _unsupported(
+                "fem3d.member_end_not_rigid",
+                {
+                    "member": label,
+                    "end": end,
+                    "dof": str(dof),
+                    "state": str(connection.state(dof)),
+                },
+                location,
+            )
+
+
+def _represented(connection: EndConnection, dof: Dof) -> bool:
+    """Componente que representa el aux (E2-a): Uy/Uz no rígidos, Ry/Rz con resorte."""
+    state = connection.state(dof)
+    if dof in AUX_TRANSLATIONS:
+        return state is not DofState.RIGID
+    return dof in AUX_ROTATIONS and state is DofState.SPRING
+
+
+def _release_code(connections: tuple[EndConnection, EndConnection], dof: Dof) -> int:
+    """Código de ``-releasey``/``-releasez``: bit 1 = I liberado, bit 2 = J liberado."""
+    return sum(
+        bit for bit, c in zip((1, 2), connections, strict=True) if c.state(dof) is DofState.RELEASED
+    )
+
+
+def _non_rigid(connections: tuple[EndConnection, EndConnection], dof: Dof) -> bool:
+    return any(c.state(dof) is not DofState.RIGID for c in connections)
+
+
+def _released_any(connections: tuple[EndConnection, EndConnection], dof: Dof) -> bool:
+    return any(c.state(dof) is DofState.RELEASED for c in connections)
+
+
+def _effective(
+    connections: tuple[EndConnection, EndConnection],
+    dof: Dof,
+    length: float,
+    value: float,
+    modulus: float,
+) -> float:
+    """A o J efectivos con los extremos en serie (hechos 5 y 15); 0 si se libera.
+
+    Exacta porque N y T son constantes en la barra (Rx sin torsor distribuido; Ux con
+    Wx = 0, E2-d): L/(M·P_ef) = L/(M·P) + Σ 1/k, es decir P_ef = L/(L/P + M·Σ 1/k).
+    Con los dos extremos rígidos devuelve ``value`` intacto (revisión de E2.2, M1).
+    """
+    if _released_any(connections, dof):
+        return 0.0
+    springs = [c.stiffness[dof.position] for c in connections if c.state(dof) is DofState.SPRING]
+    if not springs:
+        return value
+    assert all(k is not None for k in springs)  # SPRING exige rigidez (EndConnection).
+    return length / (length / value + modulus * sum(1.0 / k for k in springs if k is not None))
+
+
+def _orphan_fixes(
+    request: SpatialRequest, tol_axis: float
+) -> tuple[tuple[SpatialOrphanFix, ...], list[int]]:
+    """Huérfanos coordenados sin momento aplicado → ``fix`` (R4); con momento sobre ellos,
+    sin fijar (mecanismo de la salvaguarda). Los oblicuos los trata E2.3."""
+    moments: dict[int, list[float]] = {}
+    for load in request.nodal_loads:
+        current = moments.setdefault(load.node, [0.0] * AXES)
+        for k in range(AXES):
+            current[k] += load.values[AXES + k]
+    restrained: list[SpatialOrphanFix] = []
+    loaded: list[int] = []
+    for orphan in orphan_rotations(request, tol_axis):
+        if orphan.axes is None:
+            continue
+        moment = moments.get(orphan.node, [0.0] * AXES)
+        if any(moment[k] != 0.0 for k in orphan.axes):
+            loaded.append(orphan.node)
+            continue
+        x, y, z = (int(k in orphan.axes) for k in range(AXES))
+        restrained.append(SpatialOrphanFix(orphan.node, (x, y, z)))
+    return tuple(restrained), loaded
+
+
+def _orphan_warning(
+    model: StructuralModel, node_id: UUID, rotations: tuple[int, int, int]
+) -> Diagnostic:
+    node = model.node(node_id)
+    names = ", ".join(n for n, bit in zip(("Rx", "Ry", "Rz"), rotations, strict=True) if bit)
+    return Diagnostic.create(
+        DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+        "fem3d.orphan_rotation_restrained",
+        {"node": node.label or str(node_id), "rotations": names},
+        severity=Severity.WARNING,
+        location=Location(entity_id=node_id, revision=node.revision),
     )
 
 
