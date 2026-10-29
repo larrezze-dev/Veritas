@@ -133,6 +133,28 @@ def test_solver_stderr_is_recorded_as_warning(tmp_path: Path) -> None:
     render_message(warning)
 
 
+@pytest.mark.parametrize(
+    ("text", "warned"),
+    [
+        ("Process 0 Terminating\n", False),
+        ("Process 0 Terminating\n\nProcess 0 Terminating\n", False),
+        ("WARNING aviso de prueba\nProcess 0 Terminating\n", True),
+        ("Process 0 Terminating otra cosa\n", True),
+    ],
+    ids=["solo-cierre-linux", "cierre-repetido", "cierre-y-aviso", "linea-distinta"],
+)
+def test_linux_exit_banner_alone_is_not_a_warning(tmp_path: Path, text: str, warned: bool) -> None:
+    """CI de E1: OpenSeesPy en Linux escribe «Process 0 Terminating» al cerrar (en Linux el
+    worker real la añade otra vez). Solo esa línea exacta no es un aviso; cualquier otra sí."""
+    run = analyze(
+        cases._loaded_cantilever(cases.OBLIQUE),
+        wrapper(tmp_path, after=f"sys.stderr.write({text!r})"),
+    )
+    assert run.status is RunStatus.SUCCEEDED
+    keys = [d.message_key for d in run.diagnostics]
+    assert keys == (["fem3d.solver_stderr"] if warned else [])
+
+
 # --- Fallos antes del solver --------------------------------------------------------------
 
 

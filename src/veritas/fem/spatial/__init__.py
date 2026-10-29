@@ -80,6 +80,8 @@ __all__ = [
 ]
 
 WORKER_3D_PATH: Final = Path(opensees_worker_3d.__file__).resolve()
+# Única salida de stderr de una corrida limpia de OpenSeesPy 3.8 en Linux (CI de E1).
+LINUX_EXIT_BANNER: Final = "Process 0 Terminating"
 
 # Orden de las componentes del modo dentro de un nudo: traslaciones (globales y oblicuas)
 # y luego giros (O3: las oblicuas se publican como t1/t2/r1/r2, extensión del «t» plano).
@@ -295,13 +297,17 @@ def _response_failure(response: SpatialWorkerResponse) -> _Failure | None:
 
 def _stderr_warning(outcome: WorkerOutcome) -> Diagnostic | None:
     """Una corrida limpia no escribe en stderr (medido): un aviso del solver se registra y
-    los controles deciden (D2-A, revisión 6)."""
-    if not outcome.stderr.strip():
+    los controles deciden (D2-A, revisión 6). En Linux, OpenSeesPy escribe siempre
+    ``LINUX_EXIT_BANNER`` al cerrar (CI de E1): un stderr cuyas líneas no vacías son todas
+    exactamente esa no es un aviso; cualquier otra línea sí."""
+    text = outcome.stderr.strip()
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if all(line == LINUX_EXIT_BANNER for line in lines):
         return None
     return Diagnostic.create(
         DiagnosticCode.ANALYSIS_FAILED,
         "fem3d.solver_stderr",
-        {"text": outcome.stderr.strip()[-500:]},
+        {"text": text[-500:]},
         severity=Severity.WARNING,
     )
 
