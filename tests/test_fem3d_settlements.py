@@ -406,6 +406,44 @@ def test_protocol_rejects_settlements_with_penalties() -> None:
     assert opensees_worker_3d._solve(data)["status"] == "PROTOCOL_ERROR"
 
 
+def penalized_d4_frame() -> Frame:
+    """Apoyo D4 penalizado (giro fijo según una dirección oblicua) en el nudo central."""
+    frame = Frame()
+    a, mid, b = straight(frame)
+    frame.support(a, fixed_restraints())
+    frame.support(b, fixed_restraints())
+    frame.support(mid, build_restraints([SupportDof.RX]), oblique_basis())
+    frame.nodal(mid, fz=-1000.0)
+    return frame
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: grid_frame(50, "rz"),
+        lambda: grid_frame(50, "rigid", chain=True),
+        penalized_d4_frame,
+    ],
+    ids=["extremo penalizado", "cadena", "apoyo D4 penalizado"],
+)
+def test_worker_rejects_each_penalty_source_with_settlements(build: Any) -> None:
+    """Revisión de código de E2 (M3): cada rama del rechazo del worker 3D por separado."""
+    frame = build()
+    request = translate_spatial(frame.model, config(frame)).request
+    sources = [
+        bool(request.end_penalties),
+        bool(request.chains),
+        any(s.penalty for s in request.springs),
+    ]
+    assert sum(sources) == 1, sources  # una sola fuente de penalización o cadena
+    tag = next(f.node for f in request.fixes if f.fixity[2])
+    data = request.to_dict()
+    data["settlements"] = [[tag, 3, 0.01]]
+    response = opensees_worker_3d._solve(data)
+    assert response["status"] == "PROTOCOL_ERROR"
+    assert "D4-bis-A" in response["message"]
+
+
 def test_model_without_free_dofs_is_rejected() -> None:
     frame = Frame()
     a, b = line(frame, (0, 0, 0), (4, 0, 0))

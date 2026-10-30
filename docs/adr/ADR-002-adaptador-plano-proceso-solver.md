@@ -50,3 +50,4 @@ Los puntos 1, 2, 5 y 6 no cambian. La importación y el smoke test reales siguen
 - 2026-10-27: reinicio del proyecto con Claude Code; ADR conservado como PROPUESTO. Hechos de entorno reclasificados como verificaciones pendientes.
 - 2026-10-27: revisión propuesta tras DEC-011 (un solo intérprete 3.12); pendiente de aprobación.
 - 2026-10-27: usuario aprueba el ADR completo con la revisión DEC-011. Estado: ACCEPTED. Contratos detallados en `plans/T-007.md`.
+- 2026-10-30: sin cambio de decisión. T-016 (asientos impuestos, [plan](../../plans/T-016.md), D6-A) amplía el mensaje con `settlements` como versión nueva: protocolo plano v3 y adaptador «4», según la regla de este ADR (cambiar el mensaje exige versión nueva). Al cerrar T-016 (M1 de E2.4) la validación del v3 rechaza también nudos repetidos en `fixes`; el formato del mensaje no cambia, por lo que se mantiene el número de versión.

@@ -38,6 +38,7 @@ from veritas.fem.adapters import opensees_worker
 from veritas.fem.adapters.planar_xz import translate_planar_xz
 from veritas.fem.adapters.protocol import (
     PROTOCOL_VERSION,
+    PlanarFix,
     PlanarRequest,
     PlanarSettlement,
     ProtocolError,
@@ -427,6 +428,18 @@ def test_invalid_settlement_is_protocol_error(settlements: Any) -> None:
     tag = request.settlements[0].node
     with pytest.raises(ProtocolError):
         dataclasses.replace(request, settlements=settlements(tag))
+
+
+def test_repeated_fix_node_is_protocol_error() -> None:
+    """M1 de E2.4: un nudo repetido en ``fixes`` se rechaza, por constructor y por JSON."""
+    request = settled_request()
+    settled = next(f for f in request.fixes if f.node == request.settlements[0].node)
+    with pytest.raises(ProtocolError, match="fixes: nudo repetido"):
+        dataclasses.replace(request, fixes=(*request.fixes, PlanarFix(settled.node, (0, 0, 0))))
+    data = json.loads(request.to_json())
+    data["fixes"].append([settled.node, [0, 0, 0]])
+    with pytest.raises(ProtocolError, match="fixes: nudo repetido"):
+        PlanarRequest.from_json(json.dumps(data))
 
 
 def test_settled_rotation_in_orphan_fixes_is_protocol_error() -> None:

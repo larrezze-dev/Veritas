@@ -12,9 +12,10 @@ Se evalúan en el proceso padre sobre la respuesta del worker, en la base del so
   porque los demás controles usan ese u; sin asientos no hace nada.
 
 El alias exacto (diferencia 0) depende del handler ``Transformation``, fijado en el código
-del worker del protocolo v2: un cambio de handler exige una versión nueva de protocolo y
-revisar este control. Los controles contrastan OpenSees con la salvaguarda; no validan la
-normalización de ADR-001 ni la traducción de cargas, respaldadas por las referencias.
+del worker plano desde el protocolo v2 (vigente en v3): un cambio de handler exige una
+versión nueva de protocolo y revisar este control. Los controles contrastan OpenSees con la
+salvaguarda; no validan la normalización de ADR-001 ni la traducción de cargas, respaldadas
+por las referencias.
 Toda cota se evalúa como ``not (valor <= cota)``: un NaN da fallo. Reutilizan
 ``tol_equilibrium`` y ``PENALTY_EQUILIBRIUM_FACTOR``; no hay tolerancias nuevas.
 """

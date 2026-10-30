@@ -8,6 +8,8 @@ rígidos con ``-releasey``/``-releasez``, A y J efectivos, nudos aux y giros hu�
 v3 (ADR-004): penalización iterada en los resortes de penalización de extremo, con la
 dirección global b_s y la escala S_s de cada uno y los parámetros de parada en la petición,
 y las iteraciones, el motivo de parada y los multiplicadores λ_s en la respuesta.
+v4 (T-016): ``settlements`` (asientos impuestos en GDL del ``fix``), sin penalizaciones ni
+cadenas en la misma petición (D4-bis-A).
 """
 
 import math

@@ -208,6 +208,9 @@ class PlanarRequest:
     settlements: tuple[PlanarSettlement, ...] = ()
 
     def __post_init__(self) -> None:
+        # M1 de E2.4 (T-016): como `_unique` del espacial; `_check_settlements` indexa por nudo.
+        if len({fix.node for fix in self.fixes}) != len(self.fixes):
+            raise ProtocolError("fixes: nudo repetido")
         _check_settlements(self)
 
     def element_node(self, beam: PlanarBeam, end: str) -> int:
