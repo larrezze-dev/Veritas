@@ -1,0 +1,332 @@
+Cargas de barra ampliadas T-CB-01…08 (plan T-015): T-CB-01…05 en el adaptador plano, T-CB-06 (barra subdividida) en el plano, T-CB-07 en el espacial y T-CB-08 (barra subdividida) en el espacial:
+- Cargas de barra ampliadas (plan T-015): Euler-Bernoulli prismático, estática lineal; las fuerzas de empotramiento de las cargas nuevas las calcula Veritas y se aplican como cargas nodales equivalentes (ADR-005). Fórmulas planas con EI = E·b·h³/# y EA = E·b·h; espaciales con J de la sección. Signos: carga hacia −Z da R_My < # en I.
+- Cargas de referencia: P = # kN, w = # kN/m, F axial = # kN y m = # kN·m/m. La reacción es la acción del apoyo.
+- Acero E = # GPa, G = # GPa, R #×#; A, Iy, Iz y J (= # m⁴, serie de Saint-Venant) de las propiedades de la sección.
+
+== T-CB-01 — Biempotrada con carga puntual (fuerza X y Z) ==
+Viga de # m en +X (B1 = N1→N2, empotrada en N1 y N2; B2 = N2→N3 sin carga). Puntual en ξ = #: Fz = # kN y Fx = # kN.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +P·b²(#a+b)/L³ # N # N # # coincide
+R_Z N2 +P·a²(a+#b)/L³ # N # N # # coincide
+R_My N1 −P·a·b²/L² # N·m # N·m # # coincide
+R_My N2 +P·a²·b/L² # N·m # N·m # # coincide
+R_X N1 −F·b/L # N # N # # coincide
+R_X N2 −F·a/L # N # N # # coincide
+Vz(#+) B1 −P·b²(#a+b)/L³ # N # N # # coincide
+My(#+) B1 +P·a·b²/L² # N·m # N·m # # coincide
+N(#+) B1 +F·b/L # N # N # # coincide
+My(L−) B1 +P·a²·b/L² # N·m # N·m # # coincide
+T-CB-01: #/# magnitudes, coincide.
+
+== T-CB-02 — Biempotrada con carga triangular ==
+Viga de # m en +X (B1 = N1→N2, empotrada en N1 y N2; B2 = N2→N3 sin carga). Carga triangular de # en I a # kN/m en Z en J.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 #wL/# # N # N # # coincide
+R_Z N2 #wL/# # N # N # # coincide
+R_My N1 −wL²/# # N·m # N·m # # coincide
+R_My N2 +wL²/# # N·m # N·m # # coincide
+Vz(#+) B1 #wL/# # N # N # # coincide
+My(#+) B1 +wL²/# # N·m # N·m # # coincide
+My(L−) B1 +wL²/# # N·m # N·m # # coincide
+T-CB-02: #/# magnitudes, coincide.
+
+== T-CB-03 — Voladizo con momento distribuido uniforme ==
+Voladizo de # m en +X, empotrado en N1. Momento distribuido my = # kN·m/m en toda la barra.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+Uz N2 −m·L³/(#EI) # m # m # # coincide
+Ry N2 +m·L²/(#EI) # rad # rad # # coincide
+R_My N1 −m·L # N·m # N·m # # coincide
+R_Z N1 # # N # N # # coincide
+T-CB-03: #/# magnitudes, coincide.
+
+== T-CB-04 — Empotrada-articulada con carga puntual (extremo I liberado) ==
+Viga de # m en +X, empotrada en N1 y N2, con Ry liberado en el extremo I de B1. Puntual Fz = # kN en ξ = #.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Extremos de barra con giro liberado o resorte: nudo auxiliar con las traslaciones del nudo (equalDOF) y giro propio; resorte rotacional lineal, elástico y bilateral.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +P·b²(a+#L)/(#L³) # N # N # # coincide
+R_Z N2 P − R_I # N # N # # coincide
+R_My N2 +P·a·b(L+a)/(#L²) # N·m # N·m # # coincide
+R_My N1 # # N·m # N·m # # coincide
+My(#+) B1 # # N·m # N·m # # coincide
+My(L−) B1 +P·a·b(L+a)/(#L²) # N·m # N·m # # coincide
+T-CB-04: #/# magnitudes, coincide.
+
+== T-CB-05 a — Voladizo con triangular de máximo en el empotramiento ==
+Voladizo de # m en +X, empotrado en N1. Carga triangular de # kN/m en Z en I a # en J.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+Uz N2 −w·L⁴/(#EI) # m # m # # coincide
+R_Z N1 +wL/# # N # N # # coincide
+R_My N1 −wL²/# # N·m # N·m # # coincide
+T-CB-05 a: #/# magnitudes, coincide.
+
+== T-CB-05 b — Voladizo con triangular de máximo en la punta ==
+Voladizo de # m en +X, empotrado en N1. Carga triangular de # en I a # kN/m en Z en J.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+Uz N2 #·w·L⁴/(#EI) # m # m # # coincide
+R_Z N1 +wL/# # N # N # # coincide
+R_My N1 −wL²/# # N·m # N·m # # coincide
+T-CB-05 b: #/# magnitudes, coincide.
+
+== T-CB-05 c — Voladizo con carga puntual interior ==
+Voladizo de # m en +X, empotrado en N1. Puntual Fz = # kN en ξ = #.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+Uz N2 −P·a²(#L−a)/(#EI) # m # m # # coincide
+Ry N2 +P·a²/(#EI) # rad # rad # # coincide
+R_Z N1 +P # N # N # # coincide
+R_My N1 −P·a # N·m # N·m # # coincide
+T-CB-05 c: #/# magnitudes, coincide.
+
+== T-CB-06 — Barra oblicua con extremo I liberado frente a la barra subdividida ==
+Barra A→B oblicua de # m en el plano XZ, con A y C empotrados y la barra B→C. Puntual (fuerza) en ξ = #,#, par en ξ = #,# y parcial uniforme en [#,#; #,#], frente a la misma barra subdividida con cargas nodales y uniformes por tramo.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Extremos de barra con giro liberado o resorte: nudo auxiliar con las traslaciones del nudo (equalDOF) y giro propio; resorte rotacional lineal, elástico y bilateral.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+Ux B subdividida # m # m # # coincide
+R_X A subdividida # N # N # # coincide
+R_X C subdividida # N # N # # coincide
+pI_N B1 subdividida # N # N # # coincide
+pJ_N B1 subdividida # N # N # # coincide
+pI_N BC subdividida # N # N # # coincide
+Uz B subdividida # m # m # # coincide
+R_Z A subdividida # N # N # # coincide
+R_Z C subdividida # N # N # # coincide
+pI_Vz B1 subdividida # N # N # # coincide
+pJ_Vz B1 subdividida # N # N # # coincide
+pI_Vz BC subdividida # N # N # # coincide
+Ry B subdividida # rad # rad # # coincide
+R_MY A subdividida # N·m # N·m # # coincide
+R_MY C subdividida # N·m # N·m # # coincide
+pI_My B1 subdividida # N·m # N·m # # coincide
+pJ_My B1 subdividida # N·m # N·m # # coincide
+pI_My BC subdividida # N·m # N·m # # coincide
+Filas «subdividida»: la corrida con las cargas nuevas frente a la barra subdividida en los puntos de carga, que solo usa tipos ya aceptados; son la referencia independiente de las fuerzas de empotramiento.
+T-CB-06: #/# magnitudes, coincide.
+
+== T-CB-07 a — Voladizo con torsor distribuido uniforme (#D) ==
+Voladizo de # m en +X, empotrado en N1. Torsor distribuido mx = # kN·m/m en toda la barra.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+Rx N2 mx·L²/(#GJ) # rad # rad # # coincide
+R_MX N1 −mx·L # N·m # N·m # # coincide
+T-CB-07 a: #/# magnitudes, coincide.
+
+== T-CB-07 b — Voladizo con par de torsión puntual (#D) ==
+Voladizo de # m en +X, empotrado en N1. Par de torsión Mx = # kN·m en ξ = #.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+Rx N2 T·a/(GJ) # rad # rad # # coincide
+R_MX N1 −T # N·m # N·m # # coincide
+T-CB-07 b: #/# magnitudes, coincide.
+
+== T-CB-08 — Barra oblicua #D con Rz liberado en J frente a la barra subdividida ==
+Barra A→B oblicua en el espacio, con A y C empotrados, Rz liberado en J y la barra B→C. Puntual de seis componentes en ξ = #,# y parcial uniforme en [#,#; #,#] (base local), frente a la misma barra subdividida con carga nodal y uniforme por tramo.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Giros de flexión liberados en los extremos representados por la condensación del propio elemento de barra (exacta, también con cargas de barra).
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+Ux B subdividida # m # m # # coincide
+R_X A subdividida # N # N # # coincide
+R_X C subdividida # N # N # # coincide
+pI_N B1 subdividida # N # N # # coincide
+pJ_N B1 subdividida # N # N # # coincide
+pI_N BC subdividida # N # N # # coincide
+Uy B subdividida # m # m # # coincide
+R_Y A subdividida # N # N # # coincide
+R_Y C subdividida # N # N # # coincide
+pI_Vy B1 subdividida # N # N # # coincide
+pJ_Vy B1 subdividida # N # N # # coincide
+pI_Vy BC subdividida # N # N # # coincide
+Uz B subdividida # m # m # # coincide
+R_Z A subdividida # N # N # # coincide
+R_Z C subdividida # N # N # # coincide
+pI_Vz B1 subdividida # N # N # # coincide
+pJ_Vz B1 subdividida # N # N # # coincide
+pI_Vz BC subdividida # N # N # # coincide
+Rx B subdividida # rad # rad # # coincide
+R_MX A subdividida # N·m # N·m # # coincide
+R_MX C subdividida # N·m # N·m # # coincide
+pI_T B1 subdividida # N·m # N·m # # coincide
+pJ_T B1 subdividida # N·m # N·m # # coincide
+pI_T BC subdividida # N·m # N·m # # coincide
+Ry B subdividida # rad # rad # # coincide
+R_MY A subdividida # N·m # N·m # # coincide
+R_MY C subdividida # N·m # N·m # # coincide
+pI_My B1 subdividida # N·m # N·m # # coincide
+pJ_My B1 subdividida # N·m # N·m # # coincide
+pI_My BC subdividida # N·m # N·m # # coincide
+Rz B subdividida # rad # rad # # coincide
+R_MZ A subdividida # N·m # N·m # # coincide
+R_MZ C subdividida # N·m # N·m # # coincide
+pI_Mz B1 subdividida # N·m # N·m # # coincide
+pJ_Mz B1 subdividida # N·m # N·m # # coincide
+pI_Mz BC subdividida # N·m # N·m # # coincide
+Filas «subdividida»: la corrida con las cargas nuevas frente a la barra subdividida en los puntos de carga, que solo usa tipos ya aceptados; son la referencia independiente de las fuerzas de empotramiento.
+T-CB-08: #/# magnitudes, coincide.
+
+«coincide» = |calculado − referencia| ≤ tolerancia · max(|referencia|, S), con S la mayor |referencia| de la misma magnitud en el caso. Coincidir con la referencia analítica dentro de la tolerancia no valida la aplicación.
+Las # variantes coinciden con sus fórmulas cerradas y con la barra subdividida dentro de la tolerancia; no valida la aplicación.
+
+AVISO: aplicación experimental. No apta para justificar obras reales sin validación independiente por profesionales competentes.
+--- stderr
+
+--- 0

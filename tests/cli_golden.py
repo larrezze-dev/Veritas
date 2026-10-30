@@ -35,6 +35,7 @@ COMMANDS: Final = {
     "referencias": ["analyze", "referencias"],
     "referencias-kN-m": ["analyze", "referencias", "--profile", "kN-m"],
     "asientos": ["analyze", "asientos"],
+    "cargas_barra": ["analyze", "cargas-barra"],
 }
 
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")

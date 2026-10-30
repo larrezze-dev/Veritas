@@ -633,6 +633,87 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Filas «A + Q»: la corrida A+Q frente a la suma de las corridas A y Q en cada "
         "componente calculada; las fórmulas cerradas son la referencia independiente."
     ),
+    "benchmark.hypothesis_cargas_barra": (
+        "Cargas de barra ampliadas (plan T-015): Euler-Bernoulli prismático, estática lineal; "
+        "las fuerzas de empotramiento de las cargas nuevas las calcula Veritas y se aplican "
+        "como cargas nodales equivalentes (ADR-005). Fórmulas planas con EI = E·b·h³/12 y "
+        "EA = E·b·h; espaciales con J de la sección. Signos: carga hacia −Z da R_My < 0 en I."
+    ),
+    "benchmark.hypothesis_cargas_barra_values": (
+        "Cargas de referencia: P = {load_kn:g} kN, w = {distributed_kn_m:g} kN/m, F axial = "
+        "{axial_kn:g} kN y m = {moment_kn_m:g} kN·m/m. La reacción es la acción del apoyo."
+    ),
+    "benchmark.title_cargas_barra_fixed_point": "Biempotrada con carga puntual (fuerza X y Z)",
+    "benchmark.title_cargas_barra_fixed_triangular": "Biempotrada con carga triangular",
+    "benchmark.title_cargas_barra_cantilever_moment": "Voladizo con momento distribuido uniforme",
+    "benchmark.title_cargas_barra_propped_point": (
+        "Empotrada-articulada con carga puntual (extremo I liberado)"
+    ),
+    "benchmark.title_cargas_barra_triangular_root": (
+        "Voladizo con triangular de máximo en el empotramiento"
+    ),
+    "benchmark.title_cargas_barra_triangular_tip": "Voladizo con triangular de máximo en la punta",
+    "benchmark.title_cargas_barra_cantilever_point": "Voladizo con carga puntual interior",
+    "benchmark.title_cargas_barra_torque_distributed": (
+        "Voladizo con torsor distribuido uniforme (3D)"
+    ),
+    "benchmark.title_cargas_barra_torque_point": "Voladizo con par de torsión puntual (3D)",
+    "benchmark.title_cargas_barra_subdivision_planar": (
+        "Barra oblicua con extremo I liberado frente a la barra subdividida"
+    ),
+    "benchmark.title_cargas_barra_subdivision_spatial": (
+        "Barra oblicua 3D con Rz liberado en J frente a la barra subdividida"
+    ),
+    "benchmark.description_cargas_barra_fixed_point": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, empotrada en N1 y N2; B2 = N2→N3 sin carga). "
+        "Puntual en ξ = {xi:g}: Fz = −{load_kn:g} kN y Fx = +{axial_kn:g} kN."
+    ),
+    "benchmark.description_cargas_barra_fixed_triangular": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, empotrada en N1 y N2; B2 = N2→N3 sin carga). "
+        "Carga triangular de 0 en I a −{load_kn_m:g} kN/m en Z en J."
+    ),
+    "benchmark.description_cargas_barra_cantilever_moment": (
+        "Voladizo de {span:g} m en +X, empotrado en N1. Momento distribuido my = "
+        "{moment_kn_m:g} kN·m/m en toda la barra."
+    ),
+    "benchmark.description_cargas_barra_propped_point": (
+        "Viga de {span:g} m en +X, empotrada en N1 y N2, con Ry liberado en el extremo I de B1. "
+        "Puntual Fz = −{load_kn:g} kN en ξ = {xi:g}."
+    ),
+    "benchmark.description_cargas_barra_triangular_root": (
+        "Voladizo de {span:g} m en +X, empotrado en N1. Carga triangular de −{load_kn_m:g} kN/m "
+        "en Z en I a 0 en J."
+    ),
+    "benchmark.description_cargas_barra_triangular_tip": (
+        "Voladizo de {span:g} m en +X, empotrado en N1. Carga triangular de 0 en I a "
+        "−{load_kn_m:g} kN/m en Z en J."
+    ),
+    "benchmark.description_cargas_barra_cantilever_point": (
+        "Voladizo de {span:g} m en +X, empotrado en N1. Puntual Fz = −{load_kn:g} kN en ξ = {xi:g}."
+    ),
+    "benchmark.description_cargas_barra_torque_distributed": (
+        "Voladizo de {span:g} m en +X, empotrado en N1. Torsor distribuido mx = "
+        "{moment_kn_m:g} kN·m/m en toda la barra."
+    ),
+    "benchmark.description_cargas_barra_torque_point": (
+        "Voladizo de {span:g} m en +X, empotrado en N1. Par de torsión Mx = {torque_kn_m:g} "
+        "kN·m en ξ = {xi:g}."
+    ),
+    "benchmark.description_cargas_barra_subdivision_planar": (
+        "Barra A→B oblicua de 5 m en el plano XZ, con A y C empotrados y la barra B→C. "
+        "Puntual (fuerza) en ξ = 0,3, par en ξ = 0,6 y parcial uniforme en [0,2; 0,7], frente "
+        "a la misma barra subdividida con cargas nodales y uniformes por tramo."
+    ),
+    "benchmark.description_cargas_barra_subdivision_spatial": (
+        "Barra A→B oblicua en el espacio, con A y C empotrados, Rz liberado en J y la barra "
+        "B→C. Puntual de seis componentes en ξ = 0,3 y parcial uniforme en [0,5; 0,8] (base "
+        "local), frente a la misma barra subdividida con carga nodal y uniforme por tramo."
+    ),
+    "benchmark.note_cargas_barra_subdivision": (
+        "Filas «subdividida»: la corrida con las cargas nuevas frente a la barra subdividida en "
+        "los puntos de carga, que solo usa tipos ya aceptados; son la referencia independiente "
+        "de las fuerzas de empotramiento."
+    ),
     "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",
     "section.property_unrepresentable": (
         "La propiedad {property} no es representable como valor positivo en doble precisión "

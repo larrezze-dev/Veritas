@@ -58,3 +58,22 @@ def run_settlement_battery(
     if timeout_s not in (None, DEFAULT_TIMEOUT_S):
         return _RUN_SETTLEMENT_BATTERY(timeout_s)
     return _settlement_battery()
+
+
+_RUN_CARGAS_BARRA_BATTERY = benchmarks.run_cargas_barra_battery
+
+
+@cache
+def _cargas_barra_battery() -> tuple[
+    benchmarks.ReferenceOutcome | benchmarks.SpatialReferenceOutcome, ...
+]:
+    return _RUN_CARGAS_BARRA_BATTERY()
+
+
+def run_cargas_barra_battery(
+    timeout_s: float | None = None,
+) -> tuple[benchmarks.ReferenceOutcome | benchmarks.SpatialReferenceOutcome, ...]:
+    """Batería T-CB (plan T-015, E2.3), una vez por sesión con el tiempo límite por defecto."""
+    if timeout_s not in (None, DEFAULT_TIMEOUT_S):
+        return _RUN_CARGAS_BARRA_BATTERY(timeout_s)
+    return _cargas_barra_battery()

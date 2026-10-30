@@ -13,3 +13,5 @@ uv run python tests/cli_golden.py
 Historial: 2026-10-29, regenerados con el `cli.py` de 5d69bb8 en un worktree, tras dejar de enmascarar los dígitos de los identificadores (D-d de la revisión de E1). Reaplicando el patrón anterior se obtienen exactamente los archivos previos.
 
 Historial: 2026-10-30, `asientos.txt` nuevo (plan T-016, E2.3-d), generado solo para `analyze asientos` con la CLI de E2.3 (`cli_golden.capture`); los demás archivos no se regeneraron. Su contenido inicial forma parte de la aceptación de E2.3.
+
+Historial: 2026-10-31, `cargas_barra.txt` nuevo (plan T-015, E2.3), generado solo para `analyze cargas-barra` con la CLI de E2.3 (`cli_golden.capture`); los demás archivos no se regeneraron. Su contenido inicial forma parte de la aceptación de E2.3.

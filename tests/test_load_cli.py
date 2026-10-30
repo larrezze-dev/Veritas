@@ -96,4 +96,5 @@ def test_info_declares_loads(capsys: pytest.CaptureFixture[str]) -> None:
     code, out, _ = _run(["info"], capsys)
     assert code == cli.EXIT_OK
     assert "Cargas" in out
-    assert "DISPONIBLE (T-006)" in out
+    assert "DISPONIBLE (T-006, T-015)" in out  # D12 de T-015: línea ampliada
+    assert "momento distribuido por barra" in out

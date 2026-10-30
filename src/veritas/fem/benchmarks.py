@@ -22,13 +22,14 @@ import math
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Final
+from typing import Any, Final
 from uuid import UUID
 
 from veritas.core import units as u
 from veritas.core.connections.end import Dof, DofState, EndConnection, MemberEnd
 from veritas.core.diagnostics import DiagnosticError, ParamValue
 from veritas.core.geometry.model import StructuralModel
+from veritas.core.geometry.vector import Vec3
 from veritas.core.loads.load_case import LoadCategory
 from veritas.core.loads.loads import LoadBasis
 from veritas.core.materials.material import MaterialFamily
@@ -2324,4 +2325,577 @@ def run_settlement_battery(
         outcomes += run_settlement_reference(case_id, timeout_s)
     outcomes += run_settlement_superposition(timeout_s)
     outcomes += run_settlement_cross(timeout_s)
+    return tuple(outcomes)
+
+
+# === Cargas de barra ampliadas T-CB (plan T-015, E2.3) ===================================
+#
+# Referencias independientes de ``fem.member_loads`` (R-FIX, R-PROP, R-CANT y R-SUB del plan):
+# fórmulas cerradas de Euler-Bernoulli por cuerpo libre y, en R-SUB, la misma barra subdividida
+# en los puntos de carga y cargada con ``NodalLoad`` y ``MemberUniformLoad``. Signos de T-ASI:
+# carga hacia −Z da R_My < 0 en el extremo I y R_My > 0 en el J.
+
+CB_POINT_XI: Final = 0.25  # m/L, T-CB-01 y T-CB-04
+CB_POINT_AXIAL: Final = 20_000.0  # N, componente X de la puntual de T-CB-01
+CB_MOMENT: Final = 3_000.0  # N·m/m, T-CB-03
+CB_TORQUE_POINT: Final = 5_000.0  # N·m, T-CB-07 b
+CB_TORQUE_POINT_XI: Final = 0.4
+CB_TORQUE_DISTRIBUTED: Final = 2_000.0  # N·m/m, T-CB-07 a
+CB_PLANAR_CASES: Final = ("T-CB-01", "T-CB-02", "T-CB-03", "T-CB-04", "T-CB-05")
+CB_SUBDIVISION_PLANAR: Final = "T-CB-06"
+CB_SPATIAL_CASES: Final = ("T-CB-07",)
+CB_SUBDIVISION_SPATIAL: Final = "T-CB-08"
+CB_CASES: Final = (
+    *CB_PLANAR_CASES,
+    CB_SUBDIVISION_PLANAR,
+    *CB_SPATIAL_CASES,
+    CB_SUBDIVISION_SPATIAL,
+)
+SUBDIVIDED: Final = "subdividida"  # fórmula de una fila de R-SUB
+
+CB_HYPOTHESES: Final = (
+    Text.of("benchmark.hypothesis_cargas_barra"),
+    Text.of(
+        "benchmark.hypothesis_cargas_barra_values",
+        load_kn=P / 1000,
+        distributed_kn_m=W / 1000,
+        axial_kn=CB_POINT_AXIAL / 1000,
+        moment_kn_m=CB_MOMENT / 1000,
+    ),
+    SPATIAL_HYPOTHESES[1],
+)
+
+_CB_A: Final = CB_POINT_XI * SPAN
+_CB_B: Final = SPAN - _CB_A
+
+
+def _cb_n(value: float, unit: str = "N") -> u.Quantity:
+    return u.Quantity.of(value, unit)
+
+
+def _cb_fixed_fixed(case: _Case) -> None:
+    """N1-N2 empotrados con la barra cargada B1 y una barra descargada N2→N3 (GDL libres)."""
+    case.node("N1", 0.0)
+    case.node("N2", SPAN)
+    case.node("N3", SPAN + 1.0)
+    case.member("B1", "N1", "N2")
+    case.member("B2", "N2", "N3")
+    case.support("N1", fixed_restraints(), "Empotramiento 1")
+    case.support("N2", fixed_restraints(), "Empotramiento 2")
+
+
+def _cb_cantilever(case: _Case) -> None:
+    case.node("N1", 0.0)
+    case.node("N2", SPAN)
+    case.member("B1", "N1", "N2")
+    case.support("N1", fixed_restraints(), "Empotramiento")
+
+
+def _build_cb01(case: _Case) -> None:
+    _cb_fixed_fixed(case)
+    case.model.add_member_point_load(
+        case.load_case.id,
+        case.ids["B1"],
+        position=CB_POINT_XI,
+        fx=_cb_n(CB_POINT_AXIAL),
+        fz=_cb_n(-P),
+    )
+
+
+def _rows_cb01(c: _Case) -> list[Row]:
+    a, b, length = _CB_A, _CB_B, SPAN
+    v_i = P * b**2 * (3 * a + b) / length**3
+    v_j = P * a**2 * (a + 3 * b) / length**3
+    m_i, m_j = P * a * b**2 / length**2, P * a**2 * b / length**2
+    f_i, f_j = CB_POINT_AXIAL * b / length, CB_POINT_AXIAL * a / length
+    return [
+        ("R_Z N1", "+P·b²(3a+b)/L³", FORCE, v_i, c.reaction("N1", FZ)),
+        ("R_Z N2", "+P·a²(a+3b)/L³", FORCE, v_j, c.reaction("N2", FZ)),
+        ("R_My N1", "−P·a·b²/L²", MOMENT, -m_i, c.reaction("N1", MY)),
+        ("R_My N2", "+P·a²·b/L²", MOMENT, m_j, c.reaction("N2", MY)),
+        ("R_X N1", "−F·b/L", FORCE, -f_i, c.reaction("N1", FX)),
+        ("R_X N2", "−F·a/L", FORCE, -f_j, c.reaction("N2", FX)),
+        ("Vz(0+) B1", "−P·b²(3a+b)/L³", FORCE, -v_i, c.cut("B1", VZ, at_end=False)),
+        ("My(0+) B1", "+P·a·b²/L²", MOMENT, m_i, c.cut("B1", MY, at_end=False)),
+        ("N(0+) B1", "+F·b/L", FORCE, f_i, c.cut("B1", N, at_end=False)),
+        ("My(L−) B1", "+P·a²·b/L²", MOMENT, m_j, c.cut("B1", MY, at_end=True)),
+    ]
+
+
+def _build_cb02(case: _Case) -> None:
+    _cb_fixed_fixed(case)
+    case.model.add_member_distributed_load(
+        case.load_case.id,
+        case.ids["B1"],
+        start=0.0,
+        end=1.0,
+        qz_start=_cb_n(0.0, "N/m"),
+        qz_end=_cb_n(-W, "N/m"),
+    )
+
+
+def _rows_cb02(c: _Case) -> list[Row]:
+    length = SPAN
+    v_i, v_j = 3 * W * length / 20, 7 * W * length / 20
+    m_i, m_j = W * length**2 / 30, W * length**2 / 20
+    return [
+        ("R_Z N1", "+3wL/20", FORCE, v_i, c.reaction("N1", FZ)),
+        ("R_Z N2", "+7wL/20", FORCE, v_j, c.reaction("N2", FZ)),
+        ("R_My N1", "−wL²/30", MOMENT, -m_i, c.reaction("N1", MY)),
+        ("R_My N2", "+wL²/20", MOMENT, m_j, c.reaction("N2", MY)),
+        ("Vz(0+) B1", "−3wL/20", FORCE, -v_i, c.cut("B1", VZ, at_end=False)),
+        ("My(0+) B1", "+wL²/30", MOMENT, m_i, c.cut("B1", MY, at_end=False)),
+        ("My(L−) B1", "+wL²/20", MOMENT, m_j, c.cut("B1", MY, at_end=True)),
+    ]
+
+
+def _build_cb03(case: _Case) -> None:
+    _cb_cantilever(case)
+    case.model.add_member_distributed_moment(
+        case.load_case.id,
+        case.ids["B1"],
+        start=0.0,
+        end=1.0,
+        my_start=_cb_n(CB_MOMENT, "N·m/m"),
+        my_end=_cb_n(CB_MOMENT, "N·m/m"),
+    )
+
+
+def _rows_cb03(c: _Case) -> list[Row]:
+    m, length = CB_MOMENT, SPAN
+    return [
+        ("Uz N2", "−m·L³/(3EI)", DISP, -m * length**3 / (3 * EI), c.disp("N2", UZ)),
+        ("Ry N2", "+m·L²/(2EI)", ROT, m * length**2 / (2 * EI), c.disp("N2", RY)),
+        ("R_My N1", "−m·L", MOMENT, -m * length, c.reaction("N1", MY)),
+        ("R_Z N1", "0", FORCE, 0.0, c.reaction("N1", FZ)),
+    ]
+
+
+def _build_cb04(case: _Case) -> None:
+    case.node("N1", 0.0)
+    case.node("N2", SPAN)
+    case.member("B1", "N1", "N2")
+    case.support("N1", fixed_restraints(), "Empotramiento 1")
+    case.support("N2", fixed_restraints(), "Empotramiento 2")
+    _end(case, "B1", MemberEnd.I, _RELEASED)
+    case.model.add_member_point_load(
+        case.load_case.id, case.ids["B1"], position=CB_POINT_XI, fz=_cb_n(-P)
+    )
+
+
+def _rows_cb04(c: _Case) -> list[Row]:
+    a, b, length = _CB_A, _CB_B, SPAN
+    r_i = P * b**2 * (a + 2 * length) / (2 * length**3)
+    m_j = P * a * b * (length + a) / (2 * length**2)
+    return [
+        ("R_Z N1", "+P·b²(a+2L)/(2L³)", FORCE, r_i, c.reaction("N1", FZ)),
+        ("R_Z N2", "P − R_I", FORCE, P - r_i, c.reaction("N2", FZ)),
+        ("R_My N2", "+P·a·b(L+a)/(2L²)", MOMENT, m_j, c.reaction("N2", MY)),
+        ("R_My N1", "0", MOMENT, 0.0, c.reaction("N1", MY)),
+        ("My(0+) B1", "0", MOMENT, 0.0, c.cut("B1", MY, at_end=False)),
+        ("My(L−) B1", "+P·a·b(L+a)/(2L²)", MOMENT, m_j, c.cut("B1", MY, at_end=True)),
+    ]
+
+
+def _cb_triangle(case: _Case, q_start: float, q_end: float) -> None:
+    _cb_cantilever(case)
+    case.model.add_member_distributed_load(
+        case.load_case.id,
+        case.ids["B1"],
+        start=0.0,
+        end=1.0,
+        qz_start=_cb_n(q_start, "N/m"),
+        qz_end=_cb_n(q_end, "N/m"),
+    )
+
+
+def _build_cb05a(case: _Case) -> None:
+    _cb_triangle(case, -W, 0.0)
+
+
+def _build_cb05b(case: _Case) -> None:
+    _cb_triangle(case, 0.0, -W)
+
+
+def _build_cb05c(case: _Case) -> None:
+    _cb_cantilever(case)
+    case.model.add_member_point_load(case.load_case.id, case.ids["B1"], position=0.6, fz=_cb_n(-P))
+
+
+def _rows_cb05a(c: _Case) -> list[Row]:
+    length = SPAN
+    return [
+        ("Uz N2", "−w·L⁴/(30EI)", DISP, -W * length**4 / (30 * EI), c.disp("N2", UZ)),
+        ("R_Z N1", "+wL/2", FORCE, W * length / 2, c.reaction("N1", FZ)),
+        ("R_My N1", "−wL²/6", MOMENT, -W * length**2 / 6, c.reaction("N1", MY)),
+    ]
+
+
+def _rows_cb05b(c: _Case) -> list[Row]:
+    length = SPAN
+    delta = -11 * W * length**4 / (120 * EI)
+    return [
+        ("Uz N2", "−11·w·L⁴/(120EI)", DISP, delta, c.disp("N2", UZ)),
+        ("R_Z N1", "+wL/2", FORCE, W * length / 2, c.reaction("N1", FZ)),
+        ("R_My N1", "−wL²/3", MOMENT, -W * length**2 / 3, c.reaction("N1", MY)),
+    ]
+
+
+def _rows_cb05c(c: _Case) -> list[Row]:
+    a, length = 0.6 * SPAN, SPAN
+    delta = -P * a**2 * (3 * length - a) / (6 * EI)
+    return [
+        ("Uz N2", "−P·a²(3L−a)/(6EI)", DISP, delta, c.disp("N2", UZ)),
+        ("Ry N2", "+P·a²/(2EI)", ROT, P * a**2 / (2 * EI), c.disp("N2", RY)),
+        ("R_Z N1", "+P", FORCE, P, c.reaction("N1", FZ)),
+        ("R_My N1", "−P·a", MOMENT, -P * a, c.reaction("N1", MY)),
+    ]
+
+
+def _build_cb07a(case: _Case) -> None:
+    _cb_cantilever(case)
+    case.model.add_member_distributed_moment(
+        case.load_case.id,
+        case.ids["B1"],
+        start=0.0,
+        end=1.0,
+        mx_start=_cb_n(CB_TORQUE_DISTRIBUTED, "N·m/m"),
+        mx_end=_cb_n(CB_TORQUE_DISTRIBUTED, "N·m/m"),
+    )
+
+
+def _rows_cb07a(c: _Case) -> list[Row]:
+    m, length = CB_TORQUE_DISTRIBUTED, SPAN
+    return [
+        ("Rx N2", "mx·L²/(2GJ)", ROT, m * length**2 / (2 * _GJ), c.disp("N2", RX)),
+        ("R_MX N1", "−mx·L", MOMENT, -m * length, c.reaction("N1", RX)),
+    ]
+
+
+def _build_cb07b(case: _Case) -> None:
+    _cb_cantilever(case)
+    case.model.add_member_point_load(
+        case.load_case.id,
+        case.ids["B1"],
+        position=CB_TORQUE_POINT_XI,
+        mx=_cb_n(CB_TORQUE_POINT, "N*m"),
+    )
+
+
+def _rows_cb07b(c: _Case) -> list[Row]:
+    a = CB_TORQUE_POINT_XI * SPAN
+    return [
+        ("Rx N2", "T·a/(GJ)", ROT, CB_TORQUE_POINT * a / _GJ, c.disp("N2", RX)),
+        ("R_MX N1", "−T", MOMENT, -CB_TORQUE_POINT, c.reaction("N1", RX)),
+    ]
+
+
+def _cb_spec(  # noqa: PLR0913, PLR0917 (campos de un _Spec)
+    case_id: str,
+    name: str,
+    build: Callable[[_Case], None],
+    rows: Callable[[_Case], list[Row]],
+    params: Mapping[str, ParamValue],
+    scales: Mapping[QuantityKind, float] | None = None,
+) -> _Spec:
+    return _Spec(
+        case_id,
+        Text.of(f"benchmark.title_cargas_barra_{name}"),
+        Text.of(f"benchmark.description_cargas_barra_{name}", **params),
+        TOL_EXACT,
+        build,
+        rows,
+        _no_notes,
+        scales,
+    )
+
+
+_CB_SPAN: Final = {"span": SPAN}
+_CB_POINT: Final = {**_CB_SPAN, "load_kn": P / 1000, "xi": CB_POINT_XI}
+_CB_TRIANGLE: Final = {**_CB_SPAN, "load_kn_m": W / 1000}
+
+CB_SPECS: Final[dict[str, tuple[_Spec, ...]]] = {
+    "T-CB-01": (
+        _cb_spec(
+            "T-CB-01",
+            "fixed_point",
+            _build_cb01,
+            _rows_cb01,
+            {**_CB_POINT, "axial_kn": CB_POINT_AXIAL / 1000},
+        ),
+    ),
+    "T-CB-02": (_cb_spec("T-CB-02", "fixed_triangular", _build_cb02, _rows_cb02, _CB_TRIANGLE),),
+    "T-CB-03": (
+        _cb_spec(
+            "T-CB-03",
+            "cantilever_moment",
+            _build_cb03,
+            _rows_cb03,
+            {**_CB_SPAN, "moment_kn_m": CB_MOMENT / 1000},
+            {FORCE: CB_MOMENT},  # R_Z = 0: se compara con m (N·m/m tiene la dimensión de N)
+        ),
+    ),
+    "T-CB-04": (_cb_spec("T-CB-04", "propped_point", _build_cb04, _rows_cb04, _CB_POINT),),
+    "T-CB-05": (
+        _cb_spec("T-CB-05 a", "triangular_root", _build_cb05a, _rows_cb05a, _CB_TRIANGLE),
+        _cb_spec("T-CB-05 b", "triangular_tip", _build_cb05b, _rows_cb05b, _CB_TRIANGLE),
+        _cb_spec(
+            "T-CB-05 c",
+            "cantilever_point",
+            _build_cb05c,
+            _rows_cb05c,
+            {**_CB_SPAN, "load_kn": P / 1000, "xi": 0.6},
+        ),
+    ),
+    "T-CB-07": (
+        _cb_spec(
+            "T-CB-07 a",
+            "torque_distributed",
+            _build_cb07a,
+            _rows_cb07a,
+            {**_CB_SPAN, "moment_kn_m": CB_TORQUE_DISTRIBUTED / 1000},
+        ),
+        _cb_spec(
+            "T-CB-07 b",
+            "torque_point",
+            _build_cb07b,
+            _rows_cb07b,
+            {**_CB_SPAN, "torque_kn_m": CB_TORQUE_POINT / 1000, "xi": CB_TORQUE_POINT_XI},
+        ),
+    ),
+}
+
+
+# --- R-SUB: la barra cargada frente a la barra subdividida --------------------------------
+
+# A fijo, C fijo y B libre; la barra A→B se carga entera o subdividida en los puntos de carga.
+_SUB_XZ: Final = ((0.0, 0.0, 0.0), (3.0, 0.0, 4.0), (6.0, 0.0, 2.0))  # barra oblicua, L = 5
+_SUB_3D: Final = ((0.0, 0.0, 0.0), (2.0, 3.0, 1.5), (5.0, 2.0, -1.0))
+_SUB_CUTS_XZ: Final = (0.2, 0.3, 0.6, 0.7)  # límites de la parcial y puntos de carga
+_SUB_CUTS_3D: Final = (0.3, 0.5, 0.8)
+_SUB_FORCE_XZ: Final = (4e3, 0.0, -12e3)  # puntual en 0,3, base GLOBAL
+_SUB_COUPLE_XZ: Final = 7e3  # par My en 0,6
+_SUB_Q_XZ: Final = -3e3  # parcial [0,2; 0,7] en Z, base GLOBAL
+_SUB_FORCE_3D: Final = (1.5e3, -8e3, 6e3)  # puntual en 0,3, base LOCAL
+_SUB_MOMENT_3D: Final = (900.0, -2.5e3, 4e3)
+_SUB_Q_3D: Final = (0.0, -3e3, 2e3)  # parcial [0,5; 0,8], base LOCAL
+_RELEASED_RZ: Final = EndConnection.rigid().with_dof(Dof.RZ, DofState.RELEASED)
+
+Point3 = tuple[float, float, float]
+
+
+def _sub_point(points: Sequence[Point3], x: float) -> Point3:
+    (ax, ay, az), (bx, by, bz) = points[0], points[1]
+    return ax + x * (bx - ax), ay + x * (by - ay), az + x * (bz - az)
+
+
+def _sub_node(case: _Case, label: str, point: Point3) -> None:
+    case.node(label, point[0], z=point[2], y=point[1])
+
+
+def _build_sub(case: _Case, *, spatial: bool, split: bool) -> tuple[str, str]:
+    """Modelo de R-SUB; devuelve las etiquetas de la primera y de la última barra de A→B."""
+    points = _SUB_3D if spatial else _SUB_XZ
+    cuts = (_SUB_CUTS_3D if spatial else _SUB_CUTS_XZ) if split else ()
+    _sub_node(case, "A", points[0])
+    for index, x in enumerate(cuts, start=1):
+        _sub_node(case, f"S{index}", _sub_point(points, x))
+    _sub_node(case, "B", points[1])
+    _sub_node(case, "C", points[2])
+    names = ["A", *(f"S{index}" for index in range(1, len(cuts) + 1)), "B"]
+    pieces = [f"B{index}" for index in range(1, len(names))]
+    for piece, start, end in zip(pieces, names[:-1], names[1:], strict=True):
+        case.member(piece, start, end)
+    case.member("BC", "B", "C")
+    case.support("A", fixed_restraints(), "Empotramiento A")
+    case.support("C", fixed_restraints(), "Empotramiento C")
+    first, last = pieces[0], pieces[-1]
+    if spatial:
+        _end(case, last, MemberEnd.J, _RELEASED_RZ)
+        _sub_loads_3d(case, split, pieces)
+    else:
+        _end(case, first, MemberEnd.I, _RELEASED)
+        _sub_loads_xz(case, split, pieces)
+    return first, last
+
+
+def _sub_loads_3d(case: _Case, split: bool, pieces: Sequence[str]) -> None:
+    model, case_id, ids = case.model, case.load_case.id, case.ids
+    m = u.Quantity.of
+    force, moment = _SUB_FORCE_3D, _SUB_MOMENT_3D
+    _qx, qy, qz = _SUB_Q_3D
+    if not split:
+        model.add_member_point_load(
+            case_id,
+            ids[pieces[0]],
+            position=0.3,
+            basis=LoadBasis.LOCAL,
+            fx=m(force[0], "N"),
+            fy=m(force[1], "N"),
+            fz=m(force[2], "N"),
+            mx=m(moment[0], "N*m"),
+            my=m(moment[1], "N*m"),
+            mz=m(moment[2], "N*m"),
+        )
+        model.add_member_distributed_load(
+            case_id,
+            ids[pieces[0]],
+            start=0.5,
+            end=0.8,
+            basis=LoadBasis.LOCAL,
+            qy_start=m(qy, "N/m"),
+            qz_start=m(qz, "N/m"),
+            qy_end=m(qy, "N/m"),
+            qz_end=m(qz, "N/m"),
+        )
+        return
+    axes = model.axes(ids[pieces[0]])
+    f, mo = axes.to_global(Vec3(*force)), axes.to_global(Vec3(*moment))
+    model.add_nodal_load(
+        case_id,
+        ids["S1"],
+        fx=m(f.x, "N"),
+        fy=m(f.y, "N"),
+        fz=m(f.z, "N"),
+        mx=m(mo.x, "N*m"),
+        my=m(mo.y, "N*m"),
+        mz=m(mo.z, "N*m"),
+    )
+    model.add_member_uniform_load(
+        case_id, ids[pieces[2]], basis=LoadBasis.LOCAL, qy=m(qy, "N/m"), qz=m(qz, "N/m")
+    )
+
+
+def _sub_loads_xz(case: _Case, split: bool, pieces: Sequence[str]) -> None:
+    model, case_id, ids = case.model, case.load_case.id, case.ids
+    m = u.Quantity.of
+    fx, _fy, fz = _SUB_FORCE_XZ
+    if not split:
+        member = ids[pieces[0]]
+        model.add_member_point_load(case_id, member, position=0.3, fx=m(fx, "N"), fz=m(fz, "N"))
+        model.add_member_point_load(case_id, member, position=0.6, my=m(_SUB_COUPLE_XZ, "N*m"))
+        model.add_member_distributed_load(
+            case_id,
+            member,
+            start=0.2,
+            end=0.7,
+            qz_start=m(_SUB_Q_XZ, "N/m"),
+            qz_end=m(_SUB_Q_XZ, "N/m"),
+        )
+        return
+    model.add_nodal_load(case_id, ids["S2"], fx=m(fx, "N"), fz=m(fz, "N"))
+    model.add_nodal_load(case_id, ids["S3"], my=m(_SUB_COUPLE_XZ, "N*m"))
+    for piece in pieces[1:4]:
+        model.add_member_uniform_load(case_id, ids[piece], qz=m(_SUB_Q_XZ, "N/m"))
+
+
+def _end_force(case: _Case, member: str, *, at_j: bool) -> Vector6:
+    item = next(m for m in case._res().members if m.member_id == case.ids[member])
+    return item.p_j if at_j else item.p_i
+
+
+def _sub_rows(whole: _Case, split: _Case, names: tuple[str, str]) -> list[Row]:
+    """Filas «subdividida»: cada componente calculada de la entera frente a la subdividida."""
+    rows: list[Row] = []
+
+    def add(label: str, kind: QuantityKind, got: float | None, reference: float | None) -> None:
+        if got is not None and reference is not None:
+            rows.append((label, SUBDIVIDED, kind, reference, got))
+
+    first, last = names
+    ends = (("pI", False, "B1", first), ("pJ", True, "B1", last), ("pI", False, "BC", "BC"))
+    for index in range(6):
+        add(f"{_D_NAMES[index]} B", _U_KINDS[index], whole.disp("B", index), split.disp("B", index))
+        for node in ("A", "C"):
+            add(
+                f"{_R_NAMES[index]} {node}",
+                _F_KINDS[index],
+                whole.reaction(node, index),
+                split.reaction(node, index),
+            )
+        for end, at_j, member_whole, member_split in ends:
+            got = _end_force(whole, member_whole, at_j=at_j).components[index].value
+            ref = _end_force(split, member_split, at_j=at_j).components[index].value
+            add(f"{end}_{_M_NAMES[index]} {member_whole}", _F_KINDS[index], got, ref)
+    return rows
+
+
+def _subdivision(
+    spatial: bool, timeout_s: float | None
+) -> ReferenceOutcome | SpatialReferenceOutcome:
+    case_id = CB_SUBDIVISION_SPATIAL if spatial else CB_SUBDIVISION_PLANAR
+    name = "subdivision_spatial" if spatial else "subdivision_planar"
+    title = Text.of(f"benchmark.title_cargas_barra_{name}")
+    description = Text.of(f"benchmark.description_cargas_barra_{name}")
+    cases: list[_Case] = []
+    names = ("", "")
+    published: tuple[AnalysisRun | SpatialAnalysisRun, PlanarResults | SpatialResults] | None = None
+    for split in (False, True):
+        case = _Case()
+        built = _build_sub(case, spatial=spatial, split=split)
+        names = built if split else names
+        run: Any
+        results: Any
+        failure: DiagnosticError | None
+        runner = _spatial_run if spatial else _planar_run
+        run, results, failure = runner(case, timeout_s)
+        if results is None:  # Sin una de las dos no hay contraste: se publica su fallo.
+            part = f"{case_id} ({SUBDIVIDED if split else 'entera'})"
+            return _outcome(spatial, part, title, description, case.labels, run, None, failure)
+        case.results = results
+        cases.append(case)
+        published = published or (run, results)
+    assert published is not None
+    checks = evaluate(_sub_rows(cases[0], cases[1], names), TOL_EXACT)
+    notes = (Text.of("benchmark.note_cargas_barra_subdivision"),)
+    return _outcome(
+        spatial,
+        case_id,
+        title,
+        description,
+        cases[0].labels,
+        published[0],
+        published[1],
+        None,
+        checks,
+        notes,
+    )
+
+
+def _outcome(  # noqa: PLR0913, PLR0917 (campos del resultado)
+    spatial: bool,
+    case_id: str,
+    title: Text,
+    description: Text,
+    labels: dict[UUID, str],
+    run: Any,
+    results: Any,
+    failure: DiagnosticError | None,
+    checks: tuple[ReferenceCheck, ...] = (),
+    notes: tuple[Text, ...] = (),
+) -> ReferenceOutcome | SpatialReferenceOutcome:
+    kind = SpatialReferenceOutcome if spatial else ReferenceOutcome
+    return kind(case_id, title, description, labels, run, results, failure, checks, notes)
+
+
+def run_cargas_barra_reference(
+    case_id: str, timeout_s: float | None = None
+) -> tuple[ReferenceOutcome | SpatialReferenceOutcome, ...]:
+    """Un caso de ``CB_CASES``: T-CB-01…05 en el plano, T-CB-07 en 3D y R-SUB en los dos."""
+    if case_id in CB_PLANAR_CASES:
+        return tuple(_run_spec(spec, timeout_s) for spec in CB_SPECS[case_id])
+    if case_id in CB_SPATIAL_CASES:
+        return tuple(_run_spatial_spec(spec, timeout_s) for spec in CB_SPECS[case_id])
+    if case_id in (CB_SUBDIVISION_PLANAR, CB_SUBDIVISION_SPATIAL):
+        return (_subdivision(case_id == CB_SUBDIVISION_SPATIAL, timeout_s),)
+    raise ValueError(f"caso de carga de barra desconocido: {case_id}")
+
+
+def run_cargas_barra_battery(
+    timeout_s: float | None = None,
+) -> tuple[ReferenceOutcome | SpatialReferenceOutcome, ...]:
+    """Batería completa de ``veritas analyze cargas-barra``: T-CB-01…08, en ese orden."""
+    outcomes: list[ReferenceOutcome | SpatialReferenceOutcome] = []
+    for case_id in CB_CASES:
+        outcomes += run_cargas_barra_reference(case_id, timeout_s)
     return tuple(outcomes)
