@@ -2,7 +2,7 @@
 
 Casos ``referencias``, ``contraste-plano``, ``mecanismo-torsion`` y ``uniones`` (E2.6) con sus
 códigos de salida,
-y la comparación de la salida aceptada de ``analyze demo|uniones|referencias`` con
+y la comparación de la salida aceptada de ``analyze demo|uniones|referencias|asientos`` con
 ``tests/golden`` (normalizada en ``cli_golden``).
 """
 
@@ -26,6 +26,9 @@ def cached_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     """Las corridas de referencia y de contraste, una vez por sesión (``benchmark_cache``)."""
     monkeypatch.setattr(benchmarks, "run_spatial_reference", benchmark_cache.run_spatial_reference)
     monkeypatch.setattr(benchmarks, "run_cross_planar", benchmark_cache.run_cross_planar)
+    monkeypatch.setattr(
+        benchmarks, "run_settlement_battery", benchmark_cache.run_settlement_battery
+    )
 
 
 def run(capsys: pytest.CaptureFixture[str], *args: str) -> tuple[int, str]:

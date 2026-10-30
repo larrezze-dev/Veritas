@@ -1,0 +1,953 @@
+Asientos impuestos T-ASI-01…10 (plan T-016): T-ASI-01…06 en el adaptador plano, T-ASI-07 y # en el espacial, T-ASI-09 (superposición) en los dos y T-ASI-10 (T-ASI-01…06 en #D frente a sus fórmulas y al plano):
+- Asientos impuestos (plan T-016): Euler-Bernoulli sin deformación por cortante y torsión de Saint-Venant, estática lineal, secciones constantes; dos elementos por vano. Fórmulas planas con EI = E·b·h³/# y EA = E·b·h; espaciales con Iz y J de la sección.
+- δ = # mm, θ = # rad y δ axial = # mm, valores prescritos con signo en base global (ADR-001; δ < # es un descenso). La reacción es la acción del apoyo que los impone.
+- Acero E = # GPa, G = # GPa, R #×#; A, Iy, Iz y J (= # m⁴, serie de Saint-Venant) de las propiedades de la sección.
+
+== T-ASI-01 — Biempotrada con asiento vertical ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Asiento Uz = # mm en N3.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N3 #EIδ/L³ # N # N # # coincide
+R_Z N1 #EIδ/L³ # N # N # # coincide
+R_X N1 # # N # N # # coincide
+R_My N1 #EIδ/L² # N·m # N·m # # coincide
+R_My N3 #EIδ/L² # N·m # N·m # # coincide
+My(#+) B1 #EIδ/L² # N·m # N·m # # coincide
+Uz N3 δ # m # m # # coincide
+Uz N2 δ/# # m # m # # coincide
+Ry N2 #δ/(#L) # rad # rad # # coincide
+T-ASI-01: #/# magnitudes, coincide.
+
+== T-ASI-02 — Empotrada-articulada con asiento vertical ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y articulada en N3. Asiento Uz = # mm en N3.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N3 #EIδ/L³ # N # N # # coincide
+R_Z N1 #EIδ/L³ # N # N # # coincide
+R_My N1 #EIδ/L² # N·m # N·m # # coincide
+My(#+) B1 #EIδ/L² # N·m # N·m # # coincide
+Uz N3 δ # m # m # # coincide
+Ry N3 #δ/(#L) # rad # rad # # coincide
+T-ASI-02: #/# magnitudes, coincide.
+
+== T-ASI-03 — Biapoyada con asiento vertical (isostática) ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), articulación en N1 y rodillo vertical (Uz) en N3. Asiento Uz = # mm en N3: giro de sólido rígido, sin esfuerzos ni reacciones (escalas declaradas #EI|δ|/L³ y #EI|δ|/L²).
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos:
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rx: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rz: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 # # N # N # # coincide
+R_Z N3 # # N # N # # coincide
+R_X N1 # # N # N # # coincide
+My(L−) B1 # # N·m # N·m # # coincide
+Vz(#+) B1 # # N # N # # coincide
+Uz N2 δ/# # m # m # # coincide
+Uz N3 δ # m # m # # coincide
+Ry N1 −δ/L # rad # rad # # coincide
+Ry N2 −δ/L # rad # rad # # coincide
+Ry N3 −δ/L # rad # rad # # coincide
+T-ASI-03: #/# magnitudes, coincide.
+
+== T-ASI-04 — Biempotrada con giro impuesto ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Giro impuesto Ry = # rad en N1.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_My N1 #EIθ/L # N·m # N·m # # coincide
+R_My N3 #EIθ/L # N·m # N·m # # coincide
+R_Z N1 #EIθ/L² # N # N # # coincide
+R_Z N3 #EIθ/L² # N # N # # coincide
+My(#+) B1 #EIθ/L # N·m # N·m # # coincide
+Ry N1 θ # rad # rad # # coincide
+T-ASI-04: #/# magnitudes, coincide.
+
+== T-ASI-05 — Continua de dos vanos con asiento del apoyo central ==
+Continua de dos vanos de # m en +X (B1…B4, nudos N1…N5), articulación en N1 y rodillos verticales en N3 y N5. Asiento Uz = # mm en el apoyo central N3.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos:
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rx: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+WARNING UNSUPPORTED_CONFIGURATION: Ningún apoyo restringe Rz: el análisis plano lo restringe implícitamente en los # nudos. El modelo #D podría ser un mecanismo fuera del plano; el resultado solo vale para el modelo plano.
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N3 #EIδ/L³ # N # N # # coincide
+R_Z N1 #EIδ/L³ # N # N # # coincide
+R_Z N5 #EIδ/L³ # N # N # # coincide
+My(L−) B2 #EIδ/L² # N·m # N·m # # coincide
+Uz N3 δ # m # m # # coincide
+T-ASI-05: #/# magnitudes, coincide.
+
+== T-ASI-06 — Biempotrada con desplazamiento axial impuesto ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Desplazamiento impuesto Ux = # mm en N3 (tracción).
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_X N3 +EAδ/L # N # N # # coincide
+R_X N1 −EAδ/L # N # N # # coincide
+N(#+) B1 +EAδ/L # N # N # # coincide
+N(#+) B2 +EAδ/L # N # N # # coincide
+Ux N2 δ/# # m # m # # coincide
+Ux N3 δ # m # m # # coincide
+T-ASI-06: #/# magnitudes, coincide.
+
+== T-ASI-07 — Biempotrada con giro de torsión impuesto (#D) ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Giro impuesto Rx = # rad en N3; T = GJθ/L.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_MX N3 +GJθ/L # N·m # N·m # # coincide
+R_MX N1 −GJθ/L # N·m # N·m # # coincide
+T(#+) B1 +GJθ/L # N·m # N·m # # coincide
+T(#+) B2 +GJθ/L # N·m # N·m # # coincide
+Rx N3 θ # rad # rad # # coincide
+Rx N2 θ/# # rad # rad # # coincide
+Control de asiento, Rx en N3: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-07: #/# magnitudes, coincide.
+
+== T-ASI-08 a — Biempotrada con asiento en Uy y Rz liberado en J (#D) ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3, con Rz liberado en el extremo J de B2. Asiento Uy = # mm en N3 (flexión en Iz).
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Giros de flexión liberados en los extremos representados por la condensación del propio elemento de barra (exacta, también con cargas de barra).
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Y N3 #EIzδ/L³ # N # N # # coincide
+R_Y N1 #EIzδ/L³ # N # N # # coincide
+R_MZ N1 #EIzδ/L² # N·m # N·m # # coincide
+R_MZ N3 # # N·m # N·m # # coincide
+Uy N3 δ # m # m # # coincide
+Control de asiento, Uy en N3: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-08 a: #/# magnitudes, coincide.
+
+== T-ASI-08 b — Biempotrada con asiento en Uy y resorte de giro en J (#D) ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3, con resorte de giro Rz k = EIz/L = # N·m/rad en el extremo J de B2 (nudo auxiliar). Asiento Uy = # mm en N3; referencia por condensación del giro del extremo.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Extremos con resorte o traslación liberada representados con nudos auxiliares que no forman parte de los resultados.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Y N3 #EIzδ/(#L³) # N # N # # coincide
+R_Y N1 #EIzδ/(#L³) # N # N # # coincide
+R_MZ N1 #EIzδ/(#L²) # N·m # N·m # # coincide
+R_MZ N3 #EIzδ/(#L²) # N·m # N·m # # coincide
+Uy N3 δ # m # m # # coincide
+Control de asiento, Uy en N3: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-08 b: #/# magnitudes, coincide.
+
+== T-ASI-09 plano — Superposición de asiento y carga uniforme ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Tres corridas: A, asiento Uz = # mm en N3; Q, q = # kN/m en Z sobre B1 y B2; A+Q, las dos acciones en un mismo caso (no es una combinación).
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N3 +wL/# + #EIδ/L³ # N # N # # coincide
+R_Z N1 +wL/# − #EIδ/L³ # N # N # # coincide
+R_My N1 −wL²/# + #EIδ/L² # N·m # N·m # # coincide
+R_My N3 +wL²/# + #EIδ/L² # N·m # N·m # # coincide
+Uz N2 δ/# − wL⁴/(#EI) # m # m # # coincide
+Ry N2 #δ/(#L) # rad # rad # # coincide
+R_X N1 A + Q # N # N # # coincide
+R_Z N1 A + Q # N # N # # coincide
+R_MY N1 A + Q # N·m # N·m # # coincide
+R_X N3 A + Q # N # N # # coincide
+R_Z N3 A + Q # N # N # # coincide
+R_MY N3 A + Q # N·m # N·m # # coincide
+pI_N B1 A + Q # N # N # # coincide
+pI_Vz B1 A + Q # N # N # # coincide
+pI_My B1 A + Q # N·m # N·m # # coincide
+pJ_N B1 A + Q # N # N # # coincide
+pJ_Vz B1 A + Q # N # N # # coincide
+pJ_My B1 A + Q # N·m # N·m # # coincide
+pI_N B2 A + Q # N # N # # coincide
+pI_Vz B2 A + Q # N # N # # coincide
+pI_My B2 A + Q # N·m # N·m # # coincide
+pJ_N B2 A + Q # N # N # # coincide
+pJ_Vz B2 A + Q # N # N # # coincide
+pJ_My B2 A + Q # N·m # N·m # # coincide
+Ux N1 A + Q # m # m # # coincide
+Uz N1 A + Q # m # m # # coincide
+Ry N1 A + Q # rad # rad # # coincide
+Ux N2 A + Q # m # m # # coincide
+Uz N2 A + Q # m # m # # coincide
+Ry N2 A + Q # rad # rad # # coincide
+Ux N3 A + Q # m # m # # coincide
+Uz N3 A + Q # m # m # # coincide
+Ry N3 A + Q # rad # rad # # coincide
+Filas «A + Q»: la corrida A+Q frente a la suma de las corridas A y Q en cada componente calculada; las fórmulas cerradas son la referencia independiente.
+T-ASI-09 plano: #/# magnitudes, coincide.
+
+== T-ASI-09 espacial — Superposición de asiento y carga uniforme ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Tres corridas: A, asiento Uz = # mm en N3; Q, q = # kN/m en Z sobre B1 y B2; A+Q, las dos acciones en un mismo caso (no es una combinación).
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N3 +wL/# + #EIδ/L³ # N # N # # coincide
+R_Z N1 +wL/# − #EIδ/L³ # N # N # # coincide
+R_My N1 −wL²/# + #EIδ/L² # N·m # N·m # # coincide
+R_My N3 +wL²/# + #EIδ/L² # N·m # N·m # # coincide
+Uz N2 δ/# − wL⁴/(#EI) # m # m # # coincide
+Ry N2 #δ/(#L) # rad # rad # # coincide
+R_X N1 A + Q # N # N # # coincide
+R_Y N1 A + Q # N # N # # coincide
+R_Z N1 A + Q # N # N # # coincide
+R_MX N1 A + Q # N·m # N·m # # coincide
+R_MY N1 A + Q # N·m # N·m # # coincide
+R_MZ N1 A + Q # N·m # N·m # # coincide
+R_X N3 A + Q # N # N # # coincide
+R_Y N3 A + Q # N # N # # coincide
+R_Z N3 A + Q # N # N # # coincide
+R_MX N3 A + Q # N·m # N·m # # coincide
+R_MY N3 A + Q # N·m # N·m # # coincide
+R_MZ N3 A + Q # N·m # N·m # # coincide
+pI_N B1 A + Q # N # N # # coincide
+pI_Vy B1 A + Q # N # N # # coincide
+pI_Vz B1 A + Q # N # N # # coincide
+pI_T B1 A + Q # N·m # N·m # # coincide
+pI_My B1 A + Q # N·m # N·m # # coincide
+pI_Mz B1 A + Q # N·m # N·m # # coincide
+pJ_N B1 A + Q # N # N # # coincide
+pJ_Vy B1 A + Q # N # N # # coincide
+pJ_Vz B1 A + Q # N # N # # coincide
+pJ_T B1 A + Q # N·m # N·m # # coincide
+pJ_My B1 A + Q # N·m # N·m # # coincide
+pJ_Mz B1 A + Q # N·m # N·m # # coincide
+pI_N B2 A + Q # N # N # # coincide
+pI_Vy B2 A + Q # N # N # # coincide
+pI_Vz B2 A + Q # N # N # # coincide
+pI_T B2 A + Q # N·m # N·m # # coincide
+pI_My B2 A + Q # N·m # N·m # # coincide
+pI_Mz B2 A + Q # N·m # N·m # # coincide
+pJ_N B2 A + Q # N # N # # coincide
+pJ_Vy B2 A + Q # N # N # # coincide
+pJ_Vz B2 A + Q # N # N # # coincide
+pJ_T B2 A + Q # N·m # N·m # # coincide
+pJ_My B2 A + Q # N·m # N·m # # coincide
+pJ_Mz B2 A + Q # N·m # N·m # # coincide
+Ux N1 A + Q # m # m # # coincide
+Uy N1 A + Q # m # m # # coincide
+Uz N1 A + Q # m # m # # coincide
+Rx N1 A + Q # rad # rad # # coincide
+Ry N1 A + Q # rad # rad # # coincide
+Rz N1 A + Q # rad # rad # # coincide
+Ux N2 A + Q # m # m # # coincide
+Uy N2 A + Q # m # m # # coincide
+Uz N2 A + Q # m # m # # coincide
+Rx N2 A + Q # rad # rad # # coincide
+Ry N2 A + Q # rad # rad # # coincide
+Rz N2 A + Q # rad # rad # # coincide
+Ux N3 A + Q # m # m # # coincide
+Uy N3 A + Q # m # m # # coincide
+Uz N3 A + Q # m # m # # coincide
+Rx N3 A + Q # rad # rad # # coincide
+Ry N3 A + Q # rad # rad # # coincide
+Rz N3 A + Q # rad # rad # # coincide
+Filas «A + Q»: la corrida A+Q frente a la suma de las corridas A y Q en cada componente calculada; las fórmulas cerradas son la referencia independiente.
+Control de asiento, Uz en N3: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-09 espacial: #/# magnitudes, coincide.
+
+== T-ASI-10 · T-ASI-01 — Biempotrada con asiento vertical ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Asiento Uz = # mm en N3.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Corrida plana del contraste: SUCCEEDED · run_id <uuid> · fórmulas del plano: coincide
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N3 #EIδ/L³ # N # N # # coincide
+R_Z N1 #EIδ/L³ # N # N # # coincide
+R_X N1 # # N # N # # coincide
+R_My N1 #EIδ/L² # N·m # N·m # # coincide
+R_My N3 #EIδ/L² # N·m # N·m # # coincide
+My(#+) B1 #EIδ/L² # N·m # N·m # # coincide
+Uz N3 δ # m # m # # coincide
+Uz N2 δ/# # m # m # # coincide
+Ry N2 #δ/(#L) # rad # rad # # coincide
+Ux N1 plano # m # m # # coincide
+Uy N1 # (fuera del plano) # m # m # # coincide
+Uz N1 plano # m # m # # coincide
+Rx N1 # (fuera del plano) # rad # rad # # coincide
+Ry N1 plano # rad # rad # # coincide
+Rz N1 # (fuera del plano) # rad # rad # # coincide
+Ux N2 plano # m # m # # coincide
+Uy N2 # (fuera del plano) # m # m # # coincide
+Uz N2 plano # m # m # # coincide
+Rx N2 # (fuera del plano) # rad # rad # # coincide
+Ry N2 plano # rad # rad # # coincide
+Rz N2 # (fuera del plano) # rad # rad # # coincide
+Ux N3 plano # m # m # # coincide
+Uy N3 # (fuera del plano) # m # m # # coincide
+Uz N3 plano # m # m # # coincide
+Rx N3 # (fuera del plano) # rad # rad # # coincide
+Ry N3 plano # rad # rad # # coincide
+Rz N3 # (fuera del plano) # rad # rad # # coincide
+R_X N1 plano # N # N # # coincide
+R_Y N1 # (fuera del plano) # N # N # # coincide
+R_Z N1 plano # N # N # # coincide
+R_MX N1 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N1 plano # N·m # N·m # # coincide
+R_MZ N1 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N2 # (fuera del plano) # N # N # # coincide
+R_MX N2 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N2 # (fuera del plano) # N·m # N·m # # coincide
+R_X N3 plano # N # N # # coincide
+R_Y N3 # (fuera del plano) # N # N # # coincide
+R_Z N3 plano # N # N # # coincide
+R_MX N3 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N3 plano # N·m # N·m # # coincide
+R_MZ N3 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B1 plano # N # N # # coincide
+pI_Vy B1 # (fuera del plano) # N # N # # coincide
+pI_Vz B1 plano # N # N # # coincide
+pI_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B1 plano # N·m # N·m # # coincide
+pI_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B1 plano # N # N # # coincide
+pJ_Vy B1 # (fuera del plano) # N # N # # coincide
+pJ_Vz B1 plano # N # N # # coincide
+pJ_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B1 plano # N·m # N·m # # coincide
+pJ_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B2 plano # N # N # # coincide
+pI_Vy B2 # (fuera del plano) # N # N # # coincide
+pI_Vz B2 plano # N # N # # coincide
+pI_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B2 plano # N·m # N·m # # coincide
+pI_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B2 plano # N # N # # coincide
+pJ_Vy B2 # (fuera del plano) # N # N # # coincide
+pJ_Vz B2 plano # N # N # # coincide
+pJ_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B2 plano # N·m # N·m # # coincide
+pJ_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. Fórmulas sobre el #D con #, y #D frente a plano con #; fuera del plano, frente a #.
+Control de asiento, Uz en N3: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-10 · T-ASI-01: #/# magnitudes, coincide.
+
+== T-ASI-10 · T-ASI-02 — Empotrada-articulada con asiento vertical ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y articulada en N3. Asiento Uz = # mm en N3.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Corrida plana del contraste: SUCCEEDED · run_id <uuid> · fórmulas del plano: coincide
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N3 #EIδ/L³ # N # N # # coincide
+R_Z N1 #EIδ/L³ # N # N # # coincide
+R_My N1 #EIδ/L² # N·m # N·m # # coincide
+My(#+) B1 #EIδ/L² # N·m # N·m # # coincide
+Uz N3 δ # m # m # # coincide
+Ry N3 #δ/(#L) # rad # rad # # coincide
+Ux N1 plano # m # m # # coincide
+Uy N1 # (fuera del plano) # m # m # # coincide
+Uz N1 plano # m # m # # coincide
+Rx N1 # (fuera del plano) # rad # rad # # coincide
+Ry N1 plano # rad # rad # # coincide
+Rz N1 # (fuera del plano) # rad # rad # # coincide
+Ux N2 plano # m # m # # coincide
+Uy N2 # (fuera del plano) # m # m # # coincide
+Uz N2 plano # m # m # # coincide
+Rx N2 # (fuera del plano) # rad # rad # # coincide
+Ry N2 plano # rad # rad # # coincide
+Rz N2 # (fuera del plano) # rad # rad # # coincide
+Ux N3 plano # m # m # # coincide
+Uy N3 # (fuera del plano) # m # m # # coincide
+Uz N3 plano # m # m # # coincide
+Rx N3 # (fuera del plano) # rad # rad # # coincide
+Ry N3 plano # rad # rad # # coincide
+Rz N3 # (fuera del plano) # rad # rad # # coincide
+R_X N1 plano # N # N # # coincide
+R_Y N1 # (fuera del plano) # N # N # # coincide
+R_Z N1 plano # N # N # # coincide
+R_MX N1 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N1 plano # N·m # N·m # # coincide
+R_MZ N1 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N2 # (fuera del plano) # N # N # # coincide
+R_MX N2 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N2 # (fuera del plano) # N·m # N·m # # coincide
+R_X N3 plano # N # N # # coincide
+R_Y N3 # (fuera del plano) # N # N # # coincide
+R_Z N3 plano # N # N # # coincide
+R_MX N3 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N3 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B1 plano # N # N # # coincide
+pI_Vy B1 # (fuera del plano) # N # N # # coincide
+pI_Vz B1 plano # N # N # # coincide
+pI_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B1 plano # N·m # N·m # # coincide
+pI_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B1 plano # N # N # # coincide
+pJ_Vy B1 # (fuera del plano) # N # N # # coincide
+pJ_Vz B1 plano # N # N # # coincide
+pJ_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B1 plano # N·m # N·m # # coincide
+pJ_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B2 plano # N # N # # coincide
+pI_Vy B2 # (fuera del plano) # N # N # # coincide
+pI_Vz B2 plano # N # N # # coincide
+pI_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B2 plano # N·m # N·m # # coincide
+pI_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B2 plano # N # N # # coincide
+pJ_Vy B2 # (fuera del plano) # N # N # # coincide
+pJ_Vz B2 plano # N # N # # coincide
+pJ_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B2 plano # N·m # N·m # # coincide
+pJ_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. Fórmulas sobre el #D con #, y #D frente a plano con #; fuera del plano, frente a #.
+Control de asiento, Uz en N3: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-10 · T-ASI-02: #/# magnitudes, coincide.
+
+== T-ASI-10 · T-ASI-03 — Biapoyada con asiento vertical (isostática) ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), articulación en N1 y rodillo vertical (Uz) en N3. Asiento Uz = # mm en N3: giro de sólido rígido, sin esfuerzos ni reacciones (escalas declaradas #EI|δ|/L³ y #EI|δ|/L²).
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Corrida plana del contraste: SUCCEEDED · run_id <uuid> · fórmulas del plano: coincide
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 # # N # N # # coincide
+R_Z N3 # # N # N # # coincide
+R_X N1 # # N # N # # coincide
+My(L−) B1 # # N·m # N·m # # coincide
+Vz(#+) B1 # # N # N # # coincide
+Uz N2 δ/# # m # m # # coincide
+Uz N3 δ # m # m # # coincide
+Ry N1 −δ/L # rad # rad # # coincide
+Ry N2 −δ/L # rad # rad # # coincide
+Ry N3 −δ/L # rad # rad # # coincide
+Ux N1 plano # m # m # # coincide
+Uy N1 # (fuera del plano) # m # m # # coincide
+Uz N1 plano # m # m # # coincide
+Rx N1 # (fuera del plano) # rad # rad # # coincide
+Ry N1 plano # rad # rad # # coincide
+Rz N1 # (fuera del plano) # rad # rad # # coincide
+Ux N2 plano # m # m # # coincide
+Uy N2 # (fuera del plano) # m # m # # coincide
+Uz N2 plano # m # m # # coincide
+Rx N2 # (fuera del plano) # rad # rad # # coincide
+Ry N2 plano # rad # rad # # coincide
+Rz N2 # (fuera del plano) # rad # rad # # coincide
+Ux N3 plano # m # m # # coincide
+Uy N3 # (fuera del plano) # m # m # # coincide
+Uz N3 plano # m # m # # coincide
+Rx N3 # (fuera del plano) # rad # rad # # coincide
+Ry N3 plano # rad # rad # # coincide
+Rz N3 # (fuera del plano) # rad # rad # # coincide
+R_X N1 plano # N # N # # coincide
+R_Y N1 # (fuera del plano) # N # N # # coincide
+R_Z N1 plano # N # N # # coincide
+R_MX N1 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N1 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N2 # (fuera del plano) # N # N # # coincide
+R_MX N2 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N2 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N3 # (fuera del plano) # N # N # # coincide
+R_Z N3 plano # N # N # # coincide
+R_MX N3 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N3 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B1 plano # N # N # # coincide
+pI_Vy B1 # (fuera del plano) # N # N # # coincide
+pI_Vz B1 plano # N # N # # coincide
+pI_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B1 plano # N·m # N·m # # coincide
+pI_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B1 plano # N # N # # coincide
+pJ_Vy B1 # (fuera del plano) # N # N # # coincide
+pJ_Vz B1 plano # N # N # # coincide
+pJ_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B1 plano # N·m # N·m # # coincide
+pJ_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B2 plano # N # N # # coincide
+pI_Vy B2 # (fuera del plano) # N # N # # coincide
+pI_Vz B2 plano # N # N # # coincide
+pI_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B2 plano # N·m # N·m # # coincide
+pI_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B2 plano # N # N # # coincide
+pJ_Vy B2 # (fuera del plano) # N # N # # coincide
+pJ_Vz B2 plano # N # N # # coincide
+pJ_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B2 plano # N·m # N·m # # coincide
+pJ_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. Fórmulas sobre el #D con #, y #D frente a plano con #; fuera del plano, frente a #.
+Control de asiento, Uz en N3: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-10 · T-ASI-03: #/# magnitudes, coincide.
+
+== T-ASI-10 · T-ASI-04 — Biempotrada con giro impuesto ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Giro impuesto Ry = # rad en N1.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Corrida plana del contraste: SUCCEEDED · run_id <uuid> · fórmulas del plano: coincide
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_My N1 #EIθ/L # N·m # N·m # # coincide
+R_My N3 #EIθ/L # N·m # N·m # # coincide
+R_Z N1 #EIθ/L² # N # N # # coincide
+R_Z N3 #EIθ/L² # N # N # # coincide
+My(#+) B1 #EIθ/L # N·m # N·m # # coincide
+Ry N1 θ # rad # rad # # coincide
+Ux N1 plano # m # m # # coincide
+Uy N1 # (fuera del plano) # m # m # # coincide
+Uz N1 plano # m # m # # coincide
+Rx N1 # (fuera del plano) # rad # rad # # coincide
+Ry N1 plano # rad # rad # # coincide
+Rz N1 # (fuera del plano) # rad # rad # # coincide
+Ux N2 plano # m # m # # coincide
+Uy N2 # (fuera del plano) # m # m # # coincide
+Uz N2 plano # m # m # # coincide
+Rx N2 # (fuera del plano) # rad # rad # # coincide
+Ry N2 plano # rad # rad # # coincide
+Rz N2 # (fuera del plano) # rad # rad # # coincide
+Ux N3 plano # m # m # # coincide
+Uy N3 # (fuera del plano) # m # m # # coincide
+Uz N3 plano # m # m # # coincide
+Rx N3 # (fuera del plano) # rad # rad # # coincide
+Ry N3 plano # rad # rad # # coincide
+Rz N3 # (fuera del plano) # rad # rad # # coincide
+R_X N1 plano # N # N # # coincide
+R_Y N1 # (fuera del plano) # N # N # # coincide
+R_Z N1 plano # N # N # # coincide
+R_MX N1 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N1 plano # N·m # N·m # # coincide
+R_MZ N1 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N2 # (fuera del plano) # N # N # # coincide
+R_MX N2 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N2 # (fuera del plano) # N·m # N·m # # coincide
+R_X N3 plano # N # N # # coincide
+R_Y N3 # (fuera del plano) # N # N # # coincide
+R_Z N3 plano # N # N # # coincide
+R_MX N3 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N3 plano # N·m # N·m # # coincide
+R_MZ N3 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B1 plano # N # N # # coincide
+pI_Vy B1 # (fuera del plano) # N # N # # coincide
+pI_Vz B1 plano # N # N # # coincide
+pI_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B1 plano # N·m # N·m # # coincide
+pI_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B1 plano # N # N # # coincide
+pJ_Vy B1 # (fuera del plano) # N # N # # coincide
+pJ_Vz B1 plano # N # N # # coincide
+pJ_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B1 plano # N·m # N·m # # coincide
+pJ_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B2 plano # N # N # # coincide
+pI_Vy B2 # (fuera del plano) # N # N # # coincide
+pI_Vz B2 plano # N # N # # coincide
+pI_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B2 plano # N·m # N·m # # coincide
+pI_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B2 plano # N # N # # coincide
+pJ_Vy B2 # (fuera del plano) # N # N # # coincide
+pJ_Vz B2 plano # N # N # # coincide
+pJ_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B2 plano # N·m # N·m # # coincide
+pJ_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. Fórmulas sobre el #D con #, y #D frente a plano con #; fuera del plano, frente a #.
+Control de asiento, Ry en N1: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-10 · T-ASI-04: #/# magnitudes, coincide.
+
+== T-ASI-10 · T-ASI-05 — Continua de dos vanos con asiento del apoyo central ==
+Continua de dos vanos de # m en +X (B1…B4, nudos N1…N5), articulación en N1 y rodillos verticales en N3 y N5. Asiento Uz = # mm en el apoyo central N3.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Corrida plana del contraste: SUCCEEDED · run_id <uuid> · fórmulas del plano: coincide
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N3 #EIδ/L³ # N # N # # coincide
+R_Z N1 #EIδ/L³ # N # N # # coincide
+R_Z N5 #EIδ/L³ # N # N # # coincide
+My(L−) B2 #EIδ/L² # N·m # N·m # # coincide
+Uz N3 δ # m # m # # coincide
+Ux N1 plano # m # m # # coincide
+Uy N1 # (fuera del plano) # m # m # # coincide
+Uz N1 plano # m # m # # coincide
+Rx N1 # (fuera del plano) # rad # rad # # coincide
+Ry N1 plano # rad # rad # # coincide
+Rz N1 # (fuera del plano) # rad # rad # # coincide
+Ux N2 plano # m # m # # coincide
+Uy N2 # (fuera del plano) # m # m # # coincide
+Uz N2 plano # m # m # # coincide
+Rx N2 # (fuera del plano) # rad # rad # # coincide
+Ry N2 plano # rad # rad # # coincide
+Rz N2 # (fuera del plano) # rad # rad # # coincide
+Ux N3 plano # m # m # # coincide
+Uy N3 # (fuera del plano) # m # m # # coincide
+Uz N3 plano # m # m # # coincide
+Rx N3 # (fuera del plano) # rad # rad # # coincide
+Ry N3 plano # rad # rad # # coincide
+Rz N3 # (fuera del plano) # rad # rad # # coincide
+Ux N4 plano # m # m # # coincide
+Uy N4 # (fuera del plano) # m # m # # coincide
+Uz N4 plano # m # m # # coincide
+Rx N4 # (fuera del plano) # rad # rad # # coincide
+Ry N4 plano # rad # rad # # coincide
+Rz N4 # (fuera del plano) # rad # rad # # coincide
+Ux N5 plano # m # m # # coincide
+Uy N5 # (fuera del plano) # m # m # # coincide
+Uz N5 plano # m # m # # coincide
+Rx N5 # (fuera del plano) # rad # rad # # coincide
+Ry N5 plano # rad # rad # # coincide
+Rz N5 # (fuera del plano) # rad # rad # # coincide
+R_X N1 plano # N # N # # coincide
+R_Y N1 # (fuera del plano) # N # N # # coincide
+R_Z N1 plano # N # N # # coincide
+R_MX N1 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N1 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N2 # (fuera del plano) # N # N # # coincide
+R_MX N2 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N2 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N3 # (fuera del plano) # N # N # # coincide
+R_Z N3 plano # N # N # # coincide
+R_MX N3 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N3 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N4 # (fuera del plano) # N # N # # coincide
+R_MX N4 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N4 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N5 # (fuera del plano) # N # N # # coincide
+R_Z N5 plano # N # N # # coincide
+R_MX N5 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N5 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B1 plano # N # N # # coincide
+pI_Vy B1 # (fuera del plano) # N # N # # coincide
+pI_Vz B1 plano # N # N # # coincide
+pI_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B1 plano # N·m # N·m # # coincide
+pI_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B1 plano # N # N # # coincide
+pJ_Vy B1 # (fuera del plano) # N # N # # coincide
+pJ_Vz B1 plano # N # N # # coincide
+pJ_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B1 plano # N·m # N·m # # coincide
+pJ_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B2 plano # N # N # # coincide
+pI_Vy B2 # (fuera del plano) # N # N # # coincide
+pI_Vz B2 plano # N # N # # coincide
+pI_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B2 plano # N·m # N·m # # coincide
+pI_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B2 plano # N # N # # coincide
+pJ_Vy B2 # (fuera del plano) # N # N # # coincide
+pJ_Vz B2 plano # N # N # # coincide
+pJ_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B2 plano # N·m # N·m # # coincide
+pJ_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B3 plano # N # N # # coincide
+pI_Vy B3 # (fuera del plano) # N # N # # coincide
+pI_Vz B3 plano # N # N # # coincide
+pI_T B3 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B3 plano # N·m # N·m # # coincide
+pI_Mz B3 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B3 plano # N # N # # coincide
+pJ_Vy B3 # (fuera del plano) # N # N # # coincide
+pJ_Vz B3 plano # N # N # # coincide
+pJ_T B3 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B3 plano # N·m # N·m # # coincide
+pJ_Mz B3 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B4 plano # N # N # # coincide
+pI_Vy B4 # (fuera del plano) # N # N # # coincide
+pI_Vz B4 plano # N # N # # coincide
+pI_T B4 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B4 plano # N·m # N·m # # coincide
+pI_Mz B4 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B4 plano # N # N # # coincide
+pJ_Vy B4 # (fuera del plano) # N # N # # coincide
+pJ_Vz B4 plano # N # N # # coincide
+pJ_T B4 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B4 plano # N·m # N·m # # coincide
+pJ_Mz B4 # (fuera del plano) # N·m # N·m # # coincide
+Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. Fórmulas sobre el #D con #, y #D frente a plano con #; fuera del plano, frente a #.
+Control de asiento, Uz en N3: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-10 · T-ASI-05: #/# magnitudes, coincide.
+
+== T-ASI-10 · T-ASI-06 — Biempotrada con desplazamiento axial impuesto ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Desplazamiento impuesto Ux = # mm en N3 (tracción).
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Corrida plana del contraste: SUCCEEDED · run_id <uuid> · fórmulas del plano: coincide
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_X N3 +EAδ/L # N # N # # coincide
+R_X N1 −EAδ/L # N # N # # coincide
+N(#+) B1 +EAδ/L # N # N # # coincide
+N(#+) B2 +EAδ/L # N # N # # coincide
+Ux N2 δ/# # m # m # # coincide
+Ux N3 δ # m # m # # coincide
+Ux N1 plano # m # m # # coincide
+Uy N1 # (fuera del plano) # m # m # # coincide
+Uz N1 plano # m # m # # coincide
+Rx N1 # (fuera del plano) # rad # rad # # coincide
+Ry N1 plano # rad # rad # # coincide
+Rz N1 # (fuera del plano) # rad # rad # # coincide
+Ux N2 plano # m # m # # coincide
+Uy N2 # (fuera del plano) # m # m # # coincide
+Uz N2 plano # m # m # # coincide
+Rx N2 # (fuera del plano) # rad # rad # # coincide
+Ry N2 plano # rad # rad # # coincide
+Rz N2 # (fuera del plano) # rad # rad # # coincide
+Ux N3 plano # m # m # # coincide
+Uy N3 # (fuera del plano) # m # m # # coincide
+Uz N3 plano # m # m # # coincide
+Rx N3 # (fuera del plano) # rad # rad # # coincide
+Ry N3 plano # rad # rad # # coincide
+Rz N3 # (fuera del plano) # rad # rad # # coincide
+R_X N1 plano # N # N # # coincide
+R_Y N1 # (fuera del plano) # N # N # # coincide
+R_Z N1 plano # N # N # # coincide
+R_MX N1 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N1 plano # N·m # N·m # # coincide
+R_MZ N1 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N2 # (fuera del plano) # N # N # # coincide
+R_MX N2 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N2 # (fuera del plano) # N·m # N·m # # coincide
+R_X N3 plano # N # N # # coincide
+R_Y N3 # (fuera del plano) # N # N # # coincide
+R_Z N3 plano # N # N # # coincide
+R_MX N3 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N3 plano # N·m # N·m # # coincide
+R_MZ N3 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B1 plano # N # N # # coincide
+pI_Vy B1 # (fuera del plano) # N # N # # coincide
+pI_Vz B1 plano # N # N # # coincide
+pI_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B1 plano # N·m # N·m # # coincide
+pI_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B1 plano # N # N # # coincide
+pJ_Vy B1 # (fuera del plano) # N # N # # coincide
+pJ_Vz B1 plano # N # N # # coincide
+pJ_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B1 plano # N·m # N·m # # coincide
+pJ_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B2 plano # N # N # # coincide
+pI_Vy B2 # (fuera del plano) # N # N # # coincide
+pI_Vz B2 plano # N # N # # coincide
+pI_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B2 plano # N·m # N·m # # coincide
+pI_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B2 plano # N # N # # coincide
+pJ_Vy B2 # (fuera del plano) # N # N # # coincide
+pJ_Vz B2 plano # N # N # # coincide
+pJ_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B2 plano # N·m # N·m # # coincide
+pJ_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. Fórmulas sobre el #D con #, y #D frente a plano con #; fuera del plano, frente a #.
+Control de asiento, Ux en N3: |u − valor|/s = #, cota # (s de los nudos de dominio: la razón es ≥ la evaluada por el control).
+T-ASI-10 · T-ASI-06: #/# magnitudes, coincide.
+
+«coincide» = |calculado − referencia| ≤ tolerancia · max(|referencia|, S), con S la mayor |referencia| de la misma magnitud en el caso. Coincidir con la referencia analítica dentro de la tolerancia no valida la aplicación.
+Las # variantes coinciden con sus fórmulas cerradas, la superposición y el adaptador plano dentro de la tolerancia; no valida la aplicación.
+
+AVISO: aplicación experimental. No apta para justificar obras reales sin validación independiente por profesionales competentes.
+--- stderr
+
+--- 0

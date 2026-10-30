@@ -445,6 +445,33 @@ def test_worker_rejects_settlement_outside_fix() -> None:
     assert response["status"] == "PROTOCOL_ERROR"
 
 
+def penalized_request() -> tuple[PlanarRequest, PlanarSettlement]:
+    """Petición sin asiento con un rodillo inclinado penalizado y un asiento admisible."""
+    frame, a, _b = settled_beam()
+    add_inclined_roller(frame)
+    frame.model.add_nodal_load(frame.case_id, a.id, fz=Quantity.of(-1000.0, "N"))
+    request = translate_planar_xz(frame.model, frame.config()).request
+    assert any(s.penalty for s in request.springs)
+    node = next(f.node for f in request.fixes if f.fixity[1])
+    return request, PlanarSettlement(node, 2, -0.01)
+
+
+def test_protocol_rejects_settlements_with_penalties() -> None:
+    """P1 de E2.3 (como M3 de E2.2): el invariante de D4-bis-A también en el protocolo."""
+    request, settlement = penalized_request()
+    with pytest.raises(ProtocolError, match="penalizaciones"):
+        dataclasses.replace(request, settlements=(settlement,))
+
+
+def test_worker_rejects_settlements_with_penalties() -> None:
+    request, settlement = penalized_request()
+    data = request.to_dict()
+    data["settlements"] = [[settlement.node, settlement.dof, settlement.value]]
+    response = opensees_worker._solve(data)
+    assert response["status"] == "PROTOCOL_ERROR"
+    assert "penalizaciones" in response["message"]
+
+
 # --- Control del asiento (D7) ------------------------------------------------------------
 
 

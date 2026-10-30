@@ -39,3 +39,22 @@ def run_cross_planar(
     if timeout_s not in (None, DEFAULT_TIMEOUT_S):
         return _RUN_CROSS_PLANAR(case_id, timeout_s)
     return _cross_planar(case_id)
+
+
+_RUN_SETTLEMENT_BATTERY = benchmarks.run_settlement_battery
+
+
+@cache
+def _settlement_battery() -> tuple[
+    benchmarks.ReferenceOutcome | benchmarks.SpatialReferenceOutcome, ...
+]:
+    return _RUN_SETTLEMENT_BATTERY()
+
+
+def run_settlement_battery(
+    timeout_s: float | None = None,
+) -> tuple[benchmarks.ReferenceOutcome | benchmarks.SpatialReferenceOutcome, ...]:
+    """Batería T-ASI (plan T-016, E2.3), una vez por sesión con el tiempo límite por defecto."""
+    if timeout_s not in (None, DEFAULT_TIMEOUT_S):
+        return _RUN_SETTLEMENT_BATTERY(timeout_s)
+    return _settlement_battery()

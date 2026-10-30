@@ -130,6 +130,8 @@ def _solve(request: dict[str, Any]) -> dict[str, Any]:
     fixed = {(node, dof) for node, f in request["fixes"] for dof in (1, 2, 3) if f[dof - 1]}
     if any((node, dof) not in fixed for node, dof, _value in request["settlements"]):
         return _response("PROTOCOL_ERROR", "asiento fuera del fix del nudo")
+    if request["settlements"] and any(s[8] for s in request["springs"]):
+        return _response("PROTOCOL_ERROR", "asientos con penalizaciones (D4-bis-A)")
     # Solo tras validar la petición. OpenSeesPy no publica tipos.
     import openseespy.opensees as ops  # type: ignore[import-untyped]  # noqa: PLC0415
 

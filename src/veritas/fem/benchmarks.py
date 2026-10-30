@@ -1,5 +1,6 @@
 """Referencias analíticas T-FEM-001…004 (plan T-009, D1-A), T-CON-REF-01…04 (T-010, D6) y
-T-FEM3D-01…05 con el contraste cruzado espacial-plano (T-018, D1 y D8).
+T-FEM3D-01…05 con el contraste cruzado espacial-plano (T-018, D1 y D8) y la batería de
+asientos T-ASI-01…10 (T-016, E2.3).
 
 Cada caso plano construye su modelo XZ, lo analiza, normaliza los resultados (T-008) y los
 compara con fórmulas cerradas de Euler-Bernoulli derivadas por cuerpo libre en el plan.
@@ -18,8 +19,9 @@ comprueba que sus referencias coinciden con los literales del plan.
 """
 
 import math
+import sys
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 from uuid import UUID
 
@@ -60,6 +62,12 @@ from veritas.fem.spatial import (
     analyze_spatial,
     normalize_spatial,
 )
+from veritas.fem.spatial.postconditions import (
+    CHAIN_ALIAS_FACTOR,
+    SETTLEMENT_COMPONENT,
+    coupled_scales,
+)
+from veritas.fem.spatial.protocol import SpatialRequest
 
 E: Final = 210e9  # Pa
 G: Final = 81e9  # Pa
@@ -228,6 +236,14 @@ class _Case:
         )
         self.ids[label] = member.id
         return member.id
+
+    def settle(self, node: str, **components: float) -> None:
+        """Asiento en el caso del modelo: ux, uy y uz en m; rx, ry y rz en rad (T-016)."""
+        quantities = {
+            name: u.Quantity.of(value, "rad" if name.startswith("r") else "m")
+            for name, value in components.items()
+        }
+        self.model.add_support_settlement(self.load_case.id, self.ids[node], **quantities)
 
     def support(
         self,
@@ -1779,3 +1795,533 @@ def run_cross_planar(
     if case_id not in CROSS_CASES:
         raise ValueError(f"caso de contraste desconocido: {case_id}")
     return tuple(_run_cross_spec(spec, timeout_s) for spec in SPECS[case_id])
+
+
+# === Batería de asientos T-ASI (plan T-016, E2.3) ======================================
+#
+# δ y θ son valores prescritos con signo en base global (ADR-001; δ < 0 es un descenso) y
+# la reacción es la acción del apoyo que los impone. Signos por cuerpo libre en el plano
+# X–Z con φ = dUz/dX = −Ry (``tests/test_fem_settlements.py``) y en X–Y con φ = +Rz
+# (``tests/test_fem3d_settlements.py``); q(0+) = −pI y q(L−) = pJ. Las referencias de esos
+# tests están en fracciones; ``tests/test_settlement_reference.py`` comprueba que las de
+# aquí coinciden con ellas.
+
+SETTLEMENT: Final = -0.01  # m, δ (descenso)
+SETTLEMENT_ROTATION: Final = 0.002  # rad, θ
+SETTLEMENT_AXIAL: Final = 0.001  # m, T-ASI-06 (alargamiento)
+SETTLEMENT_CASES: Final = tuple(f"T-ASI-{index:02d}" for index in range(1, 11))
+PLANAR_SETTLEMENT_CASES: Final = SETTLEMENT_CASES[:6]  # 01-06, también en T-ASI-10
+SPATIAL_SETTLEMENT_CASES: Final = ("T-ASI-07", "T-ASI-08")
+SUPERPOSITION_CASE: Final = "T-ASI-09"
+SETTLEMENT_CROSS_CASE: Final = "T-ASI-10"
+SUPERPOSED: Final = "A + Q"  # fórmula de una fila de superposición
+
+SETTLEMENT_HYPOTHESES: Final = (
+    Text.of("benchmark.hypothesis_settlement"),
+    Text.of(
+        "benchmark.hypothesis_settlement_values",
+        delta_mm=SETTLEMENT * 1000,
+        theta=SETTLEMENT_ROTATION,
+        axial_mm=SETTLEMENT_AXIAL * 1000,
+    ),
+    SPATIAL_HYPOTHESES[1],
+)
+
+_D: Final = SETTLEMENT
+_TH: Final = SETTLEMENT_ROTATION
+_EIZ: Final = E * IZ_3D
+_GJ: Final = G * J_3D
+_SETTLED_BEAM: Final = {"span": SPAN, "delta_mm": SETTLEMENT * 1000}
+
+
+def _settled_beam(case: _Case, support_j: Restraints, label_j: str) -> None:
+    """N1-N2-N3 de L = 4 m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1."""
+    case.node("N1", 0.0)
+    case.node("N2", SPAN / 2)
+    case.node("N3", SPAN)
+    case.member("B1", "N1", "N2")
+    case.member("B2", "N2", "N3")
+    case.support("N1", fixed_restraints(), "Empotramiento 1")
+    case.support("N3", support_j, label_j)
+
+
+def _build_asi01(case: _Case) -> None:
+    _settled_beam(case, fixed_restraints(), "Empotramiento 2")
+    case.settle("N3", uz=_D)
+
+
+def _rows_asi01(c: _Case) -> list[Row]:
+    force, moment = 12 * EI * _D / SPAN**3, 6 * EI * _D / SPAN**2
+    return [
+        ("R_Z N3", "+12EIδ/L³", FORCE, force, c.reaction("N3", FZ)),
+        ("R_Z N1", "−12EIδ/L³", FORCE, -force, c.reaction("N1", FZ)),
+        ("R_X N1", "0", FORCE, 0.0, c.reaction("N1", FX)),
+        ("R_My N1", "+6EIδ/L²", MOMENT, moment, c.reaction("N1", MY)),
+        ("R_My N3", "+6EIδ/L²", MOMENT, moment, c.reaction("N3", MY)),
+        ("My(0+) B1", "−6EIδ/L²", MOMENT, -moment, c.cut("B1", MY, at_end=False)),
+        ("Uz N3", "δ", DISP, _D, c.disp("N3", UZ)),
+        ("Uz N2", "δ/2", DISP, _D / 2, c.disp("N2", UZ)),
+        ("Ry N2", "−3δ/(2L)", ROT, -3 * _D / (2 * SPAN), c.disp("N2", RY)),
+    ]
+
+
+def _build_asi02(case: _Case) -> None:
+    _settled_beam(case, pinned_restraints(), "Articulación")
+    case.settle("N3", uz=_D)
+
+
+def _rows_asi02(c: _Case) -> list[Row]:
+    force, moment = 3 * EI * _D / SPAN**3, 3 * EI * _D / SPAN**2
+    return [
+        ("R_Z N3", "+3EIδ/L³", FORCE, force, c.reaction("N3", FZ)),
+        ("R_Z N1", "−3EIδ/L³", FORCE, -force, c.reaction("N1", FZ)),
+        ("R_My N1", "+3EIδ/L²", MOMENT, moment, c.reaction("N1", MY)),
+        ("My(0+) B1", "−3EIδ/L²", MOMENT, -moment, c.cut("B1", MY, at_end=False)),
+        ("Uz N3", "δ", DISP, _D, c.disp("N3", UZ)),
+        ("Ry N3", "−3δ/(2L)", ROT, -3 * _D / (2 * SPAN), c.disp("N3", RY)),
+    ]
+
+
+def _build_asi03(case: _Case) -> None:
+    case.node("N1", 0.0)
+    case.node("N2", SPAN / 2)
+    case.node("N3", SPAN)
+    case.member("B1", "N1", "N2")
+    case.member("B2", "N2", "N3")
+    case.support("N1", pinned_restraints(), "Articulación")
+    case.support("N3", roller_restraints(SupportDof.UZ), "Rodillo")
+    case.settle("N3", uz=_D)
+
+
+def _rows_asi03(c: _Case) -> list[Row]:
+    rotation = -_D / SPAN
+    return [
+        ("R_Z N1", "0", FORCE, 0.0, c.reaction("N1", FZ)),
+        ("R_Z N3", "0", FORCE, 0.0, c.reaction("N3", FZ)),
+        ("R_X N1", "0", FORCE, 0.0, c.reaction("N1", FX)),
+        ("My(L−) B1", "0", MOMENT, 0.0, c.cut("B1", MY, at_end=True)),
+        ("Vz(0+) B1", "0", FORCE, 0.0, c.cut("B1", VZ, at_end=False)),
+        ("Uz N2", "δ/2", DISP, _D / 2, c.disp("N2", UZ)),
+        ("Uz N3", "δ", DISP, _D, c.disp("N3", UZ)),
+        ("Ry N1", "−δ/L", ROT, rotation, c.disp("N1", RY)),
+        ("Ry N2", "−δ/L", ROT, rotation, c.disp("N2", RY)),
+        ("Ry N3", "−δ/L", ROT, rotation, c.disp("N3", RY)),
+    ]
+
+
+def _build_asi04(case: _Case) -> None:
+    _settled_beam(case, fixed_restraints(), "Empotramiento 2")
+    case.settle("N1", ry=_TH)
+
+
+def _rows_asi04(c: _Case) -> list[Row]:
+    near, far, shear = 4 * EI * _TH / SPAN, 2 * EI * _TH / SPAN, 6 * EI * _TH / SPAN**2
+    return [
+        ("R_My N1", "+4EIθ/L", MOMENT, near, c.reaction("N1", MY)),
+        ("R_My N3", "+2EIθ/L", MOMENT, far, c.reaction("N3", MY)),
+        ("R_Z N1", "−6EIθ/L²", FORCE, -shear, c.reaction("N1", FZ)),
+        ("R_Z N3", "+6EIθ/L²", FORCE, shear, c.reaction("N3", FZ)),
+        ("My(0+) B1", "−4EIθ/L", MOMENT, -near, c.cut("B1", MY, at_end=False)),
+        ("Ry N1", "θ", ROT, _TH, c.disp("N1", RY)),
+    ]
+
+
+def _build_asi05(case: _Case) -> None:
+    for index, x in enumerate((0.0, SPAN / 2, SPAN, 1.5 * SPAN, 2 * SPAN), start=1):
+        case.node(f"N{index}", x)
+    for index in range(1, 5):
+        case.member(f"B{index}", f"N{index}", f"N{index + 1}")
+    case.support("N1", pinned_restraints(), "Articulación")
+    case.support("N3", roller_restraints(SupportDof.UZ), "Rodillo central")
+    case.support("N5", roller_restraints(SupportDof.UZ), "Rodillo extremo")
+    case.settle("N3", uz=_D)
+
+
+def _rows_asi05(c: _Case) -> list[Row]:
+    force, moment = 6 * EI * _D / SPAN**3, 3 * EI * _D / SPAN**2
+    return [
+        ("R_Z N3", "+6EIδ/L³", FORCE, force, c.reaction("N3", FZ)),
+        ("R_Z N1", "−3EIδ/L³", FORCE, -force / 2, c.reaction("N1", FZ)),
+        ("R_Z N5", "−3EIδ/L³", FORCE, -force / 2, c.reaction("N5", FZ)),
+        ("My(L−) B2", "+3EIδ/L²", MOMENT, moment, c.cut("B2", MY, at_end=True)),
+        ("Uz N3", "δ", DISP, _D, c.disp("N3", UZ)),
+    ]
+
+
+def _build_asi06(case: _Case) -> None:
+    _settled_beam(case, fixed_restraints(), "Empotramiento 2")
+    case.settle("N3", ux=SETTLEMENT_AXIAL)
+
+
+def _rows_asi06(c: _Case) -> list[Row]:
+    delta = SETTLEMENT_AXIAL
+    axial = EA * delta / SPAN
+    return [
+        ("R_X N3", "+EAδ/L", FORCE, axial, c.reaction("N3", FX)),
+        ("R_X N1", "−EAδ/L", FORCE, -axial, c.reaction("N1", FX)),
+        ("N(0+) B1", "+EAδ/L", FORCE, axial, c.cut("B1", N, at_end=False)),
+        ("N(0+) B2", "+EAδ/L", FORCE, axial, c.cut("B2", N, at_end=False)),
+        ("Ux N2", "δ/2", DISP, delta / 2, c.disp("N2", UX)),
+        ("Ux N3", "δ", DISP, delta, c.disp("N3", UX)),
+    ]
+
+
+def _build_asi07(case: _Case) -> None:
+    _settled_beam(case, fixed_restraints(), "Empotramiento 2")
+    case.settle("N3", rx=_TH)
+
+
+def _rows_asi07(c: _Case) -> list[Row]:
+    torque = _GJ * _TH / SPAN
+    return [
+        ("R_MX N3", "+GJθ/L", MOMENT, torque, c.reaction("N3", RX)),
+        ("R_MX N1", "−GJθ/L", MOMENT, -torque, c.reaction("N1", RX)),
+        ("T(0+) B1", "+GJθ/L", MOMENT, torque, c.cut("B1", T, at_end=False)),
+        ("T(0+) B2", "+GJθ/L", MOMENT, torque, c.cut("B2", T, at_end=False)),
+        ("Rx N3", "θ", ROT, _TH, c.disp("N3", RX)),
+        ("Rx N2", "θ/2", ROT, _TH / 2, c.disp("N2", RX)),
+    ]
+
+
+def _build_asi08a(case: _Case) -> None:
+    _settled_beam(case, fixed_restraints(), "Empotramiento 2")
+    _end(case, "B2", MemberEnd.J, EndConnection.rigid().with_dof(Dof.RZ, DofState.RELEASED))
+    case.settle("N3", uy=_D)
+
+
+def _rows_asi08a(c: _Case) -> list[Row]:
+    force, moment = 3 * _EIZ * _D / SPAN**3, 3 * _EIZ * _D / SPAN**2
+    return [
+        ("R_Y N3", "+3EIzδ/L³", FORCE, force, c.reaction("N3", UY)),
+        ("R_Y N1", "−3EIzδ/L³", FORCE, -force, c.reaction("N1", UY)),
+        ("R_MZ N1", "−3EIzδ/L²", MOMENT, -moment, c.reaction("N1", RZ)),
+        ("R_MZ N3", "0", MOMENT, 0.0, c.reaction("N3", RZ)),
+        ("Uy N3", "δ", DISP, _D, c.disp("N3", UY)),
+    ]
+
+
+_K_END: Final = _EIZ / SPAN  # N·m/rad, k = EIz/L
+
+
+def _build_asi08b(case: _Case) -> None:
+    _settled_beam(case, fixed_restraints(), "Empotramiento 2")
+    spring = u.Quantity(_K_END, Dof.RZ.stiffness_dimension)
+    _end(case, "B2", MemberEnd.J, EndConnection.semi_rigid(Dof.RZ, spring))
+    case.settle("N3", uy=_D)
+
+
+def _rows_asi08b(c: _Case) -> list[Row]:
+    # Condensación del giro ψ del extremo J: (4EIz/L + k)·ψ = 6EIzδ/L² → ψ = 6δ/(5L).
+    force = 24 * _EIZ * _D / (5 * SPAN**3)
+    near, far = -18 * _EIZ * _D / (5 * SPAN**2), -6 * _EIZ * _D / (5 * SPAN**2)
+    return [
+        ("R_Y N3", "+24EIzδ/(5L³)", FORCE, force, c.reaction("N3", UY)),
+        ("R_Y N1", "−24EIzδ/(5L³)", FORCE, -force, c.reaction("N1", UY)),
+        ("R_MZ N1", "−18EIzδ/(5L²)", MOMENT, near, c.reaction("N1", RZ)),
+        ("R_MZ N3", "−6EIzδ/(5L²)", MOMENT, far, c.reaction("N3", RZ)),
+        ("Uy N3", "δ", DISP, _D, c.disp("N3", UY)),
+    ]
+
+
+# Escalas de T-ASI-03 (isostática: todas las fuerzas y momentos de referencia son 0).
+_SETTLED_SCALES: Final = {
+    FORCE: 3 * EI * abs(SETTLEMENT) / SPAN**3,
+    MOMENT: 3 * EI * abs(SETTLEMENT) / SPAN**2,
+}
+
+
+# Escala de momentos de T-ASI-06 (solo axil): N·L = EAδ, como P·L en T-FEM-001 (T-010, M4).
+# Solo tiene efecto en el contraste T-ASI-10, donde todos los momentos de referencia son 0.
+_AXIAL_SCALES: Final = {MOMENT: EA * SETTLEMENT_AXIAL}
+
+
+def _settlement_spec(  # noqa: PLR0913, PLR0917 (campos de un _Spec)
+    case_id: str,
+    name: str,
+    build: Callable[[_Case], None],
+    rows: Callable[[_Case], list[Row]],
+    params: Mapping[str, ParamValue],
+    scales: Mapping[QuantityKind, float] | None = None,
+) -> _Spec:
+    return _Spec(
+        case_id,
+        Text.of(f"benchmark.title_settlement_{name}"),
+        Text.of(f"benchmark.description_settlement_{name}", **params),
+        TOL_EXACT,
+        build,
+        rows,
+        _no_notes,
+        scales,
+    )
+
+
+_ROTATION: Final = {"span": SPAN, "theta": SETTLEMENT_ROTATION}
+
+SETTLEMENT_SPECS: Final[dict[str, tuple[_Spec, ...]]] = {
+    "T-ASI-01": (
+        _settlement_spec("T-ASI-01", "fixed_fixed", _build_asi01, _rows_asi01, _SETTLED_BEAM),
+    ),
+    "T-ASI-02": (
+        _settlement_spec("T-ASI-02", "propped", _build_asi02, _rows_asi02, _SETTLED_BEAM),
+    ),
+    "T-ASI-03": (
+        _settlement_spec(
+            "T-ASI-03",
+            "simply_supported",
+            _build_asi03,
+            _rows_asi03,
+            _SETTLED_BEAM,
+            _SETTLED_SCALES,
+        ),
+    ),
+    "T-ASI-04": (_settlement_spec("T-ASI-04", "rotation", _build_asi04, _rows_asi04, _ROTATION),),
+    "T-ASI-05": (
+        _settlement_spec("T-ASI-05", "two_span", _build_asi05, _rows_asi05, _SETTLED_BEAM),
+    ),
+    "T-ASI-06": (
+        _settlement_spec(
+            "T-ASI-06",
+            "axial",
+            _build_asi06,
+            _rows_asi06,
+            {"span": SPAN, "delta_mm": SETTLEMENT_AXIAL * 1000},
+            _AXIAL_SCALES,
+        ),
+    ),
+    "T-ASI-07": (_settlement_spec("T-ASI-07", "torsion", _build_asi07, _rows_asi07, _ROTATION),),
+    "T-ASI-08": (
+        _settlement_spec("T-ASI-08 a", "released", _build_asi08a, _rows_asi08a, _SETTLED_BEAM),
+        _settlement_spec(
+            "T-ASI-08 b",
+            "spring_end",
+            _build_asi08b,
+            _rows_asi08b,
+            {**_SETTLED_BEAM, "stiffness": _K_END},
+        ),
+    ),
+}
+
+
+def _settlement_notes(run: SpatialAnalysisRun, labels: Mapping[UUID, str]) -> list[Text]:
+    """Obs. 5 de la revisión de E2.2: |u − valor|/s de cada GDL asentado en 3D.
+
+    s = (s_u, s_θ) de ``coupled_scales`` sobre los nudos de dominio (``raw`` no lleva los
+    aux), que no supera la de ``link_scales`` del control: la razón publicada es ≥ la que
+    evaluó el control y se compara con la misma cota ``CHAIN_ALIAS_FACTOR``·eps.
+    """
+    if run.raw is None or run.request_json is None:
+        return []
+    request = SpatialRequest.from_json(run.request_json)
+    tags = {UUID(node.entity_id): node.tag for node in request.nodes}
+    displacement = {tags[item.node_id]: item.displacement for item in run.raw.nodes}
+    scales = coupled_scales(request, displacement)
+    names = {tag: labels.get(node_id, str(node_id)) for node_id, tag in tags.items()}
+    return [
+        Text.of(
+            "benchmark.note_settlement_alias",
+            component=SETTLEMENT_COMPONENT[item.dof - 1],
+            node=names[item.node],
+            ratio=abs(displacement[item.node][item.dof - 1] - item.value)
+            / scales[(item.dof - 1) // 3],
+            bound=CHAIN_ALIAS_FACTOR * sys.float_info.epsilon,
+        )
+        for item in request.settlements
+    ]
+
+
+def _with_settlement_notes(outcome: SpatialReferenceOutcome) -> SpatialReferenceOutcome:
+    notes = (*outcome.notes, *_settlement_notes(outcome.run, outcome.labels))
+    return replace(outcome, notes=notes)
+
+
+def run_settlement_reference(
+    case_id: str, timeout_s: float | None = None
+) -> tuple[ReferenceOutcome | SpatialReferenceOutcome, ...]:
+    """T-ASI-01…06 con el adaptador plano y T-ASI-07 y 08 con el espacial (D11-A)."""
+    if case_id in PLANAR_SETTLEMENT_CASES:
+        return tuple(_run_spec(spec, timeout_s) for spec in SETTLEMENT_SPECS[case_id])
+    if case_id in SPATIAL_SETTLEMENT_CASES:
+        return tuple(
+            _with_settlement_notes(_run_spatial_spec(spec, timeout_s))
+            for spec in SETTLEMENT_SPECS[case_id]
+        )
+    raise ValueError(f"caso de asiento desconocido: {case_id}")
+
+
+def run_settlement_cross(timeout_s: float | None = None) -> tuple[SpatialReferenceOutcome, ...]:
+    """T-ASI-10: T-ASI-01…06 en 3D frente a sus fórmulas y al adaptador plano (D1 de T-018)."""
+    outcomes = (
+        _run_cross_spec(spec, timeout_s)
+        for item in PLANAR_SETTLEMENT_CASES
+        for spec in SETTLEMENT_SPECS[item]
+    )
+    return tuple(
+        _with_settlement_notes(replace(o, case_id=f"{SETTLEMENT_CROSS_CASE} · {o.case_id}"))
+        for o in outcomes
+    )
+
+
+# --- T-ASI-09: superposición ------------------------------------------------------------
+
+# Tres corridas del mismo modelo: solo el asiento (A), solo la carga (Q) y las dos acciones
+# en un único caso (A+Q). No es una combinación (F5A): D3 admite un asiento por apoyo y caso.
+SUPERPOSITION_PARTS: Final = ("A", "Q", "A+Q")
+
+
+def _build_asi09(part: str) -> Callable[[_Case], None]:
+    def build(case: _Case) -> None:
+        _settled_beam(case, fixed_restraints(), "Empotramiento 2")
+        if "A" in part:
+            case.settle("N3", uz=_D)
+        if "Q" in part:
+            for member in ("B1", "B2"):
+                case.model.add_member_uniform_load(
+                    case.load_case.id, case.ids[member], qz=u.Quantity.of(-W, "N/m")
+                )
+
+    return build
+
+
+def _rows_asi09(c: _Case) -> list[Row]:
+    """Fórmulas de la corrida conjunta: T-ASI-01 más la biempotrada con q hacia −Z."""
+    force, moment = 12 * EI * _D / SPAN**3, 6 * EI * _D / SPAN**2
+    half, end = W * SPAN / 2, W * SPAN**2 / 12
+    sag = _D / 2 - W * SPAN**4 / (384 * EI)
+    return [
+        ("R_Z N3", "+wL/2 + 12EIδ/L³", FORCE, half + force, c.reaction("N3", FZ)),
+        ("R_Z N1", "+wL/2 − 12EIδ/L³", FORCE, half - force, c.reaction("N1", FZ)),
+        ("R_My N1", "−wL²/12 + 6EIδ/L²", MOMENT, -end + moment, c.reaction("N1", MY)),
+        ("R_My N3", "+wL²/12 + 6EIδ/L²", MOMENT, end + moment, c.reaction("N3", MY)),
+        ("Uz N2", "δ/2 − wL⁴/(384EI)", DISP, sag, c.disp("N2", UZ)),
+        ("Ry N2", "−3δ/(2L)", ROT, -3 * _D / (2 * SPAN), c.disp("N2", RY)),
+    ]
+
+
+_SUM_NAMES: Final = {
+    "u": ((_D_NAMES,), _U_KINDS),
+    "R": ((_R_NAMES,), _F_KINDS),
+    "p": (tuple(tuple(f"{end}_{name}" for name in _M_NAMES) for end in ("pI", "pJ")), _F_KINDS),
+}
+
+
+def _vectors(case: _Case) -> dict[tuple[str, str], tuple[Vector6, ...]]:
+    results, labels = case._res(), case.labels
+    vectors: dict[tuple[str, str], tuple[Vector6, ...]]
+    vectors = {("u", labels[n.node_id]): (n.displacement,) for n in results.nodes}
+    vectors |= {("R", labels[r.node_id]): (r.global_,) for r in results.reactions}
+    vectors |= {("p", labels[m.member_id]): (m.p_i, m.p_j) for m in results.members}
+    return vectors
+
+
+def _superposition_rows(alone: _Case, loaded: _Case, joint: _Case) -> list[Row]:
+    """A+Q frente a A + Q en cada componente publicada (calculada) de las dos separadas."""
+    first, second, both = _vectors(alone), _vectors(loaded), _vectors(joint)
+    rows: list[Row] = []
+    for key in sorted(both):
+        prefix, label = key
+        names, kinds = _SUM_NAMES[prefix]
+        for row_names, a, q, j in zip(names, first[key], second[key], both[key], strict=True):
+            for index in range(6):
+                va, vq = a.components[index].value, q.components[index].value
+                if va is not None and vq is not None:
+                    value = j.components[index].value
+                    rows.append(
+                        (f"{row_names[index]} {label}", SUPERPOSED, kinds[index], va + vq, value)
+                    )
+    return rows
+
+
+def _superposition_checks(parts: Sequence[_Case]) -> tuple[ReferenceCheck, ...]:
+    """Fórmulas cerradas de A+Q (referencia independiente) y linealidad A+Q = A + Q."""
+    alone, loaded, joint = parts
+    formulas = evaluate(_rows_asi09(joint), TOL_EXACT)
+    return formulas + evaluate(_superposition_rows(alone, loaded, joint), TOL_EXACT)
+
+
+_SUPERPOSITION_TITLE: Final = Text.of("benchmark.title_settlement_superposition")
+_SUPERPOSITION_DESCRIPTION: Final = Text.of(
+    "benchmark.description_settlement_superposition",
+    span=SPAN,
+    delta_mm=SETTLEMENT * 1000,
+    load_kn_m=W / 1000,
+)
+_SUPERPOSITION_NOTE: Final = Text.of("benchmark.note_settlement_superposition")
+
+
+def _planar_run(
+    case: _Case, timeout_s: float | None
+) -> tuple[AnalysisRun, PlanarResults | None, DiagnosticError | None]:
+    config = AnalysisConfiguration(case.load_case.id)
+    if timeout_s is not None:
+        config = AnalysisConfiguration(case.load_case.id, timeout_s=timeout_s)
+    run = analyze_planar_xz(case.model, config)
+    results, failure = None, None
+    if run.status is RunStatus.SUCCEEDED:
+        try:
+            results = normalize_planar_xz(run, case.model)
+        except DiagnosticError as error:
+            failure = error
+    return run, results, failure
+
+
+def _planar_superposition(timeout_s: float | None) -> ReferenceOutcome:
+    case_id = f"{SUPERPOSITION_CASE} plano"
+    title, description = _SUPERPOSITION_TITLE, _SUPERPOSITION_DESCRIPTION
+    parts: list[_Case] = []
+    for part in SUPERPOSITION_PARTS:
+        case = _Case()
+        _build_asi09(part)(case)
+        run, results, failure = _planar_run(case, timeout_s)
+        if results is None:  # Sin una de las tres no hay contraste: se publica su fallo.
+            labels = case.labels
+            return ReferenceOutcome(
+                f"{case_id} ({part})", title, description, labels, run, None, failure, (), ()
+            )
+        case.results = results
+        parts.append(case)
+        joint = (run, results)
+    checks = _superposition_checks(parts)
+    notes = (_SUPERPOSITION_NOTE,)
+    labels = parts[-1].labels
+    return ReferenceOutcome(case_id, title, description, labels, *joint, None, checks, notes)
+
+
+def _spatial_superposition(timeout_s: float | None) -> SpatialReferenceOutcome:
+    case_id = f"{SUPERPOSITION_CASE} espacial"
+    title, description = _SUPERPOSITION_TITLE, _SUPERPOSITION_DESCRIPTION
+    parts: list[_Case] = []
+    for part in SUPERPOSITION_PARTS:
+        case = _Case()
+        _build_asi09(part)(case)
+        run, results, failure = _spatial_run(case, timeout_s)
+        if results is None:
+            labels = case.labels
+            return SpatialReferenceOutcome(
+                f"{case_id} ({part})", title, description, labels, run, None, failure, (), ()
+            )
+        case.results = results
+        parts.append(case)
+        joint = (run, results)
+    checks = _superposition_checks(parts)
+    labels = parts[-1].labels
+    notes = (_SUPERPOSITION_NOTE, *_settlement_notes(joint[0], labels))
+    return SpatialReferenceOutcome(case_id, title, description, labels, *joint, None, checks, notes)
+
+
+def run_settlement_superposition(
+    timeout_s: float | None = None,
+) -> tuple[ReferenceOutcome, SpatialReferenceOutcome]:
+    """T-ASI-09 con el adaptador plano y con el espacial (E2.3-b)."""
+    return _planar_superposition(timeout_s), _spatial_superposition(timeout_s)
+
+
+def run_settlement_battery(
+    timeout_s: float | None = None,
+) -> tuple[ReferenceOutcome | SpatialReferenceOutcome, ...]:
+    """Batería completa de ``veritas analyze asientos``: T-ASI-01…10, en ese orden."""
+    outcomes: list[ReferenceOutcome | SpatialReferenceOutcome] = []
+    for case_id in (*PLANAR_SETTLEMENT_CASES, *SPATIAL_SETTLEMENT_CASES):
+        outcomes += run_settlement_reference(case_id, timeout_s)
+    outcomes += run_settlement_superposition(timeout_s)
+    outcomes += run_settlement_cross(timeout_s)
+    return tuple(outcomes)

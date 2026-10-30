@@ -354,7 +354,10 @@ class PlanarRequest:
 
 def _check_settlements(request: PlanarRequest) -> None:
     """Validación estricta (plan T-016, D6): GDL 1-3 en el ``fix`` del nudo, sin repetir,
-    y un giro asentado nunca figura en ``orphan_fixes``."""
+    un giro asentado nunca figura en ``orphan_fixes`` y no hay resortes penalizados
+    (D4-bis-A; P1 de E2.3, como M3 de E2.2 en el espacial)."""
+    if request.settlements and any(s.penalty for s in request.springs):
+        raise ProtocolError("asientos con penalizaciones (D4-bis-A)")
     fixity = {fix.node: fix.fixity for fix in request.fixes}
     seen: set[tuple[int, int]] = set()
     for settlement in request.settlements:

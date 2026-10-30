@@ -539,6 +539,79 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Fórmulas sobre el 3D con 1e-9, y 3D frente a plano con {tolerance:g}; fuera del plano, "
         "frente a 0."
     ),
+    "benchmark.hypothesis_settlement": (
+        "Asientos impuestos (plan T-016): Euler-Bernoulli sin deformación por cortante y "
+        "torsión de Saint-Venant, estática lineal, secciones constantes; dos elementos por vano. "
+        "Fórmulas planas con EI = E·b·h³/12 y EA = E·b·h; espaciales con Iz y J de la sección."
+    ),
+    "benchmark.hypothesis_settlement_values": (
+        "δ = {delta_mm:g} mm, θ = {theta:g} rad y δ axial = {axial_mm:g} mm, valores "
+        "prescritos con signo en base global (ADR-001; δ < 0 es un descenso). La reacción es "
+        "la acción del apoyo que los impone."
+    ),
+    "benchmark.title_settlement_fixed_fixed": "Biempotrada con asiento vertical",
+    "benchmark.title_settlement_propped": "Empotrada-articulada con asiento vertical",
+    "benchmark.title_settlement_simply_supported": "Biapoyada con asiento vertical (isostática)",
+    "benchmark.title_settlement_rotation": "Biempotrada con giro impuesto",
+    "benchmark.title_settlement_two_span": "Continua de dos vanos con asiento del apoyo central",
+    "benchmark.title_settlement_axial": "Biempotrada con desplazamiento axial impuesto",
+    "benchmark.title_settlement_torsion": "Biempotrada con giro de torsión impuesto (3D)",
+    "benchmark.title_settlement_released": "Biempotrada con asiento en Uy y Rz liberado en J (3D)",
+    "benchmark.title_settlement_spring_end": (
+        "Biempotrada con asiento en Uy y resorte de giro en J (3D)"
+    ),
+    "benchmark.title_settlement_superposition": "Superposición de asiento y carga uniforme",
+    "benchmark.description_settlement_fixed_fixed": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Asiento "
+        "Uz = {delta_mm:g} mm en N3."
+    ),
+    "benchmark.description_settlement_propped": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y articulada en "
+        "N3. Asiento Uz = {delta_mm:g} mm en N3."
+    ),
+    "benchmark.description_settlement_simply_supported": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), articulación en N1 y rodillo "
+        "vertical (Uz) en N3. Asiento Uz = {delta_mm:g} mm en N3: giro de sólido rígido, sin "
+        "esfuerzos ni reacciones (escalas declaradas 3EI|δ|/L³ y 3EI|δ|/L²)."
+    ),
+    "benchmark.description_settlement_rotation": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Giro "
+        "impuesto Ry = {theta:g} rad en N1."
+    ),
+    "benchmark.description_settlement_two_span": (
+        "Continua de dos vanos de {span:g} m en +X (B1…B4, nudos N1…N5), articulación en N1 y "
+        "rodillos verticales en N3 y N5. Asiento Uz = {delta_mm:g} mm en el apoyo central N3."
+    ),
+    "benchmark.description_settlement_axial": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. "
+        "Desplazamiento impuesto Ux = +{delta_mm:g} mm en N3 (tracción)."
+    ),
+    "benchmark.description_settlement_torsion": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Giro "
+        "impuesto Rx = {theta:g} rad en N3; T = GJθ/L."
+    ),
+    "benchmark.description_settlement_released": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3, con Rz "
+        "liberado en el extremo J de B2. Asiento Uy = {delta_mm:g} mm en N3 (flexión en Iz)."
+    ),
+    "benchmark.description_settlement_spring_end": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3, con resorte "
+        "de giro Rz k = EIz/L = {stiffness:.6g} N·m/rad en el extremo J de B2 (nudo auxiliar). "
+        "Asiento Uy = {delta_mm:g} mm en N3; referencia por condensación del giro del extremo."
+    ),
+    "benchmark.description_settlement_superposition": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3. Tres "
+        "corridas: A, asiento Uz = {delta_mm:g} mm en N3; Q, q = −{load_kn_m:g} kN/m en Z "
+        "sobre B1 y B2; A+Q, las dos acciones en un mismo caso (no es una combinación)."
+    ),
+    "benchmark.note_settlement_alias": (
+        "Control de asiento, {component} en {node}: |u − valor|/s = {ratio:.1e}, cota "
+        "{bound:.1e} (s de los nudos de dominio: la razón es ≥ la evaluada por el control)."
+    ),
+    "benchmark.note_settlement_superposition": (
+        "Filas «A + Q»: la corrida A+Q frente a la suma de las corridas A y Q en cada "
+        "componente calculada; las fórmulas cerradas son la referencia independiente."
+    ),
     "section.property_unavailable": "La propiedad {property} de la sección no está disponible.",
     "section.property_unrepresentable": (
         "La propiedad {property} no es representable como valor positivo en doble precisión "
