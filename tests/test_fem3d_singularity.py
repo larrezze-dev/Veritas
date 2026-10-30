@@ -40,6 +40,8 @@ from veritas.fem.spatial.protocol import (
     Six,
     SpatialAuxNode,
     SpatialBeamLoad,
+    SpatialEndEqual,
+    SpatialEndSpring,
     SpatialOrphanFix,
     SpatialRequest,
     SpatialWorkerResponse,
@@ -313,27 +315,72 @@ MALFORMED = [
             r, springs=(dataclasses.replace(r.springs[0], axis_yp=r.springs[0].axis_x),)
         ),
     ),
-    # Defensa transitoria de E2.1: extremos del protocolo v2 hasta la salvaguarda de E2.3.
+    # Extremos (E2.3, R10): referencias rotas o valores nulos sin su marca.
     (
-        "liberación (E2.3)",
-        lambda r: dataclasses.replace(r, beams=(dataclasses.replace(r.beams[0], release_y=2),)),
-    ),
-    (
-        "torsión liberada (E2.3)",
+        "J nula sin marca",
         lambda r: dataclasses.replace(
-            r,
-            beams=(dataclasses.replace(r.beams[0], torsion_constant=0.0, torsion_released=True),),
+            r, beams=(dataclasses.replace(r.beams[0], torsion_constant=0.0),)
         ),
     ),
     (
-        "aux (E2.3)",
-        lambda r: dataclasses.replace(r, aux_nodes=(SpatialAuxNode(99, 2, 1, "J"),)),
+        "marca axial con A > 0",
+        lambda r: dataclasses.replace(
+            r, beams=(dataclasses.replace(r.beams[0], axial_released=True),)
+        ),
     ),
+    ("aux con maestro ajeno", lambda r: _with_aux(r, master=r.beams[0].node_i)),
+    ("aux de barra inexistente", lambda r: _with_aux(r, beam=999)),
+    ("aux con tag de nudo", lambda r: _with_aux(r, tag=r.beams[0].node_i)),
+    ("aux con tag de tierra", lambda r: _with_aux(r, tag=r.springs[0].ground)),
+    ("dos aux en un extremo", lambda r: _with_aux(r, twice=True)),
+    ("equalDOF sin aux", lambda r: _with_aux(r, equals=(SpatialEndEqual(998, (1, 2, 3)),))),
     (
-        "huérfano (E2.3)",
-        lambda r: dataclasses.replace(r, orphan_fixes=(SpatialOrphanFix(2, (1, 0, 0)),)),
+        "equalDOF repetido",
+        lambda r: _with_aux(
+            r, equals=(SpatialEndEqual(AUX_TAG, (1, 2, 3)), SpatialEndEqual(AUX_TAG, (4, 5, 6)))
+        ),
+    ),
+    ("resorte de extremo nulo", lambda r: _with_aux(r, spring=0.0)),
+    ("resorte de extremo sin aux", lambda r: _with_aux(r, spring=1e6, spring_aux=998)),
+    ("equalDOF y penalización redundantes", lambda r: _with_aux(r, spring=1e6, penalty=True)),
+    (
+        "huérfano fuera del dominio",
+        lambda r: dataclasses.replace(r, orphan_fixes=(SpatialOrphanFix(998, (1, 0, 0)),)),
     ),
 ]
+
+AUX_TAG = 990
+
+
+def _with_aux(  # noqa: PLR0913 (variantes del caso, por nombre)
+    request: SpatialRequest,
+    *,
+    tag: int = AUX_TAG,
+    master: int | None = None,
+    beam: int | None = None,
+    twice: bool = False,
+    equals: tuple[SpatialEndEqual, ...] | None = None,
+    spring: float | None = None,
+    spring_aux: int = AUX_TAG,
+    penalty: bool = False,
+) -> SpatialRequest:
+    """Aux válido en el extremo J de la barra (todo atado con ``equalDOF``) con una variante
+    que lo rompe."""
+    first = request.beams[0]
+    aux = SpatialAuxNode(tag, first.node_j if master is None else master, beam or first.tag, "J")
+    nodes = (aux, dataclasses.replace(aux, tag=tag + 1)) if twice else (aux,)
+    links = (SpatialEndEqual(tag, (1, 2, 3, 4, 5, 6)),) if equals is None else equals
+    springs: tuple[SpatialEndSpring, ...] = ()
+    if spring is not None:
+        axes = beam_matrices(request, first).axes
+        springs = (SpatialEndSpring(991, spring_aux, 1, spring, axes[0], axes[1], penalty),)
+    return dataclasses.replace(request, aux_nodes=nodes, end_equals=links, end_springs=springs)
+
+
+def test_valid_aux_passes_validation() -> None:
+    """Referencia de ``_with_aux``: sin variante, la petición es válida y no singular."""
+    request = _with_aux(_tip_support((), {SupportDof.UX: 1e6}))
+    assert not check_singularity(request, TOL).singular
 
 
 @pytest.mark.parametrize(("name", "change"), MALFORMED, ids=[n for n, _ in MALFORMED])

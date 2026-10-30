@@ -34,8 +34,9 @@ def solve_symmetric(matrix: list[list[float]], rhs: Sequence[float]) -> list[flo
     return x
 
 
-def reference_displacements(request: SpatialRequest) -> dict[int, Six]:
-    """Desplazamientos globales exactos de los nudos de dominio (tag → seis valores)."""
+def reference_displacements(request: SpatialRequest, *, aux: bool = False) -> dict[int, Six]:
+    """Desplazamientos globales exactos de los nudos de dominio (tag → seis valores); con
+    ``aux``, también los de los nudos aux (E2.3-c), que van tras los de dominio."""
     reduced, _ = reduced_stiffness(request)
     coordinates = reduced_coordinates(request)
     force = load_vector(request)
@@ -46,7 +47,10 @@ def reference_displacements(request: SpatialRequest) -> dict[int, Six]:
         for i, t in column.items():
             full[i] += t * value
     result: dict[int, Six] = {}
-    for position, node in enumerate(request.nodes):
+    tags = [node.tag for node in request.nodes]
+    if aux:
+        tags += [node.tag for node in request.aux_nodes]
+    for position, tag in enumerate(tags):
         a, b, c, d, e, f = full[DOFS_PER_NODE * position : DOFS_PER_NODE * (position + 1)]
-        result[node.tag] = (a, b, c, d, e, f)
+        result[tag] = (a, b, c, d, e, f)
     return result

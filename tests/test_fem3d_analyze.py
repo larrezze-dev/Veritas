@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import test_fem3d_singularity as cases
+import test_fem3d_singularity_ends as ends
 from fem_support import Frame
 from veritas.core.connections.end import EndConnection, MemberEnd
 from veritas.core.diagnostics import DiagnosticCode, InputValueError, Severity
@@ -346,6 +347,88 @@ def test_invalid_stiffness_is_failed(monkeypatch: pytest.MonkeyPatch) -> None:
     assert_failed(run, DiagnosticCode.ANALYSIS_FAILED, "fem.invalid_stiffness")
     assert run.pivot is None
     assert "propiedad no positiva" in (run.diagnostics[0].cause or "")
+
+
+# --- E2.3-b: huérfanos y modo con extremos (guarda E2.2-d sustituida) ---------------------
+
+
+def _without_e1_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Traducción sin la guarda E2.2-d; solo en casos que no llegan al worker (E2.5)."""
+    real = translate_spatial
+
+    def unguarded(model: object, config: SpatialAnalysisConfiguration, **_: bool) -> object:
+        return real(model, config)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(spatial, "translate_spatial", unguarded)
+
+
+def test_loaded_coordinate_orphan_is_singular_without_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Huérfano coordenado (Y, Z) con momento: FAILED antes de la salvaguarda, sin modo."""
+    _without_e1_guard(monkeypatch)
+    frame = Frame()
+    a, b = frame.node(0.0, 0.0), frame.node(2.0, 0.0)
+    member = frame.member(a, b)
+    frame.support(a, fixed_restraints())
+    frame.support(b, pinned_restraints())
+    frame.nodal(b, my=100.0)
+    frame.model.set_member_end(member.id, MemberEnd.J, EndConnection.pinned())
+    run = analyze(frame)
+    assert_failed(run, DiagnosticCode.ANALYSIS_SINGULAR, "fem3d.mechanism_orphan_rotation")
+    assert run.pivot is None
+    assert run.diagnostics[0].location is not None
+    assert run.diagnostics[0].location.entity_id == b.id
+
+
+def test_oblique_orphan_has_its_own_key_and_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    _without_e1_guard(monkeypatch)
+    frame = ends._oblique_orphan()
+    tip = cases.tip(frame)
+    run = analyze(frame)
+    assert_failed(run, DiagnosticCode.ANALYSIS_SINGULAR, "fem3d.orphan_rotation_oblique")
+    assert run.pivot is not None
+    assert run.pivot.nullity == 2
+    assert {item.node_id for item in run.pivot.mechanism} == {tip.id}
+    assert run.diagnostics[0].location is not None
+    assert run.diagnostics[0].location.entity_id == tip.id
+
+
+def test_mode_names_member_ends(monkeypatch: pytest.MonkeyPatch) -> None:
+    """E2-f, E2.3-a: el GDL propio del aux sale como extremo de barra sobre su nudo."""
+    _without_e1_guard(monkeypatch)
+    frame = ends._o3()
+    member_id = next(iter(frame.model.members))
+    tip = cases.tip(frame)
+    run = analyze(frame)
+    assert_failed(run, DiagnosticCode.ANALYSIS_SINGULAR, "fem.singular")
+    assert run.pivot is not None
+    assert run.pivot.nullity == 1
+    items = [(i.node_id, i.component, i.member_id, i.end) for i in run.pivot.mechanism]
+    assert set(items) == {(tip.id, "Uy", member_id, "J"), (tip.id, "Rz", None, None)}
+    # Sin etiquetas, el orden sigue el id de la entidad (barra o nudo), como en el plano.
+    assert items == sorted(items, key=lambda i: str(i[2] or i[0]))
+    if run.pivot.member_id is not None:
+        assert (run.pivot.member_id, run.pivot.end) == (member_id, "J")
+
+
+def test_broken_aux_reference_is_failed_not_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """La validación va antes de ``reduced_coordinates``: un aux con un maestro ajeno es
+    FAILED ``fem.invalid_stiffness`` (revisión de E1, M2), no ``KeyError``."""
+    real = translate_spatial
+
+    def broken(model: object, config: SpatialAnalysisConfiguration, **_: bool) -> object:
+        translation = real(model, config)  # type: ignore[arg-type]
+        request = translation.request
+        (aux,) = request.aux_nodes
+        aux = dataclasses.replace(aux, master=999)
+        return dataclasses.replace(
+            translation, request=dataclasses.replace(request, aux_nodes=(aux,))
+        )
+
+    monkeypatch.setattr(spatial, "translate_spatial", broken)
+    run = analyze(ends._o3())
+    assert_failed(run, DiagnosticCode.ANALYSIS_FAILED, "fem.invalid_stiffness")
 
 
 # --- Fallos del worker --------------------------------------------------------------------

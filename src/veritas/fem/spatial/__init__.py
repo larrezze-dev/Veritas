@@ -9,6 +9,7 @@ publica con los ejes y signos de ADR-001.
 """
 
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -64,12 +65,18 @@ from veritas.fem.spatial.results import (
 from veritas.fem.spatial.stiffness import (
     GLOBAL_COMPONENTS,
     REDUNDANCY_TOLERANCE,
+    SpatialDof,
     SpatialPivotReport,
     check_singularity,
     reduced_coordinates,
     solver_free_dofs,
+    validate_request,
 )
-from veritas.fem.spatial.translator import SpatialTranslation, translate_spatial
+from veritas.fem.spatial.translator import (
+    SpatialTranslation,
+    orphan_rotations,
+    translate_spatial,
+)
 
 __all__ = [
     "SpatialAnalysisConfiguration",
@@ -91,6 +98,10 @@ _COMPONENT_ORDER: Final = {
         (*GLOBAL_COMPONENTS[:3], "t1", "t2", *GLOBAL_COMPONENTS[3:], "r1", "r2")
     )
 }
+
+
+# Componentes de giro de un nudo de dominio en el modo (globales u oblicuas).
+ROTATION_COMPONENTS: Final = frozenset((*GLOBAL_COMPONENTS[3:], "r1", "r2"))
 
 
 class _Run:
@@ -165,22 +176,33 @@ def provenance_constants() -> dict[str, float]:
     }
 
 
+def _dof(request: SpatialRequest, label: SpatialDof, participation: float) -> MechanismDof:
+    """GDL de dominio; una coordenada propia de aux es el extremo de su barra (E2-f)."""
+    node_id = UUID(next(node.entity_id for node in request.nodes if node.tag == label.node))
+    if label.member is None:
+        return MechanismDof(node_id, label.component, participation)
+    member = next(beam for beam in request.beams if beam.tag == label.member)
+    return MechanismDof(node_id, label.component, participation, UUID(member.entity_id), label.end)
+
+
 def _mechanism(
     model: StructuralModel, request: SpatialRequest, report: SpatialPivotReport
 ) -> tuple[MechanismDof, ...]:
-    """Participantes (p ≥ MECHANISM_PARTICIPATION) ordenados por etiqueta del nudo, id y
-    componente. Sin extremos de barra en E1."""
+    """Participantes (p ≥ MECHANISM_PARTICIPATION) en orden determinista: etiqueta de la
+    entidad (barra para un extremo, nudo si no), id, extremo y componente, como el plano."""
     assert report.mode is not None
-    node_ids = {node.tag: UUID(node.entity_id) for node in request.nodes}
     items = [
-        MechanismDof(node_ids[label.node], label.component, participation)
+        _dof(request, label, participation)
         for label, participation in zip(report.labels, report.mode.participation, strict=True)
         if participation >= MECHANISM_PARTICIPATION
     ]
 
-    def key(item: MechanismDof) -> tuple[str, str, int]:
+    def key(item: MechanismDof) -> tuple[str, str, str, int]:
+        if item.member_id is not None:
+            label = _entity_label(model, item.member_id, True)
+            return (label, str(item.member_id), item.end or "", _COMPONENT_ORDER[item.component])
         label = _entity_label(model, item.node_id, False)
-        return (label, str(item.node_id), _COMPONENT_ORDER[item.component])
+        return (label, str(item.node_id), "", _COMPONENT_ORDER[item.component])
 
     return tuple(sorted(items, key=key))
 
@@ -188,17 +210,19 @@ def _mechanism(
 def _pivot_summary(
     model: StructuralModel, request: SpatialRequest, report: SpatialPivotReport
 ) -> PivotSummary:
-    node_ids = {node.tag: UUID(node.entity_id) for node in request.nodes}
     nullity: int | None = None
     mechanism: tuple[MechanismDof, ...] = ()
     if report.mode is not None and report.mode.conclusive:
         nullity = report.mode.nullity
         mechanism = _mechanism(model, request, report)
+    pivot = None if report.dof is None else _dof(request, report.dof, 0.0)
     return PivotSummary(
         free_dofs=report.free_dofs,
         min_pivot=report.min_pivot,
-        node_id=None if report.dof is None else node_ids[report.dof.node],
-        component=None if report.dof is None else report.dof.component,
+        node_id=None if pivot is None else pivot.node_id,
+        component=None if pivot is None else pivot.component,
+        member_id=None if pivot is None else pivot.member_id,
+        end=None if pivot is None else pivot.end,
         nullity=nullity,
         mechanism=mechanism,
     )
@@ -223,6 +247,62 @@ def _singular_failure(pivot: PivotSummary, config: SpatialAnalysisConfiguration)
         {"pivot": value, "component": component, "tolerance": config.tol_pivot},
         None if node_id is None else Location(entity_id=node_id),
     )
+
+
+def _orphan_failure(model: StructuralModel, key: str, node_ids: Sequence[UUID]) -> _Failure:
+    """Mecanismo por giros huérfanos (E2.3-b): nudos por etiqueta, ubicación en el primero."""
+    nodes = [model.node(node_id) for node_id in node_ids]
+    return _Failure(
+        DiagnosticCode.ANALYSIS_SINGULAR,
+        key,
+        {"node": ", ".join(n.label or str(n.id) for n in nodes)},
+        Location(entity_id=nodes[0].id, revision=nodes[0].revision),
+    )
+
+
+def _singular_outcome(
+    run: _Run,
+    model: StructuralModel,
+    request: SpatialRequest,
+    report: SpatialPivotReport,
+    config: SpatialAnalysisConfiguration,
+) -> _Failure:
+    """Diagnóstico de una salvaguarda singular: aviso de modo no concluyente y, si hay giros
+    huérfanos oblicuos, su clave propia (E2.3-b) en lugar de ``fem.singular``."""
+    assert run.pivot is not None
+    mode = report.mode
+    if mode is not None and not mode.conclusive:
+        run.warnings.append(
+            Diagnostic.create(
+                DiagnosticCode.ANALYSIS_SINGULAR,
+                "fem.mechanism_mode_inconclusive",
+                {
+                    "residual": mode.residual,
+                    "limit": MECHANISM_RESIDUAL_FACTOR * config.tol_pivot,
+                },
+                severity=Severity.WARNING,
+            )
+        )
+    oblique = [o.node for o in orphan_rotations(request, config.tol_axis) if o.axes is None]
+    if oblique and run.pivot.mechanism:
+        # E2.3-b: la clave propia solo si el participante principal del modo es un giro de
+        # un nudo con huérfano oblicuo; si no, otra causa domina (revisión de E2.3, M3).
+        node_ids = {node.tag: UUID(node.entity_id) for node in request.nodes}
+        orphans = [node_ids[tag] for tag in oblique]
+        # Mismo participante principal que ``_singular_failure`` (empate: el primero en orden).
+        largest = max(item.participation for item in run.pivot.mechanism)
+        top = next(
+            item
+            for item in run.pivot.mechanism
+            if item.participation >= largest - MECHANISM_TIE_TOLERANCE
+        )
+        if (
+            top.member_id is None
+            and top.component in ROTATION_COMPONENTS
+            and top.node_id in orphans
+        ):
+            return _orphan_failure(model, "fem3d.orphan_rotation_oblique", orphans)
+    return _singular_failure(run.pivot, config)
 
 
 def _raw_results(request: SpatialRequest, response: SpatialWorkerResponse) -> RawSpatialResults:
@@ -328,8 +408,15 @@ def analyze_spatial(  # noqa: PLR0911 (un retorno por causa de fallo)
     run.translation = translation = translate_spatial(model, config, e1_end_guard=True)
     request = translation.request
     run.case_revision = request.case_revision
+    if translation.orphan_loaded:  # E2.3-b: como el plano, antes de la salvaguarda y sin modo.
+        return run.finish(
+            _orphan_failure(model, "fem3d.mechanism_orphan_rotation", translation.orphan_loaded),
+            None,
+        )
     try:
         # Dentro del try: una petición mal formada es FAILED, no una excepción (revisión M2).
+        # La validación va primero: una referencia de aux rota no llega a las coordenadas.
+        validate_request(request)
         if not reduced_coordinates(request):
             raise _no_free_dofs()
         # D6: el límite cuenta los GDL del modelo del solver, cadenas incluidas.
@@ -344,20 +431,7 @@ def analyze_spatial(  # noqa: PLR0911 (un retorno por causa de fallo)
         )
     run.pivot = _pivot_summary(model, request, report)
     if report.singular:
-        mode = report.mode
-        if mode is not None and not mode.conclusive:
-            run.warnings.append(
-                Diagnostic.create(
-                    DiagnosticCode.ANALYSIS_SINGULAR,
-                    "fem.mechanism_mode_inconclusive",
-                    {
-                        "residual": mode.residual,
-                        "limit": MECHANISM_RESIDUAL_FACTOR * config.tol_pivot,
-                    },
-                    severity=Severity.WARNING,
-                )
-            )
-        return run.finish(_singular_failure(run.pivot, config), None)
+        return run.finish(_singular_outcome(run, model, request, report, config), None)
     run.outcome = outcome = run_worker(request.to_json(), config.timeout_s, worker)
     failure = _worker_failure(outcome, config.timeout_s)
     if failure is not None or outcome.response_text is None:

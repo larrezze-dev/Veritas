@@ -279,6 +279,15 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "El nudo {node} no tiene rigidez de giro en {rotations} (todas las barras liberadas y "
         "sin apoyo de giro); esos giros se fijan sin reacción."
     ),
+    "fem3d.mechanism_orphan_rotation": (
+        "Mecanismo en el nudo o nudos {node}: un giro no tiene rigidez (barras liberadas y sin "
+        "apoyo de giro) y el caso aplica un momento sobre él. No se calcula."
+    ),
+    "fem3d.orphan_rotation_oblique": (
+        "Mecanismo en el nudo o nudos {node}: un giro sin rigidez en una dirección oblicua a "
+        "los ejes globales (barras liberadas y sin apoyo de giro); no se fija. Los GDL del "
+        "modo figuran en la procedencia. No se calcula."
+    ),
     "fem3d.hypothesis_end_releases": (
         "Giros de flexión liberados en los extremos representados por la condensación del "
         "propio elemento de barra (exacta, también con cargas de barra)."
