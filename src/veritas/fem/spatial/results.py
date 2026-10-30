@@ -84,7 +84,7 @@ PROVENANCE_KEYS: Final = frozenset(
     }
 )
 SPATIAL_ADAPTER_ID: Final = "veritas.fem.spatial"
-SPATIAL_ADAPTER_VERSION: Final = "2"  # D10: "1" en E1 (extremos rígidos), "2" en E2.
+SPATIAL_ADAPTER_VERSION: Final = "3"  # D10: "1" en E1, "2" en E2, "3" con ADR-004.
 
 type Twelve = tuple[
     float, float, float, float, float, float, float, float, float, float, float, float

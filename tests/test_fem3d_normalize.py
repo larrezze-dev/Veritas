@@ -646,6 +646,39 @@ def test_provenance_keys_match_the_run_snapshot() -> None:
     assert frozenset(provenance_constants()) == PROVENANCE_KEYS
 
 
+END_PENALTY_KEYS = ("end_penalty_factor", "end_penalty_tolerance", "end_penalty_max_iterations")
+
+
+def test_end_penalty_fields_are_in_the_snapshot_only() -> None:
+    """ADR-004 §7: los campos nuevos van en ``snapshot()`` y no en ``provenance_constants``;
+    la normalización reconstruye la configuración con ellos."""
+    frame = cases._spring_tip()
+    run = run_of(frame)
+    assert {key: run.configuration[key] for key in END_PENALTY_KEYS} == {
+        "end_penalty_factor": 1e1,
+        "end_penalty_tolerance": 1e-10,
+        "end_penalty_max_iterations": 20,
+    }
+    assert PROVENANCE_KEYS.isdisjoint(END_PENALTY_KEYS)
+    normalize_spatial(run, frame.model)
+
+
+@pytest.mark.parametrize(
+    ("change", "kind"),
+    [
+        ({"end_penalty_tolerance": 1e-11}, "request"),  # Va en la petición v3.
+        ({"end_penalty_max_iterations": 0}, "configuration"),
+        ({"end_penalty_max_iterations": 2.5}, "configuration"),
+    ],
+)
+def test_end_penalty_configuration_change_is_a_mismatch(
+    change: dict[str, float], kind: str
+) -> None:
+    frame = cases._spring_tip()
+    run = run_of(frame)
+    _mismatch(dataclasses.replace(run, configuration={**run.configuration, **change}), frame, kind)
+
+
 def test_argument_types() -> None:
     frame = cases._spring_tip()
     run = run_of(frame)

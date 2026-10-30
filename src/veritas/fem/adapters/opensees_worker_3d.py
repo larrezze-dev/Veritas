@@ -18,7 +18,11 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 PROTOCOL_ID = "veritas.opensees.spatial"
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
+# Patrón corrector de la penalización iterada (ADR-004 §1): serie y patrón propios.
+CORRECTOR_TAG = 2
+MIN_STAGNATION_ITERATION = 3  # Estancamiento aceptado desde la iteración 3 (ADR-004 §3).
+STAGNATION_IMPROVEMENT = 10.0  # Mejora mínima del paso frente al mejor anterior.
 
 
 def _version(package: str) -> str | None:
@@ -46,6 +50,9 @@ def _response(status: str, message: str = "", analyze_code: int | None = None) -
         "beams": [],
         "aux": [],
         "end_springs": [],
+        "end_penalty_iterations": 0,
+        "end_penalty_stop": "none",
+        "end_penalty_converged": True,
     }
 
 
@@ -156,6 +163,64 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
     ops.analysis("Static")
 
 
+def _step(force: float, scale: float) -> float:
+    """p_s = |k_s·g_s| / S_s; con S_s = 0, 0 si la fuerza es 0 e ∞ si no (ADR-004 §3)."""
+    if scale > 0.0:
+        return abs(force) / scale
+    return 0.0 if force == 0.0 else float("inf")
+
+
+def _iterate(ops: Any, request: dict[str, Any]) -> tuple[int, int, str, dict[int, float]]:
+    """Penalización iterada (Uzawa) sobre los resortes de penalización de extremo (ADR-004).
+
+    En la iteración i se reconstruye el modelo (``_build`` hace ``wipe``) con un patrón
+    ``Constant`` corrector: −λ_s·b_s en el aux y +λ_s·b_s en el maestro (fuerzas o momentos
+    según la terna), y tras resolver λ_s ← λ_s + k_s·g_s. λ⁽¹⁾ = 0 es la penalización simple.
+    Devuelve el código de ``analyze``, las iteraciones, el motivo de parada y los λ de la
+    última resolución; el modelo de esa resolución queda construido para leer resultados.
+    """
+    springs = {s[0]: s for s in request["end_springs"]}
+    master_of = {aux: master for aux, master, _beam, _end in request["aux_nodes"]}
+    penalties = [
+        (tag, springs[tag][1], springs[tag][2], springs[tag][3], direction, scale)
+        for tag, direction, scale in request["end_penalties"]
+    ]
+    multipliers = {tag: 0.0 for tag, *_rest in penalties}
+    best = float("inf")
+    for iteration in range(1, request["end_penalty_max_iterations"] + 1):
+        _build(ops, request)
+        ops.timeSeries("Constant", CORRECTOR_TAG)
+        ops.pattern("Plain", CORRECTOR_TAG, CORRECTOR_TAG)
+        for tag, aux, dof, _k, direction, _scale in penalties:
+            offset = 0 if dof <= 3 else 3  # noqa: PLR2004 (GDL 1-3 traslaciones)
+            values = [0.0] * 6
+            for i in range(3):
+                values[offset + i] = multipliers[tag] * direction[i]
+            ops.load(aux, *[-v for v in values])
+            ops.load(master_of[aux], *values)
+        code = int(ops.analyze(1))
+        if code != 0:
+            return code, iteration, "none", multipliers
+        forces = {
+            tag: stiffness * ops.eleResponse(tag, "basicDeformation")[0]
+            for tag, _aux, _dof, stiffness, _d, _s in penalties
+        }
+        step = max(_step(forces[tag], scale) for tag, *_rest, scale in penalties)
+        if step <= request["end_penalty_tolerance"]:
+            return code, iteration, "tolerance", multipliers
+        if (
+            iteration >= MIN_STAGNATION_ITERATION
+            and step <= request["end_penalty_stagnation"]
+            and step > best / STAGNATION_IMPROVEMENT
+        ):
+            return code, iteration, "stagnation", multipliers
+        if iteration == request["end_penalty_max_iterations"]:
+            return code, iteration, "max_iterations", multipliers
+        best = min(best, step)
+        multipliers = {tag: multipliers[tag] + forces[tag] for tag in multipliers}
+    raise AssertionError("inalcanzable: end_penalty_max_iterations ≥ 1")
+
+
 def _solve(request: dict[str, Any]) -> dict[str, Any]:
     if request.get("protocol") != PROTOCOL_ID or request.get("version") != PROTOCOL_VERSION:
         return _response("PROTOCOL_ERROR", "protocolo o versión no admitidos")
@@ -163,12 +228,20 @@ def _solve(request: dict[str, Any]) -> dict[str, Any]:
     import openseespy.opensees as ops  # type: ignore[import-untyped]  # noqa: PLC0415
 
     try:
-        _build(ops, request)
-        code = int(ops.analyze(1))
+        iterations, stop = 0, "none"
+        multipliers: dict[int, float] = {}
+        if request["end_penalties"]:
+            code, iterations, stop, multipliers = _iterate(ops, request)
+        else:  # Sin penalización de extremo: una sola resolución, sin patrón corrector.
+            _build(ops, request)
+            code = int(ops.analyze(1))
         if code != 0:
             return _response("ANALYZE_FAILED", "analyze() distinto de 0", code)
         ops.reactions()
         response = _response("OK", "", code)
+        response["end_penalty_iterations"] = iterations
+        response["end_penalty_stop"] = stop
+        response["end_penalty_converged"] = stop != "max_iterations"
         response["nodes"] = [
             [tag, list(ops.nodeDisp(tag)), list(ops.nodeReaction(tag))]
             for tag, *_rest in request["nodes"]
@@ -196,6 +269,7 @@ def _solve(request: dict[str, Any]) -> dict[str, Any]:
                 spring[0],
                 ops.eleResponse(spring[0], "basicForce")[0],
                 ops.eleResponse(spring[0], "basicDeformation")[0],
+                multipliers.get(spring[0], 0.0),
             ]
             for spring in request["end_springs"]
         ]

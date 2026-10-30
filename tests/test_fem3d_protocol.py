@@ -1,4 +1,5 @@
-"""Protocolo espacial y configuración (plan T-018, D2 y D6): validación estricta y round-trip."""
+"""Protocolo espacial y configuración (plan T-018, D2 y D6; v3 de ADR-004): validación
+estricta y round-trip."""
 
 import json
 from typing import Any
@@ -7,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from veritas.core.diagnostics import DiagnosticCode, InputTypeError, InputValueError
+from veritas.fem.adapters import opensees_worker_3d
 from veritas.fem.adapters.protocol import PROTOCOL_ID as PLANAR_PROTOCOL_ID
 from veritas.fem.adapters.protocol import NonFiniteValueError, ProtocolError
 from veritas.fem.config import AnalysisConfiguration
@@ -19,6 +21,7 @@ from veritas.fem.spatial.protocol import (
     SpatialBeamLoad,
     SpatialChain,
     SpatialEndEqual,
+    SpatialEndPenalty,
     SpatialEndSpring,
     SpatialFix,
     SpatialNodalLoad,
@@ -27,6 +30,7 @@ from veritas.fem.spatial.protocol import (
     SpatialRequest,
     SpatialSpring,
     SpatialWorkerResponse,
+    penalty_step,
 )
 
 
@@ -77,6 +81,10 @@ def _request() -> SpatialRequest:
             SpatialEndSpring(40, 30, 5, 2.5e7, (0.6, 0.0, 0.8), (0.0, 1.0, 0.0), False),
             SpatialEndSpring(41, 30, 4, 5.6e15, (0.6, 0.0, 0.8), (0.0, 1.0, 0.0), True),
         ),
+        end_penalties=(SpatialEndPenalty(41, (0.6, 0.0, 0.8), 3.5e4),),
+        end_penalty_tolerance=1e-10,
+        end_penalty_stagnation=1e-6,
+        end_penalty_max_iterations=20,
     )
 
 
@@ -141,11 +149,59 @@ def test_request_round_trip_is_exact() -> None:
         (("end_springs", 0, 2), 0),
         (("end_springs", 0, 6), 1),
         (("end_springs", 0), [40, 30, 5, 2.5e7, [0.6, 0.0, 0.8], [0.0, 1.0, 0.0]]),
+        # v3 (ADR-004): una entrada por resorte de penalización, S_s ≥ 0, parada coherente.
+        (("version",), 2),
+        (("end_penalties",), []),
+        (("end_penalties", 0, 0), 40),
+        (("end_penalties",), [[41, [0.6, 0.0, 0.8], 1.0], [41, [0.6, 0.0, 0.8], 1.0]]),
+        (("end_penalties", 0, 1), [0.6, 0.0]),
+        (("end_penalties", 0, 2), -1.0),
+        (("end_penalties", 0), [41, [0.6, 0.0, 0.8]]),
+        (("end_springs", 1, 6), False),
+        (("end_penalty_tolerance",), 0.0),
+        (("end_penalty_tolerance",), 1e-6),
+        (("end_penalty_stagnation",), "1e-6"),
+        (("end_penalty_max_iterations",), 0),
+        (("end_penalty_max_iterations",), 2.5),
     ],
 )
 def test_request_rejects_invalid_content(path: tuple[str | int, ...], value: object) -> None:
     with pytest.raises(ProtocolError):
         SpatialRequest.from_json(_mutated(path, value))
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "end_penalties",
+        "end_penalty_tolerance",
+        "end_penalty_stagnation",
+        "end_penalty_max_iterations",
+    ],
+)
+def test_request_requires_the_v3_fields(key: str) -> None:
+    data = _request().to_dict()
+    del data[key]
+    with pytest.raises(ProtocolError):
+        SpatialRequest.from_json(json.dumps(data))
+
+
+def test_protocol_version_matches_the_worker() -> None:
+    """ADR-004 §5: padre y worker cambian juntos (el worker no importa ``veritas``)."""
+    assert (opensees_worker_3d.PROTOCOL_ID, opensees_worker_3d.PROTOCOL_VERSION) == (
+        PROTOCOL_ID,
+        PROTOCOL_VERSION,
+    )
+    assert PROTOCOL_VERSION == 3
+
+
+@pytest.mark.parametrize(
+    ("force", "scale", "expected"),
+    [(2.0, 4.0, 0.5), (-2.0, 4.0, 0.5), (0.0, 0.0, 0.0), (1e-30, 0.0, float("inf"))],
+)
+def test_penalty_step_matches_the_worker(force: float, scale: float, expected: float) -> None:
+    assert penalty_step(force, scale) == expected
+    assert opensees_worker_3d._step(force, scale) == expected
 
 
 def test_nan_is_rejected_on_both_sides() -> None:
@@ -172,7 +228,10 @@ def _response(**overrides: object) -> str:
         "chains": [[20, [0.1] * 6, [0.2] * 6, [0.0] * 6]],
         "beams": [[1, [0.0] * 12]],
         "aux": [[30, [0.3] * 6, [0.0] * 6]],
-        "end_springs": [[40, 12.5, 5e-7]],
+        "end_springs": [[40, 12.5, 5e-7, 0.0], [41, -3.0, -5e-16, 41.5]],
+        "end_penalty_iterations": 4,
+        "end_penalty_stop": "tolerance",
+        "end_penalty_converged": True,
     }
     data.update(overrides)
     return json.dumps(data)
@@ -186,7 +245,27 @@ def test_response_parsing() -> None:
     assert response.chain_results[0].r_disp == (0.2,) * 6
     assert response.beam_forces == ((1, (0.0,) * 12),)
     assert response.aux_results == ((30, (0.3,) * 6, (0.0,) * 6),)
-    assert response.end_spring_results == ((40, 12.5, 5e-7),)
+    assert response.end_spring_results == ((40, 12.5, 5e-7, 0.0), (41, -3.0, -5e-16, 41.5))
+    assert (
+        response.end_penalty_iterations,
+        response.end_penalty_stop,
+        response.end_penalty_converged,
+    ) == (4, "tolerance", True)
+
+
+@pytest.mark.parametrize(
+    ("iterations", "stop", "converged"),
+    [(0, "none", True), (3, "stagnation", True), (20, "max_iterations", False)],
+)
+def test_response_accepts_coherent_stops(iterations: int, stop: str, converged: bool) -> None:
+    response = SpatialWorkerResponse.from_json(
+        _response(
+            end_penalty_iterations=iterations,
+            end_penalty_stop=stop,
+            end_penalty_converged=converged,
+        )
+    )
+    assert response.end_penalty_converged is converged
 
 
 @pytest.mark.parametrize(
@@ -200,7 +279,16 @@ def test_response_parsing() -> None:
         {"chains": [[20, [0.0] * 6, [0.0] * 6]]},
         {"analyze_code": 1.5},
         {"aux": [[30, [0.0] * 6]]},
-        {"end_springs": [[40, [12.5], 5e-7]]},
+        {"end_springs": [[40, [12.5], 5e-7, 0.0]]},
+        {"end_springs": [[40, 12.5, 5e-7]]},
+        {"version": 2},
+        {"end_penalty_stop": "otro"},
+        {"end_penalty_iterations": -1},
+        {"end_penalty_iterations": 0},
+        {"end_penalty_stop": "none"},
+        {"end_penalty_converged": False},
+        {"end_penalty_stop": "max_iterations"},
+        {"end_penalty_converged": 1},
     ],
 )
 def test_response_rejects_invalid_content(overrides: dict[str, object]) -> None:
@@ -227,6 +315,9 @@ def test_configuration_defaults_and_snapshot() -> None:
         "tol_penalty": 1e-6,
         "tol_equilibrium": 1e-9,
         "max_free_dofs": 300,
+        "end_penalty_factor": 1e1,
+        "end_penalty_tolerance": 1e-10,
+        "end_penalty_max_iterations": 20,
     }
 
 
@@ -235,7 +326,12 @@ def test_configuration_is_independent_of_the_planar_one() -> None:
     spatial = set(SpatialAnalysisConfiguration(uuid4()).snapshot())
     planar = set(AnalysisConfiguration(uuid4()).snapshot())
     assert {"tol_plane", "tol_member_load_y"} <= planar - spatial
-    assert spatial - planar == {"tol_penalty"}
+    assert spatial - planar == {
+        "tol_penalty",
+        "end_penalty_factor",
+        "end_penalty_tolerance",
+        "end_penalty_max_iterations",
+    }
 
 
 @pytest.mark.parametrize(
@@ -247,6 +343,11 @@ def test_configuration_is_independent_of_the_planar_one() -> None:
         ("tol_axis", float("nan"), DiagnosticCode.INPUT_NONFINITE),
         ("penalty_factor", float("inf"), DiagnosticCode.INPUT_NONFINITE),
         ("max_free_dofs", 0, DiagnosticCode.INPUT_OUT_OF_RANGE),
+        ("end_penalty_factor", 0.0, DiagnosticCode.INPUT_OUT_OF_RANGE),
+        ("end_penalty_tolerance", 0.0, DiagnosticCode.INPUT_OUT_OF_RANGE),
+        ("end_penalty_tolerance", 1e-6, DiagnosticCode.INPUT_OUT_OF_RANGE),
+        ("end_penalty_tolerance", float("nan"), DiagnosticCode.INPUT_NONFINITE),
+        ("end_penalty_max_iterations", 0, DiagnosticCode.INPUT_OUT_OF_RANGE),
     ],
 )
 def test_configuration_rejects_invalid_values(
@@ -264,3 +365,7 @@ def test_configuration_rejects_wrong_types() -> None:
         SpatialAnalysisConfiguration(uuid4(), max_free_dofs=2.5)  # type: ignore[arg-type]
     with pytest.raises(InputTypeError):
         SpatialAnalysisConfiguration(uuid4(), max_free_dofs=True)
+    with pytest.raises(InputTypeError):
+        SpatialAnalysisConfiguration(uuid4(), end_penalty_max_iterations=20.0)  # type: ignore[arg-type]
+    with pytest.raises(InputTypeError):
+        SpatialAnalysisConfiguration(uuid4(), end_penalty_max_iterations=True)

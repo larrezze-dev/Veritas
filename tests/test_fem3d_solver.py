@@ -310,7 +310,7 @@ def test_inclined_springs_and_ground_reaction(stiffness: Six) -> None:
 
 
 def test_wrong_protocol_version_is_reported() -> None:
-    text = Cantilever((2.0, 0.0, 0.0)).request().to_json().replace('"version":2', '"version":1')
+    text = Cantilever((2.0, 0.0, 0.0)).request().to_json().replace('"version":3', '"version":2')
     outcome = run_worker(text, 60.0, worker=WORKER_3D)
     assert outcome.response_text is not None
     assert SpatialWorkerResponse.from_json(outcome.response_text).status == "PROTOCOL_ERROR"

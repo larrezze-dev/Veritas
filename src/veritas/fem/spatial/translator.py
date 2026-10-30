@@ -8,8 +8,9 @@ nunca lo ignora en silencio.
 Extremos (D5-A, E2-a, plan T-018 pieza E2.2), una representación por componente: Ry/Rz
 liberados con ``-releasey``/``-releasez``; Rx y Ux liberados o con resorte en serie (J y A
 efectivos); Uy/Uz no rígidos y Ry/Rz con resorte en un nudo aux, exacto si sus direcciones
-generan un subespacio coordenado global y, si no, con penalización en las rígidas. Los
-giros huérfanos coordenados sin momento se fijan con aviso (R4).
+generan un subespacio coordenado global y, si no, con penalización iterada en las rígidas
+(ADR-004: ``end_penalty_factor``, dirección global b_s y escala S_s del caso). Los giros
+huérfanos coordenados sin momento se fijan con aviso (R4).
 
 Mapeo: base global de ADR-001 con seis GDL por nudo; ``vecxz`` = ez de la barra (hecho 1);
 carga nodal global (Fx, Fy, Fz, Mx, My, Mz); carga de barra ``-beamUniform`` (Wy, Wz, Wx)
@@ -54,6 +55,7 @@ from veritas.fem.spatial.protocol import (
     SpatialBeamLoad,
     SpatialChain,
     SpatialEndEqual,
+    SpatialEndPenalty,
     SpatialEndSpring,
     SpatialFix,
     SpatialNodalLoad,
@@ -69,7 +71,8 @@ HYPOTHESIS_SPATIAL: Final = "fem3d.hypothesis_spatial"
 HYPOTHESIS_BEAM: Final = "fem3d.hypothesis_euler_bernoulli"
 HYPOTHESIS_LAGRANGE: Final = "fem3d.hypothesis_lagrange"
 HYPOTHESIS_CHAIN: Final = "fem3d.hypothesis_inclined_chain"
-HYPOTHESIS_PENALTY: Final = "fem3d.hypothesis_penalty"
+HYPOTHESIS_PENALTY: Final = "fem3d.hypothesis_penalty"  # Apoyos D4.
+HYPOTHESIS_END_PENALTY: Final = "fem3d.hypothesis_end_penalty_iterated"  # ADR-004 §8.
 HYPOTHESIS_END_RELEASES: Final = "fem3d.hypothesis_end_releases"
 HYPOTHESIS_END_SERIES: Final = "fem3d.hypothesis_end_series"
 HYPOTHESIS_END_LINKS: Final = "fem3d.hypothesis_end_links"
@@ -506,7 +509,7 @@ class _Builder:
                 self._end_spring(pending, aux, d)
             else:
                 scale = self.rotation_scale if offset else self.translation_scale
-                stiffness = self.config.penalty_factor * scale[pending.master]
+                stiffness = self.config.end_penalty_factor * scale[pending.master]
                 self._add_end_spring(pending, aux, position + 1, stiffness, penalty=True)
         return []
 
@@ -656,14 +659,23 @@ def translate_spatial(
         end_springs=tuple(builder.end_springs),
     )
     restrained, loaded = _orphan_fixes(request, config.tol_axis)
-    request = replace(request, orphan_fixes=restrained)
+    request = replace(
+        request,
+        orphan_fixes=restrained,
+        end_penalties=_end_penalties(request),
+        end_penalty_tolerance=config.end_penalty_tolerance,
+        end_penalty_stagnation=config.tol_penalty,
+        end_penalty_max_iterations=config.end_penalty_max_iterations,
+    )
     node_ids = {tag: node_id for node_id, tag in builder.node_tags.items()}
     orphan_warnings = [_orphan_warning(model, node_ids[o.node], o.rotations) for o in restrained]
     hypotheses = [HYPOTHESIS_SPATIAL, HYPOTHESIS_BEAM, HYPOTHESIS_LAGRANGE]
     if builder.chains:
         hypotheses.append(HYPOTHESIS_CHAIN)
-    if any(s.penalty for s in builder.springs) or any(s.penalty for s in builder.end_springs):
+    if any(s.penalty for s in builder.springs):
         hypotheses.append(HYPOTHESIS_PENALTY)
+    if request.end_penalties:
+        hypotheses.append(HYPOTHESIS_END_PENALTY)
     if any(b.release_y or b.release_z for b in beams):
         hypotheses.append(HYPOTHESIS_END_RELEASES)
     if builder.uses_series:
@@ -679,6 +691,39 @@ def translate_spatial(
         builder.max_diagonal,
         builder.chain_length,
         tuple(node_ids[tag] for tag in loaded),
+    )
+
+
+def force_scale(request: SpatialRequest) -> tuple[float, float]:
+    """(F, L_máx) del caso (ADR-004 §3): F = máx(máx|P| nodal, Σ|w|·L, máx|M| nodal / L_máx).
+
+    Normas euclídeas de las cargas traducidas (incluido el peso propio) y L de cada barra."""
+    coordinates = {node.tag: (node.x, node.y, node.z) for node in request.nodes}
+    lengths = {
+        beam.tag: math.dist(coordinates[beam.node_i], coordinates[beam.node_j])
+        for beam in request.beams
+    }
+    longest = max(lengths.values())
+    force = max((math.hypot(*load.values[:AXES]) for load in request.nodal_loads), default=0.0)
+    moment = max((math.hypot(*load.values[AXES:]) for load in request.nodal_loads), default=0.0)
+    distributed = sum(math.hypot(w.wy, w.wz, w.wx) * lengths[w.beam] for w in request.beam_loads)
+    return max(force, distributed, moment / longest), longest
+
+
+def _end_penalties(request: SpatialRequest) -> tuple[SpatialEndPenalty, ...]:
+    """b_s y S_s de cada resorte de penalización de extremo (ADR-004 §1 y §3): S_s = F en
+    traslaciones y F·L_máx en giros."""
+    penalized = [s for s in request.end_springs if s.penalty]
+    if not penalized:
+        return ()
+    force, longest = force_scale(request)
+    return tuple(
+        SpatialEndPenalty(
+            s.tag,
+            spring_direction(s.axis_x, s.axis_yp, s.dof),
+            force if s.dof <= AXES else force * longest,
+        )
+        for s in penalized
     )
 
 

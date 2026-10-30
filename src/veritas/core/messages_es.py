@@ -341,6 +341,19 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "lo admitido (estimado {value}, cota {bound}; incluye el redondeo "
         "eps·penalty_factor, que crece con un factor de penalización alto). No hay resultados."
     ),
+    "fem3d.hypothesis_end_penalty_iterated": (
+        "Al menos una componente rígida de un extremo oblicuo se representa por penalización "
+        "iterada (ADR-004): se itera hasta que el paso relativo de la restricción baja de la "
+        "tolerancia; el resultado lleva la tolerancia de penalización."
+    ),
+    "fem3d.end_penalty_iterations": (
+        "Informativo: la penalización iterada de los extremos terminó en {iterations} "
+        "iteraciones (motivo: {stop}; paso relativo final {step})."
+    ),
+    "fem3d.end_penalty_not_converged": (
+        "La penalización iterada de los extremos no converge (iteraciones {iterations}, "
+        "motivo {stop}, paso relativo final {step}, cota {bound}). No hay resultados."
+    ),
     "fem3d.solver_stderr": (
         "El solver escribió avisos durante una corrida terminada: «{text}». Los controles de "
         "la solución deciden si es válida."

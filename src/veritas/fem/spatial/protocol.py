@@ -5,6 +5,9 @@ tipos estrictos; no es formato de proyecto. Base del solver = base global de ADR
 GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz). Handler Lagrange con ``alpha_sp`` y ``alpha_mp``
 calibrados por el traductor (plan T-018, calibración de D3). v2 (E2): extremos de barra no
 rígidos con ``-releasey``/``-releasez``, A y J efectivos, nudos aux y giros huérfanos.
+v3 (ADR-004): penalización iterada en los resortes de penalización de extremo, con la
+dirección global b_s y la escala S_s de cada uno y los parámetros de parada en la petición,
+y las iteraciones, el motivo de parada y los multiplicadores λ_s en la respuesta.
 """
 
 from dataclasses import dataclass
@@ -24,13 +27,25 @@ from veritas.fem.adapters.protocol import (
     dumps,
     loads,
 )
+from veritas.fem.spatial.config import (
+    DEFAULT_END_PENALTY_MAX_ITERATIONS,
+    DEFAULT_END_PENALTY_TOLERANCE,
+    DEFAULT_TOL_PENALTY,
+)
 
 PROTOCOL_ID: Final = "veritas.opensees.spatial"
-PROTOCOL_VERSION: Final = 2  # 2: extremos de barra (E2-b)
+PROTOCOL_VERSION: Final = 3  # 2: extremos de barra (E2-b); 3: penalización iterada (ADR-004)
 DOFS_PER_NODE: Final = 6
 AXES: Final = 3  # Componentes de una terna de un nudo (traslaciones o giros).
 RELEASE_CODES: Final = (0, 1, 2, 3)  # -releasey/-releasez: ninguno, I, J, ambos.
 BEAM_ENDS: Final = ("I", "J")
+# Motivo de parada de la penalización iterada (ADR-004 §3); ``none``: sin penalización de
+# extremo (0 iteraciones).
+STOP_TOLERANCE: Final = "tolerance"
+STOP_STAGNATION: Final = "stagnation"
+STOP_MAX_ITERATIONS: Final = "max_iterations"
+STOP_NONE: Final = "none"
+END_PENALTY_STOPS: Final = (STOP_TOLERANCE, STOP_STAGNATION, STOP_MAX_ITERATIONS, STOP_NONE)
 
 type Vec3 = tuple[float, float, float]
 type Six = tuple[float, float, float, float, float, float]
@@ -234,6 +249,30 @@ type SpatialEndLink = SpatialEndEqual | SpatialEndSpring
 
 
 @dataclass(frozen=True, slots=True)
+class SpatialEndPenalty:
+    """Datos de la penalización iterada de un ``SpatialEndSpring`` con ``penalty`` (ADR-004).
+
+    ``direction``: b_s, dirección global unitaria del resorte (``spring_direction``); g_s =
+    b_s·(u_aux − u_maestro) es su ``basicDeformation``. ``scale``: S_s ≥ 0, escala del paso
+    relativo p_s = |k_s·g_s| / S_s (fuerza del caso para traslaciones, fuerza·L_máx para
+    giros). La calcula el padre; el worker no deriva ninguna base.
+    """
+
+    spring: int
+    direction: Vec3
+    scale: float
+
+
+def penalty_step(force: float, scale: float) -> float:
+    """p_s = |k_s·g_s| / S_s (ADR-004 §3); con S_s = 0, 0 si la fuerza es 0 e ∞ si no.
+
+    Misma regla que el worker, que no importa ``veritas``."""
+    if scale > 0.0:
+        return abs(force) / scale
+    return 0.0 if force == 0.0 else float("inf")
+
+
+@dataclass(frozen=True, slots=True)
 class SpatialNodalLoad:
     """Carga nodal global (Fx, Fy, Fz, Mx, My, Mz)."""
 
@@ -271,6 +310,10 @@ class SpatialRequest:
     aux_nodes: tuple[SpatialAuxNode, ...] = ()
     end_equals: tuple[SpatialEndEqual, ...] = ()
     end_springs: tuple[SpatialEndSpring, ...] = ()
+    end_penalties: tuple[SpatialEndPenalty, ...] = ()
+    end_penalty_tolerance: float = DEFAULT_END_PENALTY_TOLERANCE
+    end_penalty_stagnation: float = DEFAULT_TOL_PENALTY
+    end_penalty_max_iterations: int = DEFAULT_END_PENALTY_MAX_ITERATIONS
 
     def element_node(self, beam: SpatialBeam, end: str) -> int:
         """Nudo al que se conecta el elemento en ese extremo: aux si lo hay, si no el nudo."""
@@ -357,6 +400,10 @@ class SpatialRequest:
                 ]
                 for s in self.end_springs
             ],
+            "end_penalties": [[q.spring, list(q.direction), q.scale] for q in self.end_penalties],
+            "end_penalty_tolerance": self.end_penalty_tolerance,
+            "end_penalty_stagnation": self.end_penalty_stagnation,
+            "end_penalty_max_iterations": self.end_penalty_max_iterations,
         }
 
     def to_json(self) -> str:
@@ -405,6 +452,18 @@ class SpatialRequest:
             )
             for s in (_list(item, "end_spring", 7) for item in _list(data["end_springs"], "es"))
         )
+        end_penalties = tuple(
+            SpatialEndPenalty(_int(q[0], "end_penalty"), _vec3(q[1], "b"), _finite(q[2], "S"))
+            for q in (_list(item, "end_penalty", 3) for item in _list(data["end_penalties"], "ep"))
+        )
+        _check_end_penalties(end_springs, end_penalties)
+        tolerance = _finite(data["end_penalty_tolerance"], "end_penalty_tolerance")
+        stagnation = _finite(data["end_penalty_stagnation"], "end_penalty_stagnation")
+        if not 0.0 < tolerance < stagnation:
+            raise ProtocolError("end_penalty: se esperaba 0 < tolerancia < estancamiento")
+        max_iterations = _int(data["end_penalty_max_iterations"], "end_penalty_max_iterations")
+        if max_iterations < 1:
+            raise ProtocolError("end_penalty_max_iterations: se esperaba ≥ 1")
         springs = tuple(
             SpatialSpring(
                 _int(s[0], "spring"),
@@ -459,7 +518,23 @@ class SpatialRequest:
             aux_nodes,
             end_equals,
             end_springs,
+            end_penalties,
+            tolerance,
+            stagnation,
+            max_iterations,
         )
+
+
+def _check_end_penalties(
+    springs: tuple[SpatialEndSpring, ...], penalties: tuple[SpatialEndPenalty, ...]
+) -> None:
+    """Una entrada por cada resorte de extremo con ``penalty`` y ninguna más; S_s ≥ 0."""
+    tags = [q.spring for q in penalties]
+    expected = sorted(s.tag for s in springs if s.penalty)
+    if sorted(tags) != expected or len(set(tags)) != len(tags):
+        raise ProtocolError("end_penalties: no corresponden a los resortes de penalización")
+    if any(q.scale < 0.0 for q in penalties):
+        raise ProtocolError("end_penalties: escala negativa")
 
 
 def _beam(b: list[Any]) -> SpatialBeam:
@@ -518,6 +593,10 @@ _REQUEST_KEYS: Final = frozenset(
         "aux_nodes",
         "end_equals",
         "end_springs",
+        "end_penalties",
+        "end_penalty_tolerance",
+        "end_penalty_stagnation",
+        "end_penalty_max_iterations",
     }
 )
 _RESPONSE_KEYS: Final = frozenset(
@@ -534,6 +613,9 @@ _RESPONSE_KEYS: Final = frozenset(
         "beams",
         "aux",
         "end_springs",
+        "end_penalty_iterations",
+        "end_penalty_stop",
+        "end_penalty_converged",
     }
 )
 _VERSION_KEYS: Final = frozenset({"python", "openseespy", "openseespywin"})
@@ -562,7 +644,12 @@ class SpatialWorkerResponse:
     chain_results: tuple[SpatialChainResult, ...]
     beam_forces: tuple[tuple[int, tuple[float, ...]], ...]
     aux_results: tuple[tuple[int, Six, Six], ...] = ()
-    end_spring_results: tuple[tuple[int, float, float], ...] = ()
+    # (tag, basicForce = k·g, basicDeformation = g, λ de la última resolución); λ = 0 en
+    # los resortes sin penalización. Fuerza del enlace = λ + k·g (ADR-004 §6).
+    end_spring_results: tuple[tuple[int, float, float, float], ...] = ()
+    end_penalty_iterations: int = 0
+    end_penalty_stop: str = STOP_NONE
+    end_penalty_converged: bool = True
 
     @classmethod
     def from_json(cls, text: str) -> "SpatialWorkerResponse":
@@ -603,11 +690,28 @@ class SpatialWorkerResponse:
             (_int(x[0], "aux"), _six(x[1], "aux_disp"), _six(x[2], "aux_reaction"))
             for x in (_list(item, "aux", 3) for item in _list(data["aux"], "aux"))
         )
-        # basicForce y basicDeformation del zeroLength de una dirección (E2.5, F = k·Δ).
+        # basicForce y basicDeformation del zeroLength de una dirección (E2.5, F = k·Δ) y
+        # el multiplicador λ de la penalización iterada (ADR-004 §5).
         end_springs = tuple(
-            (_int(s[0], "end_spring"), _finite(s[1], "force"), _finite(s[2], "deformation"))
-            for s in (_list(item, "end_spring", 3) for item in _list(data["end_springs"], "es"))
+            (
+                _int(s[0], "end_spring"),
+                _finite(s[1], "force"),
+                _finite(s[2], "deformation"),
+                _finite(s[3], "multiplier"),
+            )
+            for s in (_list(item, "end_spring", 4) for item in _list(data["end_springs"], "es"))
         )
+        iterations = _int(data["end_penalty_iterations"], "end_penalty_iterations")
+        stop = _str(data["end_penalty_stop"], "end_penalty_stop")
+        converged = _bool(data["end_penalty_converged"], "end_penalty_converged")
+        # 0 iteraciones ⇔ sin penalización (none); convergida ⇔ no se agotó el máximo.
+        if (
+            stop not in END_PENALTY_STOPS
+            or iterations < 0
+            or (iterations == 0) != (stop == STOP_NONE)
+            or converged != (stop != STOP_MAX_ITERATIONS)
+        ):
+            raise ProtocolError("end_penalty: iteraciones, motivo y convergencia incoherentes")
         return cls(
             status,
             analyze_code,
@@ -619,4 +723,7 @@ class SpatialWorkerResponse:
             beams,
             aux,
             end_springs,
+            iterations,
+            stop,
+            converged,
         )

@@ -12,7 +12,7 @@ en la 12×12 propia (R7). Criterio exacto |e| ≤ 1e-9·escala.
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -59,6 +59,7 @@ from veritas.fem.spatial.stiffness import (
     fixed_end_forces,
     local_beam_stiffness,
 )
+from veritas.fem.spatial.translator import _end_penalties
 
 pytestmark = pytest.mark.solver
 
@@ -67,8 +68,8 @@ B2_OFFSET = (0.7, -1.1, 1.9)
 B2_VECXZ = (0.3, 0.2, 0.9)
 W = (4e3, -3e3, 2e3)  # (Wy, Wz, Wx) local de B1.
 W_NO_AXIAL = (4e3, -3e3, 0.0)  # Ux no rígido exige Wx = 0 (D5, E2-d).
-PENALTY_FACTOR = 1e8
-RECORD_BOUND = 1e-4  # Cota de registro (cableado), no la calibración de E2-c.
+END_PENALTY_FACTOR = 1e1  # ADR-004 §2.
+ITERATED_BOUND = 1e-8  # Hecho 22 con λ ≤ 500 (medido ≤ 3,8e-11).
 EPS = 2.2e-16
 FULL_FIX = (1, 1, 1, 1, 1, 1)
 
@@ -437,29 +438,29 @@ def test_aligned_aux_is_exact(label: str, local: int, state: str) -> None:
     assert_disp(node(response, 2)[0], ref.u, model.length)
     assert_force(beam_force(response), ref.force)
     assert_close(_check_aux(model, response, ref, 10), [0.0] * 6, max(abs(v) for v in LOAD))
-    assert [tag for tag, _f, _d in response.end_spring_results] == [s.tag for s in springs]
-    for _tag, force, deformation in response.end_spring_results:
+    assert [tag for tag, *_rest in response.end_spring_results] == [s.tag for s in springs]
+    for _tag, force, deformation, multiplier in response.end_spring_results:
+        assert multiplier == 0.0  # Sin penalización de extremo (ADR-004 §5).
         assert stiffness is not None
         assert abs(deformation - ref.delta[6 + local]) <= REL * max(abs(v) for v in ref.u)
         assert abs(force - stiffness * deformation) <= REL * abs(force)
 
 
 @pytest.mark.parametrize(("label", "local", "state"), _aux_cases(), ids=str)
-def test_oblique_aux_with_penalty_is_recorded(label: str, local: int, state: str) -> None:
-    """Barra oblicua: zeroLength en los ejes locales con penalización 1e8 en los rígidos.
-
-    Registra el error (hecho 16: hasta 8,1e-7; en este montaje, hasta 4,1e-6). La cota es de
-    registro; la calibración de la penalización de extremo es la puerta E2-c (pieza E2.4).
+def test_oblique_aux_with_iterated_penalty(label: str, local: int, state: str) -> None:
+    """Barra oblicua: zeroLength en los ejes locales con penalización iterada en los rígidos
+    (ADR-004, factor 1e1, b_s y S_s del padre). Con la penalización simple 1e8 el error
+    llegaba a 4,1e-6 en este montaje (hecho 16); iterada queda bajo ``ITERATED_BOUND``.
     Con los giros semirrígidos las traslaciones van con equalDOF global (E2-a).
     """
     model = EndModel(OBLIQUE, 0.37)
     ex, ey, _ez = model.axes
     stiffness = _end_stiffness(local, model.length) if state == "resorte" else None
     lengths = (model.length, math.dist(model.xj, model.xk))
-    rot = PENALTY_FACTOR * sum(
+    rot = END_PENALTY_FACTOR * sum(
         max(4 * E * IY / ell, 4 * E * IZ / ell, G * J / ell) for ell in lengths
     )
-    trans = PENALTY_FACTOR * sum(
+    trans = END_PENALTY_FACTOR * sum(
         max(E * A / ell, 12 * E * IY / ell**3, 12 * E * IZ / ell**3) for ell in lengths
     )
     rotation_only = local >= RX
@@ -472,21 +473,23 @@ def test_oblique_aux_with_penalty_is_recorded(label: str, local: int, state: str
         else:
             penalty = rot if d >= RX else trans
             springs.append(SpatialEndSpring(40 + d, 10, d + 1, penalty, ex, ey, True))
-    response = run(
-        model.request(
-            aux_nodes=(SpatialAuxNode(10, 2, 1, "J"),),
-            end_equals=equals,
-            end_springs=tuple(springs),
-        )
+    request = model.request(
+        aux_nodes=(SpatialAuxNode(10, 2, 1, "J"),),
+        end_equals=equals,
+        end_springs=tuple(springs),
     )
+    # b_s y S_s con la función del traductor, para no duplicar su definición.
+    response = run(replace(request, end_penalties=_end_penalties(request)))
+    assert response.end_penalty_converged
+    assert response.end_penalty_iterations > 1
     ref = model.reference({6 + local: stiffness})
     disp = node(response, 2)[0]
     trans_scale = max(abs(v) for v in ref.u[:3])
     rot_scale = max(*(abs(v) for v in ref.u[3:]), trans_scale / model.length)
     error_t = max(abs(a - b) for a, b in zip(disp[:3], ref.u[:3], strict=True)) / trans_scale
     error_r = max(abs(a - b) for a, b in zip(disp[3:], ref.u[3:], strict=True)) / rot_scale
-    print(f"hecho 16, {label} {state}: error traslación {error_t:.1e}, giro {error_r:.1e}")
-    assert max(error_t, error_r) <= RECORD_BOUND
+    print(f"ADR-004, {label} {state}: error traslación {error_t:.1e}, giro {error_r:.1e}")
+    assert max(error_t, error_r) <= ITERATED_BOUND
 
 
 # --- Combinaciones del worker (R3) y huérfanos (R4) -------------------------------------------

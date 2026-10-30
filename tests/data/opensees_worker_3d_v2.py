@@ -1,0 +1,235 @@
+"""COPIA CONGELADA del worker 3D v2 (commit 77f9e0e), solo para las pruebas: la igualdad
+bit a bit v2 ↔ v3 sin penalización de extremo de ``test_fem3d_end_penalty`` (ADR-004). No se
+usa en producción ni se modifica.
+
+Worker OpenSeesPy espacial de seis GDL por nudo (ADR-003, plan T-018, D2-D4).
+
+Se ejecuta en un proceso nuevo por corrida: ``python -I opensees_worker_3d.py RESPUESTA``,
+con el mismo runner que el worker plano. Lee la petición JSON por stdin y escribe la
+respuesta JSON en RESPUESTA. Solo usa la biblioteca estándar y OpenSeesPy; no importa
+``veritas`` ni ejecuta código procedente del modelo. Interpreta la petición literalmente:
+toda decisión de traducción la toma el traductor del proceso padre. Los avisos de OpenSees
+salen por stderr, que el runner captura.
+
+Códigos de salida: 0 = respuesta escrita (el estado del análisis va en la respuesta);
+2 = uso incorrecto. Cualquier otra excepción termina con código distinto de 0.
+"""
+
+import json
+import platform
+import sys
+from importlib.metadata import PackageNotFoundError, version
+from typing import Any
+
+PROTOCOL_ID = "veritas.opensees.spatial"
+PROTOCOL_VERSION = 2
+
+
+def _version(package: str) -> str | None:
+    try:
+        return version(package)
+    except PackageNotFoundError:
+        return None
+
+
+def _response(status: str, message: str = "", analyze_code: int | None = None) -> dict[str, Any]:
+    return {
+        "protocol": PROTOCOL_ID,
+        "version": PROTOCOL_VERSION,
+        "status": status,
+        "analyze_code": analyze_code,
+        "message": message,
+        "versions": {
+            "python": platform.python_version(),
+            "openseespy": _version("openseespy"),
+            "openseespywin": _version("openseespywin"),
+        },
+        "nodes": [],
+        "grounds": [],
+        "chains": [],
+        "beams": [],
+        "aux": [],
+        "end_springs": [],
+    }
+
+
+def _fixes(ops: Any, request: dict[str, Any]) -> None:
+    """Un único fix por nudo: el giro huérfano (plan T-018, R4) se fusiona con el del apoyo."""
+    fixity_by_node: dict[int, list[int]] = {node: list(f) for node, f in request["fixes"]}
+    for node, rotations in request["orphan_fixes"]:
+        fixity = fixity_by_node.setdefault(node, [0] * 6)
+        fixity[3:] = [max(a, b) for a, b in zip(fixity[3:], rotations, strict=True)]
+    for node, fixity in fixity_by_node.items():
+        ops.fix(node, *fixity)
+
+
+def _beams_and_ends(
+    ops: Any, request: dict[str, Any], coordinates: dict[int, tuple[float, float, float]]
+) -> None:
+    """Barras y extremos no rígidos (E2-a): aux en el maestro, sin fix; el elemento se conecta
+    a él y lo unen al maestro ``equalDOF`` y ``zeroLength`` de extremo."""
+    element_node: dict[tuple[int, str], int] = {}
+    master_of: dict[int, int] = {}
+    for aux, master, beam, end in request["aux_nodes"]:
+        ops.node(aux, *coordinates[master])
+        element_node[(beam, end)] = aux
+        master_of[aux] = master
+    for beam in request["beams"]:
+        tag, _entity, node_i, node_j, area, e, g, j, iy, iz, vecxz = beam[:11]
+        release_y, release_z = beam[11], beam[12]
+        # Transformación Linear con vecxz = ez de ADR-001 (hecho 1) y beamUniform (Wy, Wz, Wx)
+        # (hecho 9). A y J llegan efectivos (hechos 5 y 15); -releasey/-releasez solo si el
+        # código no es 0 (hecho 14). El padre contrasta localForce con k·T·u − F_eq condensados.
+        ops.geomTransf("Linear", tag, *vecxz)
+        start = element_node.get((tag, "I"), node_i)
+        stop = element_node.get((tag, "J"), node_j)
+        releases: list[Any] = []
+        if release_y:
+            releases += ["-releasey", release_y]
+        if release_z:
+            releases += ["-releasez", release_z]
+        ops.element("elasticBeamColumn", tag, start, stop, area, e, g, j, iy, iz, tag, *releases)
+    for aux, dofs in request["end_equals"]:
+        ops.equalDOF(master_of[aux], aux, *dofs)
+    for tag, aux, dof, stiffness, axis_x, axis_yp, _penalty in request["end_springs"]:
+        ops.uniaxialMaterial("Elastic", tag, stiffness)
+        ops.element(
+            "zeroLength",
+            tag,
+            master_of[aux],
+            aux,
+            "-mat",
+            tag,
+            "-dir",
+            dof,
+            "-orient",
+            *axis_x,
+            *axis_yp,
+        )
+
+
+def _build(ops: Any, request: dict[str, Any]) -> None:
+    ops.wipe()
+    ops.model("basic", "-ndm", 3, "-ndf", 6)
+    coordinates: dict[int, tuple[float, float, float]] = {}
+    for tag, _entity, x, y, z in request["nodes"]:
+        ops.node(tag, x, y, z)
+        coordinates[tag] = (x, y, z)
+    _fixes(ops, request)
+    _beams_and_ends(ops, request, coordinates)
+    grounds: set[int] = set()
+    for tag, _support, node, ground, dof, stiffness, axis_x, axis_yp, _pen in request["springs"]:
+        if ground not in grounds:
+            ops.node(ground, *coordinates[node])
+            ops.fix(ground, 1, 1, 1, 1, 1, 1)
+            grounds.add(ground)
+        ops.uniaxialMaterial("Elastic", tag, stiffness)
+        ops.element(
+            "zeroLength", tag, ground, node, "-mat", tag, "-dir", dof, "-orient", *axis_x, *axis_yp
+        )
+    for chain in request["chains"]:
+        tag, _support, node, c_node, r_node, ground, normal, tangent, length, stiffness = chain
+        # Rodillo exacto (hechos 6, 8 y 11): u_N = length·θ_R × n, luego n·u_N = 0.
+        x, y, z = coordinates[node]
+        r_point = (x - length * normal[0], y - length * normal[1], z - length * normal[2])
+        ops.node(r_node, *r_point)
+        ops.fix(r_node, 1, 1, 1, 0, 0, 0)
+        ops.node(c_node, x, y, z)
+        ops.rigidLink("beam", r_node, c_node)
+        ops.equalDOF(c_node, node, 1, 2, 3)
+        # El giro de R alrededor de n es un modo desacoplado: lo fija un resorte.
+        ops.node(ground, *r_point)
+        ops.fix(ground, 1, 1, 1, 1, 1, 1)
+        ops.uniaxialMaterial("Elastic", tag, stiffness)
+        ops.element(
+            "zeroLength", tag, ground, r_node, "-mat", tag, "-dir", 4, "-orient", *normal, *tangent
+        )
+    ops.timeSeries("Linear", 1)
+    ops.pattern("Plain", 1, 1)
+    for node, values in request["nodal_loads"]:
+        ops.load(node, *values)
+    for beam, wy, wz, wx in request["beam_loads"]:
+        ops.eleLoad("-ele", beam, "-type", "-beamUniform", wy, wz, wx)
+    # Lagrange en todas las corridas (D3-A): Transformation falla en silencio con las
+    # restricciones encadenadas de la cadena (hecho 6). Alphas escalados (hecho 13).
+    ops.constraints("Lagrange", request["alpha_sp"], request["alpha_mp"])
+    ops.numberer("RCM")
+    ops.system("BandGeneral")
+    ops.algorithm("Linear")
+    ops.integrator("LoadControl", 1.0)
+    ops.analysis("Static")
+
+
+def _solve(request: dict[str, Any]) -> dict[str, Any]:
+    if request.get("protocol") != PROTOCOL_ID or request.get("version") != PROTOCOL_VERSION:
+        return _response("PROTOCOL_ERROR", "protocolo o versión no admitidos")
+    # Solo tras validar la petición. OpenSeesPy no publica tipos.
+    import openseespy.opensees as ops  # type: ignore[import-untyped]  # noqa: PLC0415
+
+    try:
+        _build(ops, request)
+        code = int(ops.analyze(1))
+        if code != 0:
+            return _response("ANALYZE_FAILED", "analyze() distinto de 0", code)
+        ops.reactions()
+        response = _response("OK", "", code)
+        response["nodes"] = [
+            [tag, list(ops.nodeDisp(tag)), list(ops.nodeReaction(tag))]
+            for tag, *_rest in request["nodes"]
+        ]
+        grounds = sorted({spring[3] for spring in request["springs"]})
+        response["grounds"] = [[tag, list(ops.nodeReaction(tag))] for tag in grounds]
+        response["chains"] = [
+            [
+                chain[0],
+                list(ops.nodeDisp(chain[3])),
+                list(ops.nodeDisp(chain[4])),
+                list(ops.nodeReaction(chain[4])),
+            ]
+            for chain in request["chains"]
+        ]
+        response["beams"] = [
+            [beam[0], list(ops.eleResponse(beam[0], "localForce"))] for beam in request["beams"]
+        ]
+        response["aux"] = [
+            [aux[0], list(ops.nodeDisp(aux[0])), list(ops.nodeReaction(aux[0]))]
+            for aux in request["aux_nodes"]
+        ]
+        response["end_springs"] = [
+            [
+                spring[0],
+                ops.eleResponse(spring[0], "basicForce")[0],
+                ops.eleResponse(spring[0], "basicDeformation")[0],
+            ]
+            for spring in request["end_springs"]
+        ]
+    except Exception as error:  # Todo error de OpenSees es un fallo de la corrida.
+        return _response("SOLVER_ERROR", f"{type(error).__name__}: {error}")
+    finally:
+        ops.wipe()
+    return response
+
+
+def main(argv: list[str]) -> int:
+    """Punto de entrada del worker."""
+    if len(argv) != 2:
+        print("uso: opensees_worker_3d.py RUTA_RESPUESTA", file=sys.stderr)
+        return 2
+    try:
+        request = json.loads(sys.stdin.read())
+    except json.JSONDecodeError as error:
+        response = _response("PROTOCOL_ERROR", f"JSON no válido: {error.msg}")
+    else:
+        response = (
+            _solve(request)
+            if isinstance(request, dict)
+            else _response("PROTOCOL_ERROR", "la petición no es un objeto")
+        )
+    # allow_nan: un resultado no finito llega tal cual y el padre lo rechaza.
+    with open(argv[1], "w", encoding="utf-8") as stream:
+        json.dump(response, stream, allow_nan=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

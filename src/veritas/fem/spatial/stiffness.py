@@ -540,7 +540,8 @@ def validate_request(request: SpatialRequest) -> None:
     mecanismo (revisión de la pieza 4, m5); las direcciones nulas las rechaza ``unit``.
 
     Extremos (E2.3, R10): A y J ≥ 0, con 0 si y solo si su marca de liberación; referencias
-    de aux, ``equalDOF`` y resortes de extremo coherentes; huérfanos en nudos de dominio.
+    de aux, ``equalDOF`` y resortes de extremo coherentes; huérfanos en nudos de dominio y
+    penalizaciones de extremo (ADR-004) una por resorte de penalización.
     Va antes de ``reduced_coordinates``: una referencia rota es FAILED, no ``KeyError``."""
     for beam in request.beams:
         values = (beam.elastic_modulus, beam.shear_modulus, beam.inertia_y, beam.inertia_z)
@@ -597,6 +598,23 @@ def _validate_ends(request: SpatialRequest) -> None:
         spring_direction(end_spring.axis_x, end_spring.axis_yp, end_spring.dof)
     if any(orphan.node not in domain for orphan in request.orphan_fixes):
         raise InvalidStiffnessError("giro huérfano fijado fuera de los nudos de dominio")
+    _validate_end_penalties(request)
+
+
+def _validate_end_penalties(request: SpatialRequest) -> None:
+    """ADR-004: una entrada por resorte de penalización de extremo y ninguna más, con b_s =
+    ``spring_direction`` y S_s finita ≥ 0. Sin ella el worker no iteraría ese resorte y el
+    padre no lo recomprobaría."""
+    penalized = {s.tag: s for s in request.end_springs if s.penalty}
+    tags = [item.spring for item in request.end_penalties]
+    if len(set(tags)) != len(tags) or set(tags) != set(penalized):
+        raise InvalidStiffnessError("penalizaciones de extremo incoherentes con los resortes")
+    for item in request.end_penalties:
+        spring = penalized[item.spring]
+        if item.direction != spring_direction(spring.axis_x, spring.axis_yp, spring.dof) or not (
+            math.isfinite(item.scale) and item.scale >= 0.0
+        ):
+            raise InvalidStiffnessError(f"penalización de extremo {item.spring} no válida")
 
 
 def solver_free_dofs(request: SpatialRequest) -> int:

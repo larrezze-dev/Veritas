@@ -18,6 +18,7 @@ from veritas.fem.spatial.protocol import SpatialRequest
 from veritas.fem.spatial.stiffness import solver_free_dofs
 from veritas.fem.spatial.translator import (
     HYPOTHESIS_END_LINKS,
+    HYPOTHESIS_END_PENALTY,
     HYPOTHESIS_END_RELEASES,
     HYPOTHESIS_END_SERIES,
     HYPOTHESIS_ORPHAN,
@@ -28,7 +29,7 @@ from veritas.fem.spatial.translator import (
 
 ROT_UNIT = "N*m/rad"
 TRANS_UNIT = "N/m"
-PENALTY_FACTOR = 1e8
+END_PENALTY_FACTOR = 1e1  # ADR-004 §2: los extremos no usan penalty_factor (D4).
 HORIZONTAL_OBLIQUE = (1.2, -0.7, 0.0)  # Horizontal no alineada: ez = Z (ADR-001).
 
 type Tip = tuple[float, float, float]
@@ -235,7 +236,7 @@ def _scales(request: SpatialRequest, node: int) -> tuple[float, float]:
             length = math.dist(coordinates[beam.node_i], coordinates[beam.node_j])
             rotation += max(4 * E_PA * IY, 4 * E_PA * IZ, G_PA * J) / length
             translation += max(E_PA * AREA / length, 12 * E_PA * max(IY, IZ) / length**3)
-    return PENALTY_FACTOR * rotation, PENALTY_FACTOR * translation
+    return END_PENALTY_FACTOR * rotation, END_PENALTY_FACTOR * translation
 
 
 def test_oblique_rotation_spring_uses_rotation_penalty() -> None:
@@ -251,7 +252,8 @@ def test_oblique_rotation_spring_uses_rotation_penalty() -> None:
     for dof in (4, 6):
         assert springs[dof].penalty
         assert springs[dof].stiffness == pytest.approx(rotation, rel=1e-14)
-    assert HYPOTHESIS_PENALTY in translation.hypotheses
+    assert HYPOTHESIS_END_PENALTY in translation.hypotheses
+    assert HYPOTHESIS_PENALTY not in translation.hypotheses  # Solo apoyos D4 (ADR-004 §8).
 
 
 def test_oblique_released_translation_uses_translation_penalty() -> None:

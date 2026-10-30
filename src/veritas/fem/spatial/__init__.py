@@ -47,8 +47,11 @@ from veritas.fem.spatial.postconditions import (
 )
 from veritas.fem.spatial.protocol import (
     PROTOCOL_VERSION,
+    STOP_STAGNATION,
+    STOP_TOLERANCE,
     SpatialRequest,
     SpatialWorkerResponse,
+    penalty_step,
 )
 from veritas.fem.spatial.results import (
     RAW_SPATIAL_BASIS,
@@ -375,6 +378,78 @@ def _response_failure(response: SpatialWorkerResponse) -> _Failure | None:
     )
 
 
+def _end_penalty_step(request: SpatialRequest, response: SpatialWorkerResponse) -> float:
+    """P = máx_s |k_s·g_s| / S_s con la ``basicForce`` devuelta (ADR-004 §3)."""
+    forces = {tag: force for tag, force, _deformation, _lam in response.end_spring_results}
+    if set(forces) != {spring.tag for spring in request.end_springs} or len(forces) != len(
+        response.end_spring_results
+    ):
+        raise ProtocolError("la respuesta no corresponde a la petición")
+    return max(
+        (penalty_step(forces[item.spring], item.scale) for item in request.end_penalties),
+        default=0.0,
+    )
+
+
+def _end_penalty_failure(
+    request: SpatialRequest, response: SpatialWorkerResponse, step: float
+) -> _Failure | None:
+    """Recomprobación de la penalización iterada en el padre (ADR-004 §3, defensa en
+    profundidad): el motivo declarado debe cumplirse con el paso P recalculado."""
+    iterations, stop = response.end_penalty_iterations, response.end_penalty_stop
+    if not request.end_penalties:
+        if iterations != 0:
+            raise ProtocolError("iteraciones de extremo sin penalización de extremo")
+        return None
+    bound = {
+        STOP_TOLERANCE: request.end_penalty_tolerance,
+        STOP_STAGNATION: request.end_penalty_stagnation,
+    }.get(stop)
+    if (
+        response.end_penalty_converged
+        and bound is not None
+        and step <= bound
+        and iterations <= request.end_penalty_max_iterations
+        and (stop != STOP_STAGNATION or iterations >= opensees_worker_3d.MIN_STAGNATION_ITERATION)
+    ):
+        return None
+    return _Failure(
+        DiagnosticCode.ANALYSIS_NONCONVERGENCE,
+        "fem3d.end_penalty_not_converged",
+        {
+            "iterations": iterations,
+            "stop": stop,
+            "step": step,
+            "bound": request.end_penalty_tolerance if bound is None else bound,
+        },
+    )
+
+
+def _end_penalty_diagnostic(response: SpatialWorkerResponse, step: float) -> Diagnostic:
+    """Iteraciones y motivo de parada (ADR-004 §8): informativo, no cambia el estado."""
+    return Diagnostic.create(
+        DiagnosticCode.ANALYSIS_NONCONVERGENCE,
+        "fem3d.end_penalty_iterations",
+        {
+            "iterations": response.end_penalty_iterations,
+            "stop": response.end_penalty_stop,
+            "step": step,
+        },
+        severity=Severity.WARNING,
+    )
+
+
+def _end_penalty_outcome(
+    run: _Run, request: SpatialRequest, response: SpatialWorkerResponse
+) -> _Failure | None:
+    """Recomprobación de la penalización iterada y, si converge, su diagnóstico."""
+    step = _end_penalty_step(request, response)
+    failure = _end_penalty_failure(request, response, step)
+    if failure is None and request.end_penalties:
+        run.warnings.append(_end_penalty_diagnostic(response, step))
+    return failure
+
+
 def _stderr_warning(outcome: WorkerOutcome) -> Diagnostic | None:
     """Una corrida limpia no escribe en stderr (medido): un aviso del solver se registra y
     los controles deciden (D2-A, revisión 6). En Linux, OpenSeesPy escribe siempre
@@ -442,7 +517,7 @@ def analyze_spatial(  # noqa: PLR0911 (un retorno por causa de fallo)
     try:
         response = SpatialWorkerResponse.from_json(outcome.response_text)
         run.versions.update(response.versions)
-        failure = _response_failure(response)
+        failure = _response_failure(response) or _end_penalty_outcome(run, request, response)
         if failure is not None:
             return run.finish(failure, None)
         raw = _raw_results(request, response)
