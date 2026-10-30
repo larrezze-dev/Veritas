@@ -125,7 +125,9 @@ from veritas.fem import (
 from veritas.fem.spatial import (
     SpatialAnalysisConfiguration,
     SpatialAnalysisRun,
+    SpatialResults,
     analyze_spatial,
+    normalize_spatial,
 )
 
 EXPERIMENTAL_WARNING: Final = (
@@ -328,8 +330,8 @@ def _add_analyze_parser(
     )
     spatial = analyze_sub.add_parser(
         "espacial",
-        help="Adaptador espacial de seis GDL: referencias T-FEM3D, contraste con el plano y "
-        "un mecanismo de torsión (T-018).",
+        help="Adaptador espacial de seis GDL: referencias T-FEM3D, contraste con el plano, "
+        "un mecanismo de torsión y uniones de extremo (T-018).",
         description=SPATIAL_DESCRIPTION,
         epilog=SPATIAL_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1545,8 +1547,8 @@ class _Variant:
 @dataclass(frozen=True, slots=True)
 class _Solved:
     variant: _Variant
-    run: AnalysisRun
-    results: PlanarResults | None
+    run: AnalysisRun | SpatialAnalysisRun
+    results: PlanarResults | SpatialResults | None
     error: DiagnosticError | None
 
 
@@ -1752,6 +1754,8 @@ class SpringContrast:
     within: tuple[bool, ...]  # Por fila: entre rígida y liberada, inclusive y con tolerancia.
     ratio: float | None  # s medio; None si ninguna fila tiene x_ríg ≠ x_lib.
     spread: float | None  # máx s − mín s.
+    # tol_penalty en el espacial con resorte oblicuo penalizado (T-018, E2.6-a).
+    tolerance: float = benchmarks.TOL_EXACT
 
     @property
     def matches(self) -> bool:
@@ -1760,7 +1764,7 @@ class SpringContrast:
             and self.ratio is not None
             and self.spread is not None
             and 0.0 < self.ratio < 1.0
-            and self.spread <= benchmarks.TOL_EXACT
+            and self.spread <= self.tolerance
         )
 
 
@@ -1769,6 +1773,7 @@ def spring_contrast(
     released: Sequence[float | None],
     spring: Sequence[float | None],
     scales: Sequence[float],
+    tolerance: float = benchmarks.TOL_EXACT,
 ) -> SpringContrast:
     """Monotonía y cociente común: con un único resorte, x(k) = x_lib + (x_ríg − x_lib)·s.
 
@@ -1782,14 +1787,15 @@ def spring_contrast(
         if x_r is None or x_l is None or x_s is None:
             within.append(False)
             continue
-        margin = benchmarks.TOL_EXACT * scale
+        margin = tolerance * scale
         within.append(min(x_r, x_l) - margin <= x_s <= max(x_r, x_l) + margin)
         # Solo filas con x_ríg − x_lib apreciable: en una casi degenerada, s no es fiable.
         if abs(x_r - x_l) >= SPRING_RATIO_MIN_SPAN * scale:
             ratios.append((x_s - x_l) / (x_r - x_l))
     if not ratios:
-        return SpringContrast(tuple(within), None, None)
-    return SpringContrast(tuple(within), sum(ratios) / len(ratios), max(ratios) - min(ratios))
+        return SpringContrast(tuple(within), None, None, tolerance)
+    spread = max(ratios) - min(ratios)
+    return SpringContrast(tuple(within), sum(ratios) / len(ratios), spread, tolerance)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1821,14 +1827,17 @@ class UnionsContrast:
         return errors
 
 
-def contrast_unions(
+def contrast_unions(  # noqa: PLR0913 (dos opciones con nombre del contraste espacial)
     solved: Sequence[_Solved],
     rows: Sequence[tuple[str, QuantityKind, _Extractor]],
     pairs: Sequence[tuple[float, float]],
     moment_scale: float,
+    *,
+    spring_tolerance: float = benchmarks.TOL_EXACT,
+    scales: dict[QuantityKind, float] | None = None,
 ) -> UnionsContrast:
     """Rígida y Liberada con ``benchmarks.evaluate``; Resorte con ``spring_contrast``."""
-    scales = {QuantityKind.MOMENT: moment_scale}
+    scales = {**(scales or {}), QuantityKind.MOMENT: moment_scale}
     checks = [
         benchmarks.evaluate(
             [
@@ -1846,6 +1855,7 @@ def contrast_unions(
         [check.computed for check in released],
         [extract(solved[2]) for _name, _kind, extract in rows],
         [max(r.scale, lib.scale) for r, lib in zip(rigid, released, strict=True)],
+        spring_tolerance,
     )
     return UnionsContrast(rigid, released, spring)
 
@@ -1856,7 +1866,7 @@ def _spring_lines(contrast: UnionsContrast) -> list[str]:
     spread = NOT_APPLICABLE_MARK if spring.spread is None else f"{spring.spread:.1e}"
     verdict = REFERENCE_MATCH if contrast.matches else REFERENCE_MISMATCH
     return [
-        f"Resorte: s = {ratio} (dispersión {spread}, tolerancia {benchmarks.TOL_EXACT:g}); "
+        f"Resorte: s = {ratio} (dispersión {spread}, tolerancia {spring.tolerance:g}); "
         f"entre Rígida y Liberada: {YES if all(spring.within) else NO}.",
         f"Contraste de uniones: {verdict}.",
     ]
@@ -2168,13 +2178,16 @@ def run_analyze_references(
 SPATIAL_REFERENCES: Final = "referencias"
 SPATIAL_CROSS: Final = "contraste-plano"
 SPATIAL_TORSION: Final = "mecanismo-torsion"
-SPATIAL_CHOICES: Final = (SPATIAL_REFERENCES, SPATIAL_CROSS, SPATIAL_TORSION)
+SPATIAL_UNIONS: Final = "uniones"
+SPATIAL_CHOICES: Final = (SPATIAL_REFERENCES, SPATIAL_CROSS, SPATIAL_TORSION, SPATIAL_UNIONS)
 SPATIAL_DESCRIPTION: Final = (
-    "Análisis espacial de seis GDL por nudo (ADR-003), en tres casos:\n"
-    "  referencias        T-FEM3D-01, 02, 03 y 05 frente a fórmulas cerradas (plan T-018).\n"
-    "  contraste-plano    T-FEM-001…004 con Uy, Rx y Rz fijos: fórmulas en 3D y 3D frente\n"
-    "                     al adaptador plano.\n"
-    "  mecanismo-torsion  biapoyada sin restricción de torsión: ANALYSIS_SINGULAR con su modo."
+    "Análisis espacial de seis GDL por nudo (ADR-003), en cuatro casos:\n"
+    "  referencias        T-FEM3D-01…05 frente a fórmulas cerradas (plan T-018).\n"
+    "  contraste-plano    T-FEM-001…004 y T-CON-REF-01…04 con Uy, Rx y Rz fijos: fórmulas\n"
+    "                     en 3D y 3D frente al adaptador plano.\n"
+    "  mecanismo-torsion  biapoyada sin restricción de torsión: ANALYSIS_SINGULAR con su modo.\n"
+    "  uniones            la viga de analyze uniones en una dirección oblicua: rígida,\n"
+    "                     liberada y resorte en Ry y en Rz locales, y un mecanismo."
 )
 SPATIAL_EPILOG: Final = (
     "Componentes del modo de mecanismo: Ux…Rz son GDL globales de un nudo; t1/t2 (traslación) "
@@ -2194,6 +2207,7 @@ SPATIAL_TORSION_EXPECTED: Final = (
     "Mecanismo detectado, como se esperaba: el análisis no publica resultados (salida 3)."
 )
 SPATIAL_TORSION_MISSED: Final = "ERROR: la corrida no detectó el mecanismo esperado."
+SPATIAL_UNIONS_MISSED: Final = "ERROR: la variante Mecanismo no dio ANALYSIS_SINGULAR."
 
 
 def _planar_contrast_lines(planar: benchmarks.ReferenceOutcome) -> list[str]:
@@ -2214,6 +2228,8 @@ def run_analyze_spatial(case: str, timeout_text: str, profile_name: str = "SI") 
     profile = _profile(profile_name)
     if case == SPATIAL_TORSION:
         return _spatial_torsion(timeout)
+    if case == SPATIAL_UNIONS:
+        return _spatial_unions(timeout, profile)
     if case == SPATIAL_CROSS:
         outcomes = [
             o for item in benchmarks.CROSS_CASES for o in benchmarks.run_cross_planar(item, timeout)
@@ -2221,7 +2237,7 @@ def run_analyze_spatial(case: str, timeout_text: str, profile_name: str = "SI") 
         return _format_outcomes(
             outcomes,
             profile,
-            "Contraste espacial-plano de T-FEM-001…004 (plan T-018, D1):",
+            "Contraste espacial-plano de T-FEM-001…004 y T-CON-REF-01…04 (plan T-018, D1):",
             benchmarks.SPATIAL_HYPOTHESES,
             "con las fórmulas del caso plano y con el adaptador plano dentro de la tolerancia",
         )
@@ -2282,6 +2298,288 @@ def _spatial_torsion(timeout: float) -> tuple[str, int]:
     ]
     # Salida 3 siempre: un mecanismo es una corrida FAILED (D7); si no se detectara, también.
     return "\n".join(lines), EXIT_ANALYSIS_FAILED
+
+
+# --- `analyze espacial --caso uniones` (T-018, E2-e y E2.6) ---------------------------------
+
+UNIONS_AXIS: Final = (2 / 7, -3 / 7, 6 / 7)  # dirección oblicua (la de T-FEM3D-01 b y 05)
+UNIONS_ALPHA: Final = 0.37  # rad
+
+
+@dataclass(frozen=True, slots=True)
+class _UnionsFamily:
+    """Familia de `uniones` espacial: GDL de la unión, plano de flexión y signo de momentos.
+
+    Ry: carga −P·ez, flexión en el plano local xz (el caso plano girado rígidamente). Rz:
+    carga −P·ey; es el caso Ry girado −90° alrededor de ex (ez→ey, ey→−ez), así que fuerzas
+    y desplazamientos según ey son los de ez y los momentos según ez son −(los de ey).
+    """
+
+    dof: Dof
+    force: int  # índice local de la fuerza y del desplazamiento del plano (2 = z, 1 = y)
+    moment: int  # índice local del momento del plano (4 = My, 5 = Mz)
+    sign: float  # signo de los momentos respecto al caso plano
+    inertia: float  # m⁴, I de flexión del plano (b = 0,2 m según y, h = 0,4 m según z)
+
+
+UNIONS_FAMILIES: Final = (
+    _UnionsFamily(Dof.RY, 2, 4, 1.0, 0.2 * 0.4**3 / 12),
+    _UnionsFamily(Dof.RZ, 1, 5, -1.0, 0.4 * 0.2**3 / 12),
+)
+
+
+def _local_axes(variant: _Variant) -> tuple[tuple[float, float, float], ...]:
+    return variant.model.axes(_id(variant, "B1")).matrix()
+
+
+def _spatial_unions_variant(
+    name: str, family: _UnionsFamily, end_j: EndConnection | None, *, mechanism: bool = False
+) -> _Variant:
+    """La viga de ``analyze uniones`` en la dirección ``UNIONS_AXIS`` con alfa = 0,37 rad.
+
+    Rígida, Liberada y Resorte: empotrada en N1 y N2 (6 GDL) y P = 10 kN en N3 en el plano
+    local de la familia. Mecanismo (E2.6-b): apoyos en la base local de la barra con solo el
+    giro según ey libre y rótula Ry en J de B1; nulidad 1 con el modo de rótula.
+    """
+    model = StructuralModel()
+    steel = _steel(model)
+    section = model.add_rectangular_section(
+        b=u.Quantity.of(0.2, "m"), h=u.Quantity.of(0.4, "m"), name="R 200×400"
+    )
+    case = model.add_load_case("Q1", LoadCategory.VARIABLE)
+    m = u.Quantity.of
+    nodes = {
+        label: model.add_node(
+            *(m(component * distance, "m") for component in UNIONS_AXIS), label=label
+        )
+        for label, distance in (("N1", 0.0), ("N3", UNIONS_L / 2), ("N2", UNIONS_L))
+    }
+    alpha = m(UNIONS_ALPHA, "rad")
+    members = {
+        label: model.add_member(
+            nodes[i].id,
+            nodes[j].id,
+            material=steel.ref,
+            section=section.ref,
+            alpha=alpha,
+            label=label,
+        )
+        for label, i, j in (("B1", "N1", "N3"), ("B2", "N3", "N2"))
+    }
+    q = model.axes(members["B1"].id).matrix()
+    if mechanism:
+        basis = SupportBasis.inclined(Vec3(*q[0]), Vec3(*q[2]))
+        hinge = build_restraints(
+            [SupportDof.UX, SupportDof.UY, SupportDof.UZ, SupportDof.RX, SupportDof.RZ]
+        )
+        for label in ("N1", "N2"):
+            model.set_support(nodes[label].id, hinge, basis=basis, label=f"Giro ey libre {label}")
+        released = EndConnection.rigid().with_dof(Dof.RY, DofState.RELEASED)
+        model.set_member_end(members["B1"].id, MemberEnd.J, released)
+    else:
+        for label in ("N1", "N2"):
+            model.set_support(nodes[label].id, fixed_restraints(), label=f"Empotramiento {label}")
+    if end_j is not None:
+        model.set_member_end(members["B2"].id, MemberEnd.J, end_j)
+    load = [-UNIONS_P * value for value in q[family.force]]
+    model.add_nodal_load(
+        case.id, nodes["N3"].id, fx=m(load[0], "N"), fy=m(load[1], "N"), fz=m(load[2], "N")
+    )
+    return _Variant(name, model, case.id, _labels(model))
+
+
+def _solve_spatial(variant: _Variant, timeout: float) -> _Solved:
+    config = SpatialAnalysisConfiguration(variant.case_id, timeout_s=timeout)
+    run = analyze_spatial(variant.model, config)
+    if run.status is not RunStatus.SUCCEEDED:
+        return _Solved(variant, run, None, None)
+    try:
+        return _Solved(variant, run, normalize_spatial(run, variant.model), None)
+    except DiagnosticError as error:
+        return _Solved(variant, run, None, error)
+
+
+def _local(values: Sequence[float | None], q: Sequence[Sequence[float]]) -> list[float] | None:
+    """Q·v por bloques de tres; None si falta una componente."""
+    if any(value is None for value in values):
+        return None
+    v = [value or 0.0 for value in values]
+    return [sum(q[r % 3][k] * v[3 * (r // 3) + k] for k in range(3)) for r in range(6)]
+
+
+def _local_node_value(node: str, index: int) -> _Extractor:
+    def extract(solved: _Solved) -> float | None:
+        if solved.results is None:
+            return None
+        node_id = _id(solved.variant, node)
+        item = next(n for n in solved.results.nodes if n.node_id == node_id)
+        local = _local(item.displacement.values(), _local_axes(solved.variant))
+        return None if local is None else local[index]
+
+    return extract
+
+
+def _local_reaction_value(node: str, index: int) -> _Extractor:
+    def extract(solved: _Solved) -> float | None:
+        if solved.results is None:
+            return None
+        node_id = _id(solved.variant, node)
+        item = next(r for r in solved.results.reactions if r.node_id == node_id)
+        local = _local(item.global_.values(), _local_axes(solved.variant))
+        return None if local is None else local[index]
+
+    return extract
+
+
+_LOCAL_NAMES: Final = ("x", "y", "z")
+_OUT_OF_PLANE_ROWS: Final = 4
+
+
+def _unions_family_rows(
+    family: _UnionsFamily,
+) -> tuple[list[tuple[str, QuantityKind, _Extractor]], list[tuple[float, float]]]:
+    """Filas en ejes locales de B1 y referencias (rígida, liberada) en SI.
+
+    Las del plano probado salen de ``unions_references`` (momentos con ``family.sign``); las
+    de fuera de ese plano (revisión m4) se comparan con 0: sin flexión en el otro eje ni
+    torsión.
+    """
+    ei = ANALYZE_DEMO_E * 1e6 * family.inertia
+    f, mo = family.force, family.moment
+    other_f, other_m = 3 - f, 9 - mo  # 1 ↔ 2 y 4 ↔ 5
+    fn, on = _LOCAL_NAMES[f], _LOCAL_NAMES[other_f]
+    mn, om = _LOCAL_NAMES[mo - 3], _LOCAL_NAMES[other_m - 3]
+    disp, force, moment = QuantityKind.DISPLACEMENT, QuantityKind.FORCE, QuantityKind.MOMENT
+    rows: list[tuple[str, QuantityKind, _Extractor]] = [
+        (f"u·e{fn} N3 (centro)", disp, _local_node_value("N3", f)),
+        (f"R·e{fn} N1", force, _local_reaction_value("N1", f)),
+        (f"R·e{fn} N2", force, _local_reaction_value("N2", f)),
+        (f"M·e{mn} N1 (reacción)", moment, _local_reaction_value("N1", mo)),
+        (f"M·e{mn} N2 (reacción)", moment, _local_reaction_value("N2", mo)),
+        (f"M{mn} extremo J de B2", moment, _end_value("B2", MemberEnd.J, mo)),
+        (f"u·e{on} N3 (fuera del plano)", disp, _local_node_value("N3", other_f)),
+        (f"R·e{on} N1 (fuera del plano)", force, _local_reaction_value("N1", other_f)),
+        (f"M·e{om} N1 (fuera del plano)", moment, _local_reaction_value("N1", other_m)),
+        ("M·ex N1 (torsión)", moment, _local_reaction_value("N1", 3)),
+    ]
+    planar = unions_references(UNIONS_P, UNIONS_L, ei)
+    pairs = [
+        (family.sign * rigid, family.sign * released) if index >= 3 else (rigid, released)  # noqa: PLR2004 (filas de momento)
+        for index, (rigid, released) in enumerate(planar)
+    ]
+    return rows, [*pairs, *([(0.0, 0.0)] * _OUT_OF_PLANE_ROWS)]
+
+
+def spatial_unions_contrast(
+    family: _UnionsFamily, solved: Sequence[_Solved]
+) -> tuple[list[tuple[str, QuantityKind, _Extractor]], list[tuple[float, float]], UnionsContrast]:
+    """Contraste de una familia: Rígida y Liberada a 1e-9; Resorte con tol_penalty (E2.6-a).
+
+    Escalas declaradas de las filas nulas (m4): P, PL³/(EI) y PL/8. El resorte oblicuo va
+    por penalización iterada (ADR-004), así que su cociente s lleva ``TOL_PENALTY``.
+    """
+    rows, pairs = _unions_family_rows(family)
+    ei = ANALYZE_DEMO_E * 1e6 * family.inertia
+    load, length = UNIONS_P, UNIONS_L
+    scales = {QuantityKind.FORCE: load, QuantityKind.DISPLACEMENT: load * length**3 / ei}
+    contrast = contrast_unions(
+        solved,
+        rows,
+        pairs,
+        load * length / 8,
+        spring_tolerance=benchmarks.TOL_PENALTY,
+        scales=scales,
+    )
+    return rows, pairs, contrast
+
+
+def _unions_family_lines(
+    family: _UnionsFamily, timeout: float, profile: PresentationProfile
+) -> tuple[list[str], bool]:
+    ei = ANALYZE_DEMO_E * 1e6 * family.inertia
+    k = UNIONS_SPRING_RATIO * ei / UNIONS_L
+    spring = EndConnection.semi_rigid(family.dof, u.Quantity(k, family.dof.stiffness_dimension))
+    released = EndConnection.rigid().with_dof(family.dof, DofState.RELEASED)
+    variants = [
+        _spatial_unions_variant("Rígida", family, None),
+        _spatial_unions_variant("Liberada", family, released),
+        _spatial_unions_variant("Resorte", family, spring),
+    ]
+    solved = [_solve_spatial(variant, timeout) for variant in variants]
+    rows, pairs, contrast = spatial_unions_contrast(family, solved)
+
+    def q(value: float, kind: QuantityKind) -> str:
+        return format_quantity(u.Quantity.of(value, _SI_SYMBOLS[kind]), kind, profile)
+
+    references = [
+        [
+            q(rigid, kind),
+            q(free, kind),
+            YES if ok else NO,
+            NOT_APPLICABLE_MARK if error is None else f"{error:.1e}",
+        ]
+        for (_name, kind, _extract), (rigid, free), ok, error in zip(
+            rows, pairs, contrast.row_matches, contrast.row_errors, strict=True
+        )
+    ]
+    stiffness = format_quantity(
+        u.Quantity(k, family.dof.stiffness_dimension), QuantityKind.ROTATIONAL_STIFFNESS, profile
+    )
+    name = str(family.dof)
+    lines = [
+        f"Familia {name}: P = {UNIONS_P / 1000:g} kN según −e{_LOCAL_NAMES[family.force]} "
+        "local en N3; se "
+        f"cambia el extremo J de B2: rígido, {name} liberado o resorte k = "
+        f"{UNIONS_SPRING_RATIO}·EI/L = {stiffness}.",
+        *_status_lines(solved),
+        *_hypothesis_lines(solved[2].run.hypotheses),
+        "",
+        _comparison(solved, rows, profile, references, ("Coincide", "Err. rel. máx.")),
+        *_spring_lines(contrast),
+        "",
+    ]
+    ok = all(item.results is not None for item in solved) and contrast.matches
+    return lines, ok
+
+
+def _spatial_unions(timeout: float, profile: PresentationProfile) -> tuple[str, int]:
+    """``analyze espacial --caso uniones``: dos familias (Ry, Rz) y un mecanismo (E2.6-c)."""
+    axis = ", ".join(f"{value:.4g}" for value in UNIONS_AXIS)
+    lines = [
+        f"Uniones en 3D (plan T-018, E2-e): la viga N1-N3-N2 de {UNIONS_L:g} m de "
+        "`analyze uniones` (B1 = N1→N3, B2 = N3→N2, R 200×400 de acero) en la dirección "
+        f"oblicua ({axis}) con alfa = {UNIONS_ALPHA:g} rad, empotrada en N1 y N2. Valores en "
+        "ejes locales de B1 (B1 y B2 colineales).",
+        f"Perfil de unidades: {profile.name}",
+        "",
+    ]
+    ok = True
+    for family in UNIONS_FAMILIES:
+        family_lines, family_ok = _unions_family_lines(family, timeout, profile)
+        lines += family_lines
+        ok = ok and family_ok
+    mechanism = _solve_spatial(
+        _spatial_unions_variant("Mecanismo", UNIONS_FAMILIES[0], None, mechanism=True), timeout
+    )
+    singular = any(d.code is DiagnosticCode.ANALYSIS_SINGULAR for d in mechanism.run.diagnostics)
+    lines += [
+        "Referencias a mano: familia Ry = caso plano girado (PL/8, PL³/(192EI); liberada "
+        "3PL/16, 7PL³/(768EI), reacciones 11P/16 y 5P/16); familia Rz = la misma con EIz y los "
+        "momentos con el signo cambiado (giro de −90° alrededor de ex). Rígida y Liberada con "
+        f"error relativo ≤ {benchmarks.TOL_EXACT:g}; fuera del plano probado, frente a 0. El "
+        "resorte oblicuo va por penalización iterada (ADR-004): su cociente s debe ser común "
+        f"con dispersión ≤ {benchmarks.TOL_PENALTY:g} (tol_penalty).",
+        COMPARISON_NOTE,
+        "",
+        "Mecanismo: la misma viga con apoyos en la base local de la barra (traslaciones y "
+        "giros según ex y ez fijos; giro según ey libre) en N1 y N2 y rótula Ry en J de B1 "
+        "(en N3).",
+        *_status_lines([mechanism]),
+        *([] if singular else [SPATIAL_UNIONS_MISSED]),
+        "",
+        EXPERIMENTAL_WARNING,
+    ]
+    return "\n".join(lines), EXIT_OK if ok and singular else EXIT_ANALYSIS_FAILED
 
 
 def _tolerant_streams() -> None:

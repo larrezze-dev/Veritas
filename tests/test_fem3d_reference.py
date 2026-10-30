@@ -1,4 +1,4 @@
-"""Referencias espaciales T-FEM3D-01, 02, 03 y 05 con OpenSeesPy real (plan T-018, D8).
+"""Referencias espaciales T-FEM3D-01…05 con OpenSeesPy real (plan T-018, D8).
 
 Independiente de ``fem.benchmarks``: cada valor esperado es una fórmula de este archivo con
 E y G literales y A, Iy, Iz y J de ``rectangular_properties`` (la función que alimenta el
@@ -12,11 +12,13 @@ coinciden con las de este archivo.
 
 import math
 from collections.abc import Sequence
+from fractions import Fraction
 
 import pytest
 
 import benchmark_cache
 from fem_support import Frame
+from veritas.core.connections.end import EndConnection, MemberEnd
 from veritas.core.geometry.entities import Member, Node
 from veritas.core.loads.loads import LoadBasis
 from veritas.core.messages_es import MESSAGES_ES, render_text
@@ -286,6 +288,79 @@ def test_3d05b_oblique_local_and_global_loads() -> None:
     check_oblique(frame, o, j, bar, total)
 
 
+# --- T-FEM3D-04: trípode (E2; derivación revisada en el plan) -------------------------------
+
+APEX_04 = (0.0, 0.0, 4.0)
+# Base, e_i (de la base al vértice, en racionales) y L_i.
+type Rational3 = tuple[Fraction, Fraction, Fraction]
+BASES_04: dict[str, tuple[tuple[float, float, float], Rational3, Fraction]] = {
+    "A": ((1.0, 1.5, 1.0), (Fraction(-2, 7), Fraction(-3, 7), Fraction(6, 7)), Fraction(7, 2)),
+    "B": ((-2.0, 2.0, 0.5), (Fraction(4, 9), Fraction(-4, 9), Fraction(7, 9)), Fraction(9, 2)),
+    "C": ((-0.5, -2.0, 0.0), (Fraction(1, 9), Fraction(4, 9), Fraction(8, 9)), Fraction(9, 2)),
+}
+# Axiles a mano (Σ N_i·e_i = P, tracción positiva), en racionales.
+TRIPOD_04: dict[str, tuple[tuple[int, int, int], tuple[Fraction | int, ...]]] = {
+    "general": ((6_000, -4_000, -15_000), (Fraction(-112_000, 9), 8_600, -12_400)),
+    "vertical": (
+        (0, 0, -10_000),
+        (Fraction(-40_000, 9), Fraction(-10_000, 7), Fraction(-40_000, 7)),
+    ),
+}
+
+
+def solve3(rows: Sequence[Sequence[Fraction]], rhs: Sequence[Fraction]) -> list[Fraction]:
+    """Eliminación de Gauss exacta (3×3, racionales)."""
+    m = [[*row, value] for row, value in zip(rows, rhs, strict=True)]
+    for k in range(3):
+        pivot = next(r for r in range(k, 3) if m[r][k] != 0)
+        m[k], m[pivot] = m[pivot], m[k]
+        for r in range(3):
+            if r != k:
+                factor = m[r][k] / m[k][k]
+                m[r] = [a - factor * b for a, b in zip(m[r], m[k], strict=True)]
+    return [m[r][3] / m[r][r] for r in range(3)]
+
+
+@pytest.mark.parametrize("variant", list(TRIPOD_04), ids=list(TRIPOD_04))
+def test_3d04_tripod(variant: str) -> None:
+    load, given = TRIPOD_04[variant]
+    forces = [Fraction(n) for n in given]
+    directions = [BASES_04[k][1] for k in "ABC"]
+    lengths = [BASES_04[k][2] for k in "ABC"]
+    # Los axiles a mano cumplen el equilibrio exacto del vértice.
+    for axis in range(3):
+        assert sum(n * e[axis] for n, e in zip(forces, directions, strict=True)) == load[axis]
+    ea = Fraction(E) * Fraction(A)
+    stretch = [n * length / ea for n, length in zip(forces, lengths, strict=True)]
+    u = solve3(directions, stretch)  # e_i·u = N_i·L_i/(EA)
+    work = sum(Fraction(p) * x for p, x in zip(load, u, strict=True))
+    assert work == sum(n * n * length / ea for n, length in zip(forces, lengths, strict=True))
+
+    frame = Frame()
+    apex = frame.node(APEX_04[0], APEX_04[2], y=APEX_04[1])
+    bars = {}
+    for key, (base, _e, _l) in BASES_04.items():
+        node = frame.node(base[0], base[2], y=base[1])
+        frame.support(node, fixed_restraints())
+        bar = frame.member(node, apex)
+        for end in MemberEnd:
+            frame.model.set_member_end(bar.id, end, EndConnection.pinned())
+        bars[key] = (node, bar)
+    frame.nodal(apex, fx=load[0], fy=load[1], fz=load[2])
+    res = solve(frame)
+    norm = math.hypot(*load)
+    u_ref = [float(x) for x in u]
+    computed = disp(res, apex)
+    close(computed[:3], u_ref, scale_of(*u_ref))
+    longest = float(max(lengths))
+    # Giro del vértice nulo (rigidez de torsión), con la escala |u|/L_máx.
+    close(computed[3:], [0.0, 0.0, 0.0], math.hypot(*u_ref) / longest)
+    for (node, bar), n, e in zip(bars.values(), forces, directions, strict=True):
+        close_fm(p_i(res, bar), [-float(n), 0.0, 0.0, 0.0, 0.0, 0.0], norm, norm * longest)
+        expected = [-float(n * x) for x in e] + [0.0, 0.0, 0.0]
+        close_fm(reaction(res, node), expected, norm, norm * longest)
+
+
 # --- Coherencia con fem.benchmarks ----------------------------------------------------------
 
 
@@ -309,6 +384,8 @@ def test_benchmark_spatial_references_match() -> None:
         ("T-FEM3D-02 b", "R_MZ O"): P * L2,
         ("T-FEM3D-03 a", "R_X O1"): -P / 2,
         ("T-FEM3D-03 b", "Uy A1"): None,  # solo presencia; el valor lo fija el test 03b
+        ("T-FEM3D-04 a", "pI_x BB"): -8_600.0,
+        ("T-FEM3D-04 b", "pI_x BA"): 40_000 / 9,
         ("T-FEM3D-05 a", "R_Z O"): 7850 * A * 9.80665 * 3.5,
     }
     references = {
@@ -344,7 +421,7 @@ def test_all_spatial_benchmark_cases_match() -> None:
     outcomes = [
         o for case in benchmarks.SPATIAL_CASES for o in benchmark_cache.run_spatial_reference(case)
     ]
-    assert len(outcomes) == 8
+    assert len(outcomes) == 10
     for outcome in outcomes:
         failing = [c.quantity for c in outcome.checks if not c.matches]
         assert outcome.matches, (outcome.case_id, failing)

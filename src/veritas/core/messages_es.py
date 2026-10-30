@@ -319,9 +319,8 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "penalización, con nudos auxiliares que no forman parte de los resultados."
     ),
     "fem3d.hypothesis_penalty": (
-        "Al menos un giro fijo parcial en base oblicua o una componente rígida de un extremo "
-        "oblicuo se representa por penalización; el resultado lleva la tolerancia de "
-        "penalización."
+        "Al menos un giro fijo parcial en base oblicua de un apoyo se representa por "
+        "penalización; el resultado lleva la tolerancia de penalización."
     ),
     "fem3d.hypothesis_normalized": (
         "Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis "
@@ -495,6 +494,14 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "benchmark.description_oblique_member_loads": (
         "Voladizo oblicuo de {length:g} m con alfa = {alpha:g} rad, empotrado en O. Carga "
         "uniforme LOCAL ({local_kn_m}) kN/m y GLOBAL ({global_kn_m}) kN/m, con Wx ≠ 0."
+    ),
+    "benchmark.title_tripod_general": "Trípode espacial articulado, carga general",
+    "benchmark.title_tripod_vertical": "Trípode espacial articulado, carga vertical",
+    "benchmark.description_tripod": (
+        "Vértice V ({apex}) m y bases empotradas A ({a}), B ({b}) y C ({c}) m; barras de "
+        "base a vértice con Ry y Rz liberados en ambos extremos "
+        "(preset articulado). Carga ({load_kn}) kN en V. Axiles de Σ N·e = P y desplazamiento "
+        "de e·u = N·L/(EA); giro de V nulo."
     ),
     "benchmark.note_cross_planar": (
         "Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. "

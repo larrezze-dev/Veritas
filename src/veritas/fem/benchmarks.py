@@ -1,5 +1,5 @@
 """Referencias analíticas T-FEM-001…004 (plan T-009, D1-A), T-CON-REF-01…04 (T-010, D6) y
-T-FEM3D-01, 02, 03 y 05 con el contraste cruzado espacial-plano (T-018, D1 y D8).
+T-FEM3D-01…05 con el contraste cruzado espacial-plano (T-018, D1 y D8).
 
 Cada caso plano construye su modelo XZ, lo analiza, normaliza los resultados (T-008) y los
 compara con fórmulas cerradas de Euler-Bernoulli derivadas por cuerpo libre en el plan.
@@ -825,8 +825,17 @@ IY_3D: Final = _calculated(_PROPS.iy.value)
 IZ_3D: Final = _calculated(_PROPS.iz.value)
 J_3D: Final = _calculated(_PROPS.torsion_constant.value)  # Saint-Venant, 7,3178e-4 m⁴
 
-SPATIAL_CASES: Final = ("T-FEM3D-01", "T-FEM3D-02", "T-FEM3D-03", "T-FEM3D-05")
-CROSS_CASES: Final = ("T-FEM-001", "T-FEM-002", "T-FEM-003", "T-FEM-004")
+SPATIAL_CASES: Final = ("T-FEM3D-01", "T-FEM3D-02", "T-FEM3D-03", "T-FEM3D-04", "T-FEM3D-05")
+CROSS_CASES: Final = (
+    "T-FEM-001",
+    "T-FEM-002",
+    "T-FEM-003",
+    "T-FEM-004",
+    "T-CON-REF-01",
+    "T-CON-REF-02",
+    "T-CON-REF-03",
+    "T-CON-REF-04",
+)
 
 SPATIAL_HYPOTHESES: Final = (
     Text.of("benchmark.hypothesis_spatial_formulation"),
@@ -1274,6 +1283,152 @@ def _rows_3d05b(c: _Case) -> list[Row]:
     return _rows_oblique(c, [a + b for a, b in zip(from_local, LOAD_GLOBAL_05, strict=True)])
 
 
+# --- T-FEM3D-04: trípode espacial (E2; derivación revisada en el plan) -------------------
+# Bases empotradas; barras de base a vértice con Ry y Rz liberados en I y J (preset
+# articulado). e_i = (V − base)/L_i son cuádruplas pitagóricas: det[e_A e_B e_C] = 5/9.
+
+TRIPOD_APEX: Final = (0.0, 0.0, 4.0)  # m
+TRIPOD_BASES: Final = {
+    "A": (1.0, 1.5, 1.0),  # e = (−2, −3, 6)/7, L = 3,5 m
+    "B": (-2.0, 2.0, 0.5),  # e = (4, −4, 7)/9, L = 4,5 m
+    "C": (-0.5, -2.0, 0.0),  # e = (1, 4, 8)/9, L = 4,5 m
+}
+TRIPOD_LOAD_GENERAL: Final = (6_000.0, -4_000.0, -15_000.0)  # N, global
+TRIPOD_LOAD_VERTICAL: Final = (0.0, 0.0, -10_000.0)  # N, global
+
+
+def _tripod_axes() -> dict[str, tuple[tuple[float, float, float], float]]:
+    """(e_i, L_i) por base, con e_i de la base al vértice."""
+    axes = {}
+    for label, base in TRIPOD_BASES.items():
+        length = math.dist(base, TRIPOD_APEX)
+        direction = tuple((a - b) / length for a, b in zip(TRIPOD_APEX, base, strict=True))
+        axes[label] = ((direction[0], direction[1], direction[2]), length)
+    return axes
+
+
+def _det3(m: Sequence[Sequence[float]]) -> float:
+    return (
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    )
+
+
+def _cramer(m: Sequence[Sequence[float]], rhs: Sequence[float]) -> list[float]:
+    """Solución de m·x = rhs (3×3) por la regla de Cramer."""
+    det = _det3(m)
+    solution = []
+    for column in range(3):
+        replaced = [[rhs[r] if k == column else m[r][k] for k in range(3)] for r in range(3)]
+        solution.append(_det3(replaced) / det)
+    return solution
+
+
+def _tripod_reference(load: Sequence[float]) -> tuple[list[float], list[float]]:
+    """(N_i, u_V): Σ N_i·e_i = P y e_i·u = N_i·L_i/(EA), tracción positiva."""
+    axes = _tripod_axes()
+    labels = list(TRIPOD_BASES)
+    columns = [[axes[label][0][r] for label in labels] for r in range(3)]
+    forces = _cramer(columns, load)
+    rows = [list(axes[label][0]) for label in labels]
+    stretch = [n * axes[label][1] / (E * AREA_3D) for n, label in zip(forces, labels, strict=True)]
+    return forces, _cramer(rows, stretch)
+
+
+def _build_tripod(load: Sequence[float]) -> Callable[[_Case], None]:
+    def build(case: _Case) -> None:
+        apex = TRIPOD_APEX
+        case.node("V", apex[0], apex[2], y=apex[1])
+        for label, base in TRIPOD_BASES.items():
+            case.node(label, base[0], base[2], y=base[1])
+            case.support(label, fixed_restraints(), f"Empotramiento {label}")
+            member = case.member(f"B{label}", label, "V")
+            for end in MemberEnd:
+                case.model.set_member_end(member, end, EndConnection.pinned())
+        m = u.Quantity.of
+        case.model.add_nodal_load(
+            case.load_case.id,
+            case.ids["V"],
+            fx=m(load[0], "N"),
+            fy=m(load[1], "N"),
+            fz=m(load[2], "N"),
+        )
+
+    return build
+
+
+def _rows_tripod(load: Sequence[float]) -> Callable[[_Case], list[Row]]:
+    def rows(c: _Case) -> list[Row]:
+        forces, disp = _tripod_reference(load)
+        axes = _tripod_axes()
+        result = _six_rows(
+            "V",
+            _U_NAMES,
+            ("Eᵀ·u = N·L/(EA)",) * 3 + ("0",) * 3,
+            _U_KINDS,
+            (*disp, 0.0, 0.0, 0.0),
+            _disp6(c, "V"),
+        )
+        for normal, (label, (direction, _length)) in zip(forces, axes.items(), strict=True):
+            result += _six_rows(
+                f"B{label}",
+                _P_NAMES,
+                ("−N_i (Σ N·e = P)",) + ("0",) * 5,
+                _F_KINDS,
+                (-normal, 0.0, 0.0, 0.0, 0.0, 0.0),
+                _p_i(c, f"B{label}"),
+            )
+            result += _six_rows(
+                label,
+                _R_NAMES,
+                ("−N_i·e_i",) * 3 + ("0",) * 3,
+                _F_KINDS,
+                (*(-normal * value for value in direction), 0.0, 0.0, 0.0),
+                _reaction6(c, label),
+            )
+        # Control energético (revisión, o1): trabajo con el u calculado frente a Σ N²L/(EA).
+        norm = math.hypot(*load)
+        energy = sum(
+            n * n * length / (E * AREA_3D)
+            for n, (_direction, length) in zip(forces, axes.values(), strict=True)
+        )
+        computed = _disp6(c, "V")[:3]
+        work = (
+            None
+            if any(value is None for value in computed)
+            else sum(p * (value or 0.0) for p, value in zip(load, computed, strict=True))
+        )
+        result.append(
+            (
+                "P·u/|P| V",
+                "Σ N²L/(EA)/|P|",
+                DISP,
+                energy / norm,
+                None if work is None else work / norm,
+            )
+        )
+        return result
+
+    return rows
+
+
+def _tripod_scales(load: Sequence[float]) -> dict[QuantityKind, float]:
+    """Escalas de las filas nulas: |P|, |P|·L_máx y |u_ref|/L_máx (giros)."""
+    norm = math.hypot(*load)
+    longest = max(length for _direction, length in _tripod_axes().values())
+    _forces, disp = _tripod_reference(load)
+    return {FORCE: norm, MOMENT: norm * longest, ROT: math.hypot(*disp) / longest}
+
+
+def _point(point: Sequence[float]) -> str:
+    return ", ".join(f"{value:g}" for value in point)
+
+
+_TRIPOD: Final = {
+    "apex": _point(TRIPOD_APEX),
+    **{label.lower(): _point(base) for label, base in TRIPOD_BASES.items()},
+}
 _TIP: Final = {
     "length": CANTILEVER_3D,
     "n_kn": TIP_LOCAL[0] / 1000,
@@ -1364,6 +1519,28 @@ SPATIAL_SPECS: Final[dict[str, tuple[_Spec, ...]]] = {
             _PORTAL_SCALES,
         ),
     ),
+    "T-FEM3D-04": (
+        _Spec(
+            "T-FEM3D-04 a",
+            Text.of("benchmark.title_tripod_general"),
+            Text.of("benchmark.description_tripod", load_kn=_kn(TRIPOD_LOAD_GENERAL), **_TRIPOD),
+            TOL_EXACT,
+            _build_tripod(TRIPOD_LOAD_GENERAL),
+            _rows_tripod(TRIPOD_LOAD_GENERAL),
+            _no_notes,
+            _tripod_scales(TRIPOD_LOAD_GENERAL),
+        ),
+        _Spec(
+            "T-FEM3D-04 b",
+            Text.of("benchmark.title_tripod_vertical"),
+            Text.of("benchmark.description_tripod", load_kn=_kn(TRIPOD_LOAD_VERTICAL), **_TRIPOD),
+            TOL_EXACT,
+            _build_tripod(TRIPOD_LOAD_VERTICAL),
+            _rows_tripod(TRIPOD_LOAD_VERTICAL),
+            _no_notes,
+            _tripod_scales(TRIPOD_LOAD_VERTICAL),
+        ),
+    ),
     "T-FEM3D-05": (
         _Spec(
             "T-FEM3D-05 a",
@@ -1448,10 +1625,11 @@ def _fix_out_of_plane(case: _Case) -> None:
     """Uy, Rx y Rz fijos en todos los nudos, en la base de su apoyo (D1; revisión, hallazgo 14).
 
     Los estados existentes (fijos y resortes) se conservan: solo los GDL libres pasan a fijos.
-    Un resorte en Uy, Rx o Rz se mantendría (no ocurre en T-FEM-001…004 y no rompe el
-    desacoplamiento). En un apoyo inclinado del plano
-    XZ, ey′ = Y: Uy′ es un ``fix`` y Rx′ y Rz′ con Ry′ libre forman el complemento alineado
-    (PROP-1), así que no se añade penalización.
+    Un resorte en Uy, Rx o Rz se mantendría (no ocurre en T-FEM-001…004 ni en T-CON-REF-01…04
+    y no rompe el desacoplamiento). Los resortes de extremo de T-CON-REF (Ry, barra en +X)
+    usan un aux coordenado sin coordenadas propias fuera del plano (R6). En un apoyo
+    inclinado del plano XZ, ey′ = Y: Uy′ es un ``fix`` y Rx′ y Rz′ con Ry′ libre forman el
+    complemento alineado (PROP-1), así que no se añade penalización.
     """
     added = (SupportDof.UY, SupportDof.RX, SupportDof.RZ)
     for node_id in case.model.nodes:
@@ -1538,6 +1716,34 @@ def _cross_rows(planar: _Case, spatial: _Case) -> list[Row]:
     return rows
 
 
+def _cross_scales(
+    planar: _Case, rows: Sequence[Row], declared: Mapping[QuantityKind, float] | None
+) -> dict[QuantityKind, float]:
+    """Escalas de las filas 3D frente a plano (E2.6; revisión, m1).
+
+    Las declaradas del caso (wL²/8, P·L) valen también aquí: si todos los momentos de
+    referencia son ≈ 0 (extremos liberados), la escala no puede ser el ruido del plano.
+    Un tipo sin escala (todas las traslaciones o todos los giros de referencia nulos) toma
+    la acoplada del otro: L_máx·máx|θ| o máx|u|/L_máx (precedente DEV-2). Solo se usan
+    valores de referencia (del plano) y la geometría, nunca valores calculados en 3D.
+    """
+    scales = dict(declared or {})
+    largest = {
+        kind: max((abs(row[3]) for row in rows if row[2] is kind), default=0.0)
+        for kind in (DISP, ROT)
+    }
+    model = planar.model
+    longest = max(
+        (model.nodes[m.node_j].position - model.nodes[m.node_i].position).norm()
+        for m in model.members.values()
+    )
+    if largest[DISP] == 0.0 and DISP not in scales and largest[ROT] > 0.0:
+        scales[DISP] = longest * largest[ROT]
+    if largest[ROT] == 0.0 and ROT not in scales and largest[DISP] > 0.0:
+        scales[ROT] = largest[DISP] / longest
+    return scales
+
+
 def _run_cross_spec(spec: _Spec, timeout_s: float | None) -> SpatialReferenceOutcome:
     planar_case, planar = _planar_case(spec, timeout_s)
     case = _Case(spec.category)
@@ -1550,7 +1756,8 @@ def _run_cross_spec(spec: _Spec, timeout_s: float | None) -> SpatialReferenceOut
         # Fórmulas del plano sobre el 3D, exactas (el rodillo inclinado es exacto en 3D), y
         # 3D frente a plano con la tolerancia del plano (1e-6 donde este penaliza).
         checks = evaluate(spec.rows(case), TOL_EXACT, spec.scales)
-        checks += evaluate(_cross_rows(planar_case, case), spec.tolerance)
+        rows = _cross_rows(planar_case, case)
+        checks += evaluate(rows, spec.tolerance, _cross_scales(planar_case, rows, spec.scales))
     return SpatialReferenceOutcome(
         spec.case_id,
         spec.title,
