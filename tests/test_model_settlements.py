@@ -10,7 +10,6 @@ from veritas.core.diagnostics import DiagnosticCode, InputValueError
 from veritas.core.geometry.entities import Node
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.loads.load_case import LoadCategory
-from veritas.core.loads.loads import SupportSettlement
 from veritas.core.materials.material import MaterialFamily
 from veritas.core.supports.support import (
     FIXED,
@@ -24,6 +23,7 @@ from veritas.core.supports.support import (
 )
 from veritas.core.units import Quantity
 from veritas.fem.adapters.planar_xz import translate_planar_xz
+from veritas.fem.adapters.protocol import PlanarSettlement
 from veritas.fem.spatial.config import SpatialAnalysisConfiguration
 from veritas.fem.spatial.translator import translate_spatial
 
@@ -317,7 +317,7 @@ def test_remove_support_with_settlement_is_rejected() -> None:
     model.remove_support(a.id)  # tras retirar el asiento, se permite
 
 
-# --- Adaptadores (E1: rechazo explícito) ------------------------------------------------
+# --- Adaptadores (E1: rechazo explícito; E2.1 lo admite en el plano, E2-b) -------------
 
 
 def settled_frame() -> Frame:
@@ -330,14 +330,12 @@ def settled_frame() -> Frame:
     return frame
 
 
-def test_planar_adapter_rejects_settlement() -> None:
+def test_planar_adapter_translates_settlement() -> None:
+    """E2.1 (E2-b): la misma petición que E1 rechazaba lleva ahora el asiento en u₂."""
     frame = settled_frame()
-    with pytest.raises(InputValueError) as info:
-        translate_planar_xz(frame.model, frame.config())
-    expect(info, D.UNSUPPORTED_CONFIGURATION, "fem.settlement_pending")
-    (load,) = (x for x in frame.model.loads.values() if isinstance(x, SupportSettlement))
-    assert info.value.diagnostic.location is not None
-    assert info.value.diagnostic.location.entity_id == load.id
+    request = translate_planar_xz(frame.model, frame.config()).request
+    (node,) = (n.tag for n in request.nodes if n.x1 == 0.0)
+    assert request.settlements == (PlanarSettlement(node, 2, -0.01),)
 
 
 def test_spatial_adapter_rejects_settlement() -> None:
@@ -347,12 +345,13 @@ def test_spatial_adapter_rejects_settlement() -> None:
     expect(info, D.UNSUPPORTED_CONFIGURATION, "fem.settlement_pending")
 
 
-def test_settlement_only_case_is_rejected_not_empty() -> None:
+def test_settlement_only_case_is_not_empty() -> None:
     frame = Frame()
     a, b = frame.node(0, 0), frame.node(2, 0)
     frame.member(a, b)
     frame.support(a, fixed_restraints())
     frame.model.add_support_settlement(frame.case_id, a.id, uz=m(-0.01))
-    with pytest.raises(InputValueError) as info:
-        translate_planar_xz(frame.model, frame.config())
-    expect(info, D.UNSUPPORTED_CONFIGURATION, "fem.settlement_pending")
+    request = translate_planar_xz(frame.model, frame.config()).request  # sin fem.empty_case
+    assert not request.nodal_loads
+    assert not request.beam_loads
+    assert len(request.settlements) == 1

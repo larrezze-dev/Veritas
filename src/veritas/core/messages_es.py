@@ -182,6 +182,23 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "fem.settlement_pending": (
         "El caso incluye un asiento de apoyo, que este análisis aún no admite; no se ignora."
     ),
+    "fem.settlement_out_of_plane": (
+        "Asiento fuera del plano XZ (Uy = {uy} m, Rx = {rx} rad, Rz = {rz} rad); el análisis "
+        "plano solo admite Ux, Uz y Ry."
+    ),
+    "fem.settlement_inclined_unsupported": (
+        "Asiento en un apoyo de base inclinada: el análisis solo lo admite en apoyos de base "
+        "global; no se ignora."
+    ),
+    "fem.settlement_with_penalty_unsupported": (
+        "El caso tiene asientos y la petición usa penalizaciones o cadenas (apoyos inclinados, "
+        "extremos penalizados); esta combinación aún no se admite y no se ignora."
+    ),
+    "fem.settlement_mismatch": (
+        "El desplazamiento calculado en el GDL asentado {component} del nudo {node} "
+        "({value}) no coincide con el prescrito ({prescribed}); diferencia {difference} "
+        "> cota {bound}."
+    ),
     "fem.load_type_unsupported": (
         "Carga de tipo {type} que el análisis plano no admite; no se ignora."
     ),

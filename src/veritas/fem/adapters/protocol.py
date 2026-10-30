@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 PROTOCOL_ID: Final = "veritas.opensees.planar"
-PROTOCOL_VERSION: Final = 2  # 2: extremos de barra liberados/resorte (T-010)
+PROTOCOL_VERSION: Final = 3  # 2: extremos de barra liberados/resorte (T-010); 3: asientos (T-016)
 
 type Pair = tuple[float, float]
 type Triple = tuple[float, float, float]
@@ -178,6 +178,19 @@ class PlanarBeamLoad:
 
 
 @dataclass(frozen=True, slots=True)
+class PlanarSettlement:
+    """Asiento impuesto (T-016) en la base del solver: ``dof`` 1 = u₁, 2 = u₂, 3 = θ.
+
+    El GDL debe estar en el ``fix`` del nudo; el worker lo retira del ``fix`` y lo impone
+    con ``sp`` dentro del patrón de carga (hechos 5 y 6 del plan).
+    """
+
+    node: int
+    dof: int
+    value: float
+
+
+@dataclass(frozen=True, slots=True)
 class PlanarRequest:
     """Petición completa y determinista de una corrida."""
 
@@ -192,6 +205,10 @@ class PlanarRequest:
     beam_loads: tuple[PlanarBeamLoad, ...]
     end_links: tuple[PlanarEndLink, ...] = ()
     orphan_fixes: tuple[int, ...] = ()
+    settlements: tuple[PlanarSettlement, ...] = ()
+
+    def __post_init__(self) -> None:
+        _check_settlements(self)
 
     def element_node(self, beam: PlanarBeam, end: str) -> int:
         """Nudo al que se conecta el elemento en ese extremo: aux si hay enlace, si no el nudo."""
@@ -244,6 +261,7 @@ class PlanarRequest:
                 for k in self.end_links
             ],
             "orphan_fixes": list(self.orphan_fixes),
+            "settlements": [[t.node, t.dof, t.value] for t in self.settlements],
         }
 
     def to_json(self) -> str:
@@ -314,6 +332,10 @@ class PlanarRequest:
             for k in (_list(item, "link", 7) for item in _list(data["end_links"], "end_links"))
         )
         orphans = tuple(_int(t, "orphan") for t in _list(data["orphan_fixes"], "orphan_fixes"))
+        settlements = tuple(
+            PlanarSettlement(_int(t[0], "node"), _int(t[1], "dof"), _finite(t[2], "value"))
+            for t in (_list(item, "settlement", 3) for item in _list(data["settlements"], "st"))
+        )
         return cls(
             _int(data["model_revision"], "model_revision"),
             _str(data["case_id"], "case_id"),
@@ -326,7 +348,28 @@ class PlanarRequest:
             beam_loads,
             links,
             orphans,
+            settlements,
         )
+
+
+def _check_settlements(request: PlanarRequest) -> None:
+    """Validación estricta (plan T-016, D6): GDL 1-3 en el ``fix`` del nudo, sin repetir,
+    y un giro asentado nunca figura en ``orphan_fixes``."""
+    fixity = {fix.node: fix.fixity for fix in request.fixes}
+    seen: set[tuple[int, int]] = set()
+    for settlement in request.settlements:
+        key = (settlement.node, settlement.dof)
+        if settlement.dof not in (1, 2, 3):
+            raise ProtocolError(f"asiento: GDL no válido {settlement.dof}")
+        if key in seen:
+            raise ProtocolError(f"asiento repetido en el nudo {settlement.node}")
+        seen.add(key)
+        if not fixity.get(settlement.node, (0, 0, 0))[settlement.dof - 1]:
+            raise ProtocolError(f"asiento fuera del fix del nudo {settlement.node}")
+        if settlement.dof == 3 and settlement.node in request.orphan_fixes:  # noqa: PLR2004
+            raise ProtocolError(f"giro asentado en orphan_fixes del nudo {settlement.node}")
+        if not math.isfinite(settlement.value):
+            raise NonFiniteValueError("asiento: valor no finito")
 
 
 def _bool(value: object, field: str) -> bool:
@@ -350,6 +393,7 @@ _REQUEST_KEYS: Final = frozenset(
         "beam_loads",
         "end_links",
         "orphan_fixes",
+        "settlements",
     }
 )
 _RESPONSE_KEYS: Final = frozenset(

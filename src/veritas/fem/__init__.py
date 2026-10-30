@@ -57,6 +57,7 @@ from veritas.fem.postconditions import (
     CheckFailure,
     member_checks,
     residual_check,
+    settlement_check,
 )
 from veritas.fem.results.normalized import (
     Component,
@@ -491,6 +492,10 @@ def _check_failure(model: StructuralModel, failure: CheckFailure) -> _Failure:
         member = model.member(UUID(failure.member_id))
         params["member"] = member.label or str(member.id)
         location = Location(entity_id=member.id, revision=member.revision)
+    if failure.key == "fem.settlement_mismatch" and failure.node_id is not None:
+        node = model.node(UUID(failure.node_id))
+        params["node"] = node.label or str(node.id)
+        location = Location(entity_id=node.id, revision=node.revision)
     if failure.key == "fem.residual_failed":
         if failure.member_id is not None:
             params["subject"] = render_text(
@@ -503,6 +508,32 @@ def _check_failure(model: StructuralModel, failure: CheckFailure) -> _Failure:
             )
             location = Location(entity_id=node.id, revision=node.revision)
     return _Failure(DiagnosticCode.ANALYSIS_FAILED, failure.key, params, location)
+
+
+def _solution_failure(
+    model: StructuralModel,
+    request: PlanarRequest,
+    response: WorkerResponse,
+    config: AnalysisConfiguration,
+) -> _Failure | None:
+    """Controles de la solución en orden: asiento (T-016, D7; sin asientos no evalúa nada),
+    equilibrio, esfuerzos por barra y residuo (T-017)."""
+    check = settlement_check(request, response)
+    if check is not None:
+        return _check_failure(model, check)
+    ok, force_residual, moment_residual = equilibrium_residual(request, response, config)
+    if not ok:
+        return _Failure(
+            DiagnosticCode.ANALYSIS_FAILED,
+            "fem.equilibrium_failed",
+            {
+                "force": force_residual,
+                "moment": moment_residual,
+                "tolerance": config.tol_equilibrium,
+            },
+        )
+    check = member_checks(request, response, config) or residual_check(request, response, config)
+    return None if check is None else _check_failure(model, check)
 
 
 def _worker_failure(outcome: WorkerOutcome, timeout_s: float) -> _Failure | None:
@@ -623,21 +654,4 @@ def analyze_planar_xz(  # noqa: PLR0911 (un retorno por causa de fallo)
             _Failure(DiagnosticCode.ANALYSIS_FAILED, "fem.protocol_error", {}, cause=str(error)),
             None,
         )
-    ok, force_residual, moment_residual = equilibrium_residual(request, response, config)
-    if not ok:
-        return run.finish(
-            _Failure(
-                DiagnosticCode.ANALYSIS_FAILED,
-                "fem.equilibrium_failed",
-                {
-                    "force": force_residual,
-                    "moment": moment_residual,
-                    "tolerance": config.tol_equilibrium,
-                },
-            ),
-            None,
-        )
-    check = member_checks(request, response, config) or residual_check(request, response, config)
-    if check is not None:
-        return run.finish(_check_failure(model, check), None)
-    return run.finish(None, raw)
+    return run.finish(_solution_failure(model, request, response, config), raw)

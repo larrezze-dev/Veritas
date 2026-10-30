@@ -17,7 +17,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 PROTOCOL_ID = "veritas.opensees.planar"
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 
 
 def _version(package: str) -> str | None:
@@ -46,6 +46,19 @@ def _response(status: str, message: str = "", analyze_code: int | None = None) -
     }
 
 
+def _fix(ops: Any, request: dict[str, Any]) -> None:
+    # Un único fix por nudo: el giro huérfano (T-010, D3) se fusiona con el del apoyo.
+    fixity_by_node: dict[int, list[int]] = {node: list(f) for node, f in request["fixes"]}
+    for node in request["orphan_fixes"]:
+        fixity_by_node.setdefault(node, [0, 0, 0])[2] = 1
+    # Asiento (T-016): el GDL sale del fix (fix y sp chocan, hecho 5) y lleva solo el sp.
+    for node, dof, _value in request["settlements"]:
+        fixity_by_node[node][dof - 1] = 0
+    for node, fixity in fixity_by_node.items():
+        if any(fixity):
+            ops.fix(node, *fixity)
+
+
 def _build(ops: Any, request: dict[str, Any]) -> None:
     ops.wipe()
     ops.model("basic", "-ndm", 2, "-ndf", 3)
@@ -53,12 +66,7 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
     for tag, _entity, x1, x2 in request["nodes"]:
         ops.node(tag, x1, x2)
         coordinates[tag] = (x1, x2)
-    # Un único fix por nudo: el giro huérfano (T-010, D3) se fusiona con el del apoyo.
-    fixity_by_node: dict[int, list[int]] = {node: list(f) for node, f in request["fixes"]}
-    for node in request["orphan_fixes"]:
-        fixity_by_node.setdefault(node, [0, 0, 0])[2] = 1
-    for node, fixity in fixity_by_node.items():
-        ops.fix(node, *fixity)
+    _fix(ops, request)
     # Extremos no rígidos (T-010, D2): aux en el nudo, equalDOF en u1, u2 y giro propio.
     element_node: dict[tuple[int, str], int] = {}
     for _tag, _member, beam, end, master, aux, _stiffness in request["end_links"]:
@@ -103,6 +111,9 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
         ops.load(node, p1, p2, moment)
     for beam, wy, wx in request["beam_loads"]:
         ops.eleLoad("-ele", beam, "-type", "-beamUniform", wy, wx)
+    # sp dentro del patrón 1 (hecho 6): valor prescrito con factor 1 en el único paso.
+    for node, dof, value in request["settlements"]:
+        ops.sp(node, dof, value)
     # Transformation hace que nodeDisp(aux)[0:2] sea igual bit a bit al maestro: el control
     # de alias del padre (T-017, D1) depende de ello. Cambiarlo exige nueva versión de protocolo.
     ops.constraints("Transformation")
@@ -116,6 +127,9 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
 def _solve(request: dict[str, Any]) -> dict[str, Any]:
     if request.get("protocol") != PROTOCOL_ID or request.get("version") != PROTOCOL_VERSION:
         return _response("PROTOCOL_ERROR", "protocolo o versión no admitidos")
+    fixed = {(node, dof) for node, f in request["fixes"] for dof in (1, 2, 3) if f[dof - 1]}
+    if any((node, dof) not in fixed for node, dof, _value in request["settlements"]):
+        return _response("PROTOCOL_ERROR", "asiento fuera del fix del nudo")
     # Solo tras validar la petición. OpenSeesPy no publica tipos.
     import openseespy.opensees as ops  # type: ignore[import-untyped]  # noqa: PLC0415
 

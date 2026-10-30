@@ -4,7 +4,8 @@ Función pura: no importa OpenSeesPy ni hace E/S y no modifica el modelo. Rechaz
 ``UNSUPPORTED_CONFIGURATION`` todo lo que no cabe en el plano (ADR-002 §1-§2; notas de
 T-005 R5/M6 y T-006); nunca lo ignora en silencio.
 
-Mapeo (gate G1-G4 del plan): x₁ = X, x₂ = Z, θ = −Ry; carga nodal (Fx, Fz, −My); carga
+Mapeo (gate G1-G4 del plan): x₁ = X, x₂ = Z, θ = −Ry; carga nodal (Fx, Fz, −My); asiento
+(Ux, Uz, −Ry) en apoyos de base global (T-016); carga
 de barra ``-beamUniform`` (Wy, Wx) en la base 2D del elemento, con ŷ = x̂ girado +90°.
 Tags (D6): por orden del texto UUID canónico, independiente del orden de inserción.
 """
@@ -45,6 +46,7 @@ from veritas.fem.adapters.protocol import (
     PlanarNodalLoad,
     PlanarNode,
     PlanarRequest,
+    PlanarSettlement,
     PlanarSpring,
 )
 from veritas.fem.adapters.singularity import translational_diagonal
@@ -360,7 +362,9 @@ class _Builder:
         wy = q.x * -uz + q.z * ux
         return PlanarBeamLoad(tag, wy, wx)
 
-    def loads(self, case_id: UUID) -> tuple[list[PlanarNodalLoad], list[PlanarBeamLoad]]:
+    def loads(
+        self, case_id: UUID
+    ) -> tuple[list[PlanarNodalLoad], list[PlanarBeamLoad], list[PlanarSettlement]]:
         loads = sorted(self.model.loads_in_case(case_id), key=lambda load: str(load.id))
         case = self.model.load_case(case_id)
         if not loads:
@@ -374,6 +378,7 @@ class _Builder:
             )
         nodal: list[PlanarNodalLoad] = []
         beam: list[PlanarBeamLoad] = []
+        settlements: list[PlanarSettlement] = []
         for load in loads:
             location = Location(entity_id=load.id, revision=load.revision)
             if isinstance(load, NodalLoad):
@@ -395,12 +400,38 @@ class _Builder:
                     q_z = self.model.self_weight_load(member_id)[2].si_value
                     beam.append(self._beam_load(member_id, Vec3(0.0, 0.0, q_z)))
             elif isinstance(load, SupportSettlement):
-                raise _unsupported("fem.settlement_pending", {}, location)
+                settlements.extend(self._settlement(load, location))
             else:  # Nunca se descarta en silencio.
                 raise _unsupported(
                     "fem.load_type_unsupported", {"type": type(load).__name__}, location
                 )
-        return nodal, beam
+        # D4-bis-A: con asientos, ninguna penalización en toda la petición (apoyos inclinados).
+        if settlements and self.uses_penalty:
+            raise _unsupported(
+                "fem.settlement_with_penalty_unsupported",
+                {},
+                Location(entity_id=case.id, revision=case.revision),
+            )
+        return nodal, beam, sorted(settlements, key=lambda t: (t.node, t.dof))
+
+    def _settlement(self, load: SupportSettlement, location: Location) -> list[PlanarSettlement]:
+        """Asiento (T-016): (Ux, Uz, −Ry) en u₁, u₂, θ; rechazos de lo específico a lo general."""
+        if load.translation.y != 0.0 or load.rotation.x != 0.0 or load.rotation.z != 0.0:
+            raise _unsupported(
+                "fem.settlement_out_of_plane",
+                {"uy": load.translation.y, "rx": load.rotation.x, "rz": load.rotation.z},
+                location,
+            )
+        support = self.model.supports[load.support_id]
+        if support.basis.kind is not BasisKind.GLOBAL:
+            raise _unsupported("fem.settlement_inclined_unsupported", {}, location)
+        node = self.node_tags[support.node_id]
+        values = (load.translation.x, load.translation.z, -load.rotation.y)
+        return [
+            PlanarSettlement(node, dof, value)
+            for dof, value in enumerate(values, start=1)
+            if value != 0.0
+        ]
 
     def _member_q(self, load: MemberUniformLoad, location: Location) -> Vec3:
         if load.basis is LoadBasis.GLOBAL:
@@ -479,7 +510,7 @@ def translate_planar_xz(model: StructuralModel, config: AnalysisConfiguration) -
     beams = builder.beams()
     builder.supports()
     links = builder.finish_links(beams)
-    nodal, beam_loads = builder.loads(case.id)
+    nodal, beam_loads, settlements = builder.loads(case.id)
     request = PlanarRequest(
         model.model_revision,
         str(case.id),
@@ -491,6 +522,7 @@ def translate_planar_xz(model: StructuralModel, config: AnalysisConfiguration) -
         tuple(nodal),
         tuple(beam_loads),
         tuple(links),
+        settlements=tuple(settlements),
     )
     node_ids = {tag: node_id for node_id, tag in builder.node_tags.items()}
     restrained, loaded = _orphans(request)

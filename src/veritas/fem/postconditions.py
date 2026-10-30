@@ -8,6 +8,8 @@ Se evalúan en el proceso padre sobre la respuesta del worker, en la base del so
   M = k·(θ maestro − θ aux) y giro libre del aux sin reacción.
 - D2: residuo Tᵀ(K·u − F) por coordenada reducida, con las cargas equivalentes de
   ``beamUniform`` (traslaciones al maestro, momento al θ del aux en un extremo no rígido).
+- Asiento (T-016, D7): el desplazamiento en cada GDL asentado es el prescrito. Va primero,
+  porque los demás controles usan ese u; sin asientos no hace nada.
 
 El alias exacto (diferencia 0) depende del handler ``Transformation``, fijado en el código
 del worker del protocolo v2: un cambio de handler exige una versión nueva de protocolo y
@@ -226,6 +228,35 @@ def _link_failure(
     reaction = abs(aux_reaction[link.aux][2])
     if _exceeds(reaction, bound):
         return _end_failure(link, CONTROL_AUX_REACTION, reaction, bound)
+    return None
+
+
+# Componente de dominio del GDL asentado en la base del solver (θ = −Ry).
+SETTLEMENT_COMPONENT: Final = {1: "Ux", 2: "Uz", 3: "Ry"}
+
+
+def settlement_check(request: PlanarRequest, response: WorkerResponse) -> CheckFailure | None:
+    """D7: |u − valor| ≤ c·eps·|valor| en cada GDL asentado (Transformation es exacto, hecho 2)."""
+    displacement = _displacements(response)
+    node_ids = {node.tag: node.entity_id for node in request.nodes}
+    for settlement in request.settlements:
+        value = displacement[settlement.node][settlement.dof - 1]
+        difference = abs(value - settlement.value)
+        bound = _ROUNDING * abs(settlement.value)
+        if _exceeds(difference, bound):
+            # El diagnóstico va en base de dominio: Ry = −θ (revisión E2.1, M4).
+            sign = -1.0 if settlement.dof == 3 else 1.0  # noqa: PLR2004 (GDL 3 = giro)
+            return CheckFailure(
+                "fem.settlement_mismatch",
+                {
+                    "component": SETTLEMENT_COMPONENT[settlement.dof],
+                    "value": sign * value,
+                    "prescribed": sign * settlement.value,
+                    "difference": difference if math.isfinite(difference) else math.nan,
+                    "bound": bound,
+                },
+                node_id=node_ids[settlement.node],
+            )
     return None
 
 

@@ -37,7 +37,13 @@ from veritas.core.diagnostics import (
 )
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
-from veritas.core.loads.loads import LoadBasis, MemberUniformLoad, NodalLoad, SelfWeight
+from veritas.core.loads.loads import (
+    LoadBasis,
+    MemberUniformLoad,
+    NodalLoad,
+    SelfWeight,
+    SupportSettlement,
+)
 from veritas.core.supports.support import BasisKind, RestraintKind, Support, SupportDof
 from veritas.fem.adapters.planar_xz import translate_planar_xz
 from veritas.fem.adapters.protocol import PlanarRequest
@@ -562,6 +568,8 @@ class _Normalizer:
                     q_z = self.model.self_weight_load(member_id)[2].si_value
                     total = distributed.get(member_id, Vec3(0, 0, 0)) + Vec3(0.0, 0.0, q_z)
                     distributed[member_id] = total
+            elif isinstance(load, SupportSettlement):
+                continue  # T-016, D7: acción sin fuerza prescrita; no aporta q ni P.
             else:  # pragma: no cover (O1: otro tipo de carga invalida q(0+) = −pI)
                 raise _postcondition("fem.results_unsupported_load", {"load": str(load.id)})
         return nodal, distributed
