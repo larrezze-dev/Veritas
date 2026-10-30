@@ -103,6 +103,17 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "El peso propio solo puede estar en un caso permanente; el caso «{case}» sería {category}."
     ),
     "load.self_weight_missing": "El modelo no tiene peso propio definido.",
+    "load.settlement_dof_not_fixed": (
+        "El asiento exige el GDL {dof} del apoyo FIXED, pero está en estado {state}."
+    ),
+    "load.settlement_duplicate": (
+        "El caso «{case}» ya tiene un asiento en este apoyo; solo se admite uno por caso y "
+        "apoyo. Retírelo antes de añadir otro."
+    ),
+    "load.settlement_support_conflict": (
+        "El cambio del apoyo ({detail}) dejaría incoherente el asiento del caso «{case}»; "
+        "retire antes el asiento."
+    ),
     "fem.no_members": "El modelo no tiene barras: no hay nada que analizar.",
     "fem.node_out_of_plane": (
         "El nudo {node} está fuera del plano de análisis XZ "
@@ -167,6 +178,12 @@ MESSAGES_ES: Final[dict[str, str]] = {
     ),
     "fem.member_load_out_of_plane": (
         "Carga de barra con componente global Y = {qy} N/m (límite {limit} N/m)."
+    ),
+    "fem.settlement_pending": (
+        "El caso incluye un asiento de apoyo, que este análisis aún no admite; no se ignora."
+    ),
+    "fem.load_type_unsupported": (
+        "Carga de tipo {type} que el análisis plano no admite; no se ignora."
     ),
     "fem.empty_case": "El caso «{case}» no tiene cargas.",
     "fem.too_many_dofs": (

@@ -26,7 +26,13 @@ from veritas.core.diagnostics import (
 )
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
-from veritas.core.loads.loads import LoadBasis, MemberUniformLoad, NodalLoad, SelfWeight
+from veritas.core.loads.loads import (
+    LoadBasis,
+    MemberUniformLoad,
+    NodalLoad,
+    SelfWeight,
+    SupportSettlement,
+)
 from veritas.core.materials.material import MaterialFamily
 from veritas.core.sections.properties import PropertyStatus, SectionProperty
 from veritas.core.supports.support import BasisKind, RestraintKind, Support, SupportDof
@@ -388,6 +394,12 @@ class _Builder:
                 for member_id, _ in _ordered(self.model.members):
                     q_z = self.model.self_weight_load(member_id)[2].si_value
                     beam.append(self._beam_load(member_id, Vec3(0.0, 0.0, q_z)))
+            elif isinstance(load, SupportSettlement):
+                raise _unsupported("fem.settlement_pending", {}, location)
+            else:  # Nunca se descarta en silencio.
+                raise _unsupported(
+                    "fem.load_type_unsupported", {"type": type(load).__name__}, location
+                )
         return nodal, beam
 
     def _member_q(self, load: MemberUniformLoad, location: Location) -> Vec3:

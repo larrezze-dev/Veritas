@@ -1,4 +1,4 @@
-"""Cargas nodales, cargas uniformes de barra y peso propio (LD-002, LD-003; plan T-006).
+"""Cargas nodales, de barra, peso propio y asientos de apoyo (LD-002, LD-003; T-006, T-016).
 
 Convenciones (ADR-001 §1-§2, ampliación aprobada en el plan T-006):
 
@@ -10,9 +10,13 @@ Convenciones (ADR-001 §1-§2, ampliación aprobada en el plan T-006):
 - Peso propio: q = ρ·A·g por metro de longitud real, dirección -Z global, derivado bajo
   demanda de la revisión actual de material y sección de cada barra. g se declara en la
   definición; por defecto la gravedad normal convencional 9,80665 m/s² (CGPM 1901).
+- Asiento de apoyo (plan T-016): desplazamiento (m) y giro (rad) impuestos en la BASE DEL
+  APOYO (global o inclinada, ADR-001 §1): traslación positiva según +x', +y', +z' y giro
+  positivo por la regla de la mano derecha (un descenso en base global es Uz < 0). Es una
+  acción sin fuerza prescrita: no aporta a la resultante ΣF ni ΣM.
 
-Las cargas nodales y de barra son inmutables (revisión 1); el peso propio admite
-revisiones. Una carga con todas las componentes nulas no se admite. Las acciones son
+Las cargas nodales, de barra y los asientos son inmutables (revisión 1); el peso propio
+admite revisiones. Una carga con todas las componentes nulas no se admite. Las acciones son
 prescritas: su resultante es una comprobación de entrada, no un resultado de análisis.
 """
 
@@ -145,7 +149,29 @@ class SelfWeight:
         object.__setattr__(self, "gravity", positive_float(self.gravity, "gravity", location))
 
 
-type Load = NodalLoad | MemberUniformLoad | SelfWeight
+@dataclass(frozen=True, slots=True)
+class SupportSettlement:
+    """Asiento impuesto (traslación en m, giro en rad) en la base de un apoyo.
+
+    Cada componente no nula exige un GDL FIXED del apoyo; lo comprueba el modelo.
+    """
+
+    id: UUID
+    revision: int
+    case_id: UUID
+    support_id: UUID
+    translation: Vec3
+    rotation: Vec3
+
+    def __post_init__(self) -> None:
+        check_entity_identity(self.id, self.revision, "SupportSettlement")
+        location = _check_refs(
+            self.id, self.revision, {"case_id": self.case_id, "support_id": self.support_id}
+        )
+        check_load_vector({"translation": self.translation, "rotation": self.rotation}, location)
+
+
+type Load = NodalLoad | MemberUniformLoad | SelfWeight | SupportSettlement
 
 
 def self_weight_intensity(linear_mass: Quantity, gravity: Quantity) -> Quantity:

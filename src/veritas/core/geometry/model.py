@@ -54,6 +54,7 @@ from veritas.core.loads.loads import (
     MemberUniformLoad,
     NodalLoad,
     SelfWeight,
+    SupportSettlement,
     point_contribution,
     self_weight_intensity,
     uniform_contribution,
@@ -62,7 +63,14 @@ from veritas.core.materials.material import MaterialFamily, MaterialRevision, bu
 from veritas.core.references import RevisionRef, RevisionRegistry, require_ref
 from veritas.core.sections.mass import linear_mass
 from veritas.core.sections.section import SectionRevision, build_rectangular_section
-from veritas.core.supports.support import Support, SupportBasis, check_restraints
+from veritas.core.supports.support import (
+    RestraintKind,
+    Restraints,
+    Support,
+    SupportBasis,
+    SupportDof,
+    check_restraints,
+)
 from veritas.core.units import (
     ACCELERATION,
     ANGLE,
@@ -530,6 +538,8 @@ class StructuralModel:
             raise _invalid_type("basis", "SupportBasis", basis, location)
         new_label = old_label if label is KEEP else label
         candidate = Support(support_id, revision, new_label, node_id, basis, checked)
+        if current is not None:
+            self._check_settlement_coherence(current, candidate.basis, candidate.restraints)
         if current is None:
             self._supports[support_id] = candidate
             self._support_by_node[node_id] = support_id
@@ -556,10 +566,47 @@ class StructuralModel:
     def remove_support(self, node_id: UUID) -> Support:
         """Retira el apoyo del nudo (``model_revision`` +1) y devuelve su última revisión."""
         current = self._require_support(node_id)
+        if self._settlements_of(current.id):
+            raise self._settlement_conflict(
+                current, "retirada del apoyo", self._settlements_of(current.id)[0]
+            )
         del self._supports[current.id]
         del self._support_by_node[node_id]
         self._model_revision += 1
         return current
+
+    def _settlements_of(self, support_id: UUID) -> list[SupportSettlement]:
+        return [
+            load
+            for load in self._loads.values()
+            if isinstance(load, SupportSettlement) and load.support_id == support_id
+        ]
+
+    def _settlement_conflict(
+        self, support: Support, detail: str, settlement: SupportSettlement
+    ) -> InputValueError:
+        return InputValueError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                "load.settlement_support_conflict",
+                {"detail": detail, "case": self.load_case(settlement.case_id).name},
+                location=Location(entity_id=support.id, revision=support.revision),
+            )
+        )
+
+    def _check_settlement_coherence(
+        self, current: Support, basis: SupportBasis, restraints: Restraints
+    ) -> None:
+        """Rechaza (sin mutar) un cambio del apoyo incoherente con sus asientos (T-016, D2-A)."""
+        for settlement in self._settlements_of(current.id):
+            if basis != current.basis:
+                raise self._settlement_conflict(current, "cambio de base", settlement)
+            values = (*settlement.translation.components(), *settlement.rotation.components())
+            for dof, value in zip(SupportDof, values, strict=True):
+                if value != 0.0 and restraints[dof.value].kind is not RestraintKind.FIXED:
+                    raise self._settlement_conflict(
+                        current, f"GDL {dof.label} deja de ser FIXED", settlement
+                    )
 
     # --- Casos de carga y cargas (T-006) ------------------------------------------------
 
@@ -680,6 +727,55 @@ class StructuralModel:
         self._model_revision += 1
         return load
 
+    def add_support_settlement(  # noqa: PLR0913 (seis componentes opcionales por nombre)
+        self,
+        case_id: UUID,
+        node_id: UUID,
+        *,
+        ux: Quantity | None = None,
+        uy: Quantity | None = None,
+        uz: Quantity | None = None,
+        rx: Quantity | None = None,
+        ry: Quantity | None = None,
+        rz: Quantity | None = None,
+    ) -> SupportSettlement:
+        """Asiento impuesto en la base del apoyo del nudo (componente omitida = 0); +1.
+
+        Cada componente no nula exige el GDL FIXED en la revisión actual del apoyo; como
+        máximo uno por (caso, apoyo).
+        """
+        case = self.load_case(case_id)
+        support = self._require_support(node_id)
+        load_id = new_entity_id()
+        location = Location(entity_id=load_id, revision=1)
+        translation = _vector({"ux": ux, "uy": uy, "uz": uz}, LENGTH, location)
+        rotation = _vector({"rx": rx, "ry": ry, "rz": rz}, ANGLE, location)
+        load = SupportSettlement(load_id, 1, case_id, support.id, translation, rotation)
+        values = (*translation.components(), *rotation.components())
+        for dof, value in zip(SupportDof, values, strict=True):
+            state = support.restraint(dof).kind
+            if value != 0.0 and state is not RestraintKind.FIXED:
+                raise InputValueError(
+                    Diagnostic.create(
+                        DiagnosticCode.INPUT_OUT_OF_RANGE,
+                        "load.settlement_dof_not_fixed",
+                        {"dof": dof.label, "state": str(state)},
+                        location=location,
+                    )
+                )
+        if any(s.case_id == case_id for s in self._settlements_of(support.id)):
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "load.settlement_duplicate",
+                    {"case": case.name},
+                    location=location,
+                )
+            )
+        self._loads[load.id] = load
+        self._model_revision += 1
+        return load
+
     @property
     def self_weight(self) -> SelfWeight | None:
         """Peso propio del modelo, o ``None``."""
@@ -779,18 +875,23 @@ class StructuralModel:
         loads = self.loads_in_case(case_id)
         force = moment = Vec3(0.0, 0.0, 0.0)
         for load in loads:
+            parts: list[tuple[Vec3, Vec3]]
             if isinstance(load, NodalLoad):
                 position = self._nodes[load.node_id].position
                 parts = [point_contribution(position, load.force, load.moment)]
             elif isinstance(load, MemberUniformLoad):
                 parts = [self._uniform_part(load.member_id, self._member_load_global(load))]
-            else:
+            elif isinstance(load, SupportSettlement):
+                parts = []  # Sin fuerza prescrita: cuenta en load_count, no en ΣF ni ΣM.
+            elif isinstance(load, SelfWeight):
                 parts = [
                     self._uniform_part(
                         member_id, Vec3(0.0, 0.0, self.self_weight_load(member_id)[2].si_value)
                     )
                     for member_id in self._members
                 ]
+            else:  # pragma: no cover (unión Load cerrada)
+                raise TypeError(f"tipo de carga no contemplado: {type(load).__name__}")
             for f, m in parts:
                 force, moment = force + f, moment + m
         return LoadResultant.from_vectors(force, moment, len(loads))

@@ -38,7 +38,13 @@ from veritas.core.diagnostics import (
 )
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
-from veritas.core.loads.loads import LoadBasis, MemberUniformLoad, NodalLoad, SelfWeight
+from veritas.core.loads.loads import (
+    LoadBasis,
+    MemberUniformLoad,
+    NodalLoad,
+    SelfWeight,
+    SupportSettlement,
+)
 from veritas.core.supports.support import RestraintKind, Support, SupportDof
 from veritas.fem.adapters.planar_xz import (
     NEAR_RIGID_RATIO,
@@ -609,6 +615,12 @@ class _Builder:
                     beam.append(
                         self._beam_load(member_id, self.model.axes(member_id).to_local(weight))
                     )
+            elif isinstance(load, SupportSettlement):
+                raise _unsupported(
+                    "fem.settlement_pending",
+                    {},
+                    Location(entity_id=load.id, revision=load.revision),
+                )
             else:  # Nunca se descarta en silencio.
                 raise _unsupported(
                     "fem3d.load_type_unsupported",

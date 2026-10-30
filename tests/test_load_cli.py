@@ -80,6 +80,9 @@ def test_demo_values(capsys: pytest.CaptureFixture[str]) -> None:
     assert "B2: q = (0.000 N/m; 0.000 N/m; -800.000 N/m)" in out
     assert "ez = (-0.8, 0, 0.6)" in out
     assert "Solo descripción de Q1: revisión 2, model_revision = 11" in out
+    assert "asiento            N1     GLOBAL  u = (0.000 m; 0.000 m; -0.005 m)" in out
+    assert "θ = (0.000 rad; 0.002 rad; 0.000 rad)" in out
+    assert "Empotramiento en N1 y asiento en Q1: model_revision = 13" in out
     assert out.rstrip().endswith(cli.PRESCRIBED_NOT_ANALYSIS)
 
 

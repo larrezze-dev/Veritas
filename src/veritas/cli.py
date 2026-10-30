@@ -92,6 +92,8 @@ from veritas.core.loads.loads import (
     LoadBasis,
     MemberUniformLoad,
     NodalLoad,
+    SelfWeight,
+    SupportSettlement,
     self_weight_intensity,
     vector_quantities,
 )
@@ -1141,7 +1143,22 @@ def _load_rows(
                     "q = " + _fq3(q, QuantityKind.FORCE_PER_LENGTH, profile),
                 )
             )
-        else:
+        elif isinstance(load, SupportSettlement):
+            support = model.supports[load.support_id]
+            displacement = vector_quantities(load.translation, u.LENGTH)
+            rotation = vector_quantities(load.rotation, u.ANGLE)
+            rows.append(
+                (
+                    "asiento",
+                    names[support.node_id],
+                    str(support.basis.kind),
+                    "u = "
+                    + _fq3(displacement, QuantityKind.DISPLACEMENT, profile)
+                    + "  θ = "
+                    + _fq3(rotation, QuantityKind.ANGLE, profile),
+                )
+            )
+        elif isinstance(load, SelfWeight):
             g = u.Quantity(load.gravity, u.ACCELERATION)
             rows.append(
                 (
@@ -1151,11 +1168,13 @@ def _load_rows(
                     f"g = {_fq(g, QuantityKind.ACCELERATION, profile)}",
                 )
             )
+        else:  # pragma: no cover (unión Load cerrada)
+            raise TypeError(f"tipo de carga no contemplado: {type(load).__name__}")
     return rows
 
 
 def format_load_demo(profile_name: str) -> str:
-    """Dos barras, caso G1 (peso propio) y caso Q1 (carga nodal y cargas locales)."""
+    """Dos barras, caso G1 (peso propio) y caso Q1 (cargas y asiento de un empotramiento)."""
     profile = _profile(profile_name)
     model = StructuralModel()
 
@@ -1192,6 +1211,11 @@ def format_load_demo(profile_name: str) -> str:
         f"Solo descripción de Q1: revisión {renamed.revision}, "
         f"model_revision = {model.model_revision}"
     )
+    model.set_support(n1.id, fixed_restraints())
+    model.add_support_settlement(
+        q1.id, n1.id, uz=u.Quantity.of(-5, "mm"), ry=u.Quantity.of(0.002, "rad")
+    )
+    trace.append(f"Empotramiento en N1 y asiento en Q1: model_revision = {model.model_revision}")
     names = {n1.id: "N1", n2.id: "N2", n3.id: "N3", b1.id: "B1", b2.id: "B2"}
     lines = [
         "Material SINTÉTICO de demostración (rho = 1000 kg/m³) y g = 10 m/s² explícita, "
