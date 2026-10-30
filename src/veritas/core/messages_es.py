@@ -262,10 +262,6 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "fem.results_unsupported_load": (
         "Carga {load} de un tipo que la normalización no admite (error interno)."
     ),
-    "fem3d.member_end_not_rigid": (
-        "El extremo {end} de la barra {member} no es rígido ({dof}: {state}); el análisis "
-        "espacial solo admite por ahora extremos rígidos."
-    ),
     "fem3d.end_axial_with_axial_load": (
         "La barra {member} tiene Ux de extremo liberado o con resorte y carga axial distribuida "
         "en el caso (Wx = {wx} N/m, incluido el peso propio de una barra inclinada); el "
@@ -349,6 +345,25 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "fem3d.end_penalty_iterations": (
         "Informativo: la penalización iterada de los extremos terminó en {iterations} "
         "iteraciones (motivo: {stop}; paso relativo final {step})."
+    ),
+    "fem3d.subject_member": "la barra {member}",
+    "fem3d.end_penalty_contrast_failed": (
+        "El contraste exacto de la penalización iterada de los extremos no se supera "
+        "({control}, componente {component}: desviación {value}, cota {bound}) en {subject}. "
+        "No hay resultados."
+    ),
+    "fem3d.end_penalty_reference_unreliable": (
+        "La solución de referencia del contraste de la penalización de extremo no es fiable "
+        "(corrección del refinamiento {value}, cota {bound}). No hay resultados."
+    ),
+    "fem3d.end_link_check_failed": (
+        "Control del enlace del extremo {end} de la barra {member} no superado ({control}: "
+        "desviación {value}, cota {bound}). No hay resultados."
+    ),
+    "fem3d.singular_member_end": (
+        "Rigidez singular o extremadamente mal condicionada (pivote escalado {pivot} ≤ "
+        "{tolerance}) en el extremo {end} de la barra {member}, componente local {component}: "
+        "posible mecanismo en la unión de extremo. No se calcula."
     ),
     "fem3d.end_penalty_not_converged": (
         "La penalización iterada de los extremos no converge (iteraciones {iterations}, "

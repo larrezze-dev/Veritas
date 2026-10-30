@@ -89,7 +89,8 @@ class MechanismDof:
     """GDL que participa en el modo de mecanismo (T-017, D3), en base de dominio.
 
     ``component``: «Ux», «Uz», «Ry» o «t» (traslación tangente de un apoyo oblicuo). Con
-    ``member_id``, es el giro propio del extremo ``end`` de esa barra sobre ``node_id``.
+    ``member_id``, es una coordenada propia (traslación o giro, en la base local de la barra
+    o t1/r1… si es oblicua) del extremo ``end`` de esa barra sobre ``node_id``.
     ``participation`` = Σ_q Q_iq² en coordenadas escaladas (entre 0 y 1).
     """
 

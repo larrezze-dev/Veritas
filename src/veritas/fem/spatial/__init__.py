@@ -41,6 +41,7 @@ from veritas.fem.runners.subprocess_runner import WorkerOutcome, run_worker
 from veritas.fem.spatial.config import SpatialAnalysisConfiguration
 from veritas.fem.spatial.postconditions import (
     CHAIN_ALIAS_FACTOR,
+    REFERENCE_MARGIN,
     equilibrium_residual,
     node_reactions,
     solution_checks,
@@ -176,6 +177,10 @@ def provenance_constants() -> dict[str, float]:
         "mechanism_guard_high": MECHANISM_GUARD_BAND[1],
         "mechanism_residual_factor": MECHANISM_RESIDUAL_FACTOR,
         "redundancy_tolerance": REDUNDANCY_TOLERANCE,
+        # Parada del worker y fiabilidad del contraste (ADR-004 §3-4; E2.5-e).
+        "end_penalty_min_stagnation_iteration": opensees_worker_3d.MIN_STAGNATION_ITERATION,
+        "end_penalty_stagnation_ratio": opensees_worker_3d.STAGNATION_IMPROVEMENT,
+        "end_contrast_reference_margin": REFERENCE_MARGIN,
     }
 
 
@@ -231,11 +236,15 @@ def _pivot_summary(
     )
 
 
-def _singular_failure(pivot: PivotSummary, config: SpatialAnalysisConfiguration) -> _Failure:
+def _singular_failure(
+    model: StructuralModel, pivot: PivotSummary, config: SpatialAnalysisConfiguration
+) -> _Failure:
     """Ubicación en el participante de mayor participación (empate: el primero por
-    etiqueta, T-017 D3-5); sin modo concluyente, la del pivote."""
+    etiqueta, T-017 D3-5); sin modo concluyente, la del pivote. Si es una coordenada propia
+    de un aux, ``fem3d.singular_member_end`` con la barra y el extremo (E2.5-d)."""
     value = pivot.min_pivot if pivot.min_pivot is not None else 0.0
     node_id, component = pivot.node_id, pivot.component or ""
+    member_id, end = pivot.member_id, pivot.end
     if pivot.mechanism:
         largest = max(item.participation for item in pivot.mechanism)
         top = next(
@@ -244,6 +253,21 @@ def _singular_failure(pivot: PivotSummary, config: SpatialAnalysisConfiguration)
             if item.participation >= largest - MECHANISM_TIE_TOLERANCE
         )
         node_id, component = top.node_id, top.component
+        member_id, end = top.member_id, top.end
+    if member_id is not None:
+        member = model.member(member_id)
+        return _Failure(
+            DiagnosticCode.ANALYSIS_SINGULAR,
+            "fem3d.singular_member_end",
+            {
+                "pivot": value,
+                "component": component,
+                "member": member.label or str(member.id),
+                "end": end or "",
+                "tolerance": config.tol_pivot,
+            },
+            Location(entity_id=member.id, revision=member.revision),
+        )
     return _Failure(
         DiagnosticCode.ANALYSIS_SINGULAR,
         "fem.singular",
@@ -305,7 +329,7 @@ def _singular_outcome(
             and top.node_id in orphans
         ):
             return _orphan_failure(model, "fem3d.orphan_rotation_oblique", orphans)
-    return _singular_failure(run.pivot, config)
+    return _singular_failure(model, run.pivot, config)
 
 
 def _raw_results(request: SpatialRequest, response: SpatialWorkerResponse) -> RawSpatialResults:
@@ -316,8 +340,11 @@ def _raw_results(request: SpatialRequest, response: SpatialWorkerResponse) -> Ra
     by_ground = dict(response.ground_reactions)
     by_beam = dict(response.beam_forces)
     chains = {item.tag for item in response.chain_results}
+    auxes = {tag for tag, _disp, _reaction in response.aux_results}
     if (
-        set(by_node) != set(node_ids)
+        auxes != {aux.tag for aux in request.aux_nodes}
+        or len(auxes) != len(response.aux_results)
+        or set(by_node) != set(node_ids)
         or len(by_node) != len(response.node_results)
         or set(by_ground) != set(grounds)
         or len(by_ground) != len(response.ground_reactions)
@@ -342,6 +369,10 @@ def _raw_results(request: SpatialRequest, response: SpatialWorkerResponse) -> Ra
     return RawSpatialResults(RAW_SPATIAL_BASIS, nodes, ground_reactions, members)
 
 
+# Controles cuyo texto nombra un sujeto (nudo o barra) en lugar de un nudo.
+_SUBJECT_KEYS: Final = frozenset({"fem.residual_failed", "fem3d.end_penalty_contrast_failed"})
+
+
 def _check_failure(model: StructuralModel, failure: CheckFailure) -> _Failure:
     """Añade la etiqueta y la ubicación de la barra o del nudo del control."""
     params = dict(failure.params)
@@ -349,11 +380,13 @@ def _check_failure(model: StructuralModel, failure: CheckFailure) -> _Failure:
     if failure.member_id is not None:
         member = model.member(UUID(failure.member_id))
         params["member"] = member.label or str(member.id)
+        if failure.key in _SUBJECT_KEYS:
+            params["subject"] = render_text("fem3d.subject_member", {"member": params["member"]})
         location = Location(entity_id=member.id, revision=member.revision)
     elif failure.node_id is not None:
         node = model.node(UUID(failure.node_id))
         label = node.label or str(node.id)
-        if failure.key == "fem.residual_failed":
+        if failure.key in _SUBJECT_KEYS:
             params["subject"] = render_text("fem.subject_node", {"node": label})
         else:
             params["node"] = label
@@ -478,9 +511,7 @@ def analyze_spatial(  # noqa: PLR0911 (un retorno por causa de fallo)
     ``worker`` solo se sustituye en pruebas.
     """
     run = _Run(model, config)
-    # E2.2-d: el rechazo de E1 hasta que la salvaguarda (E2.3) y la normalización (E2.5)
-    # admitan extremos no rígidos, en el mismo punto de la traducción que en E1.
-    run.translation = translation = translate_spatial(model, config, e1_end_guard=True)
+    run.translation = translation = translate_spatial(model, config)
     request = translation.request
     run.case_revision = request.case_revision
     if translation.orphan_loaded:  # E2.3-b: como el plano, antes de la salvaguarda y sin modo.
@@ -545,7 +576,7 @@ def analyze_spatial(  # noqa: PLR0911 (un retorno por causa de fallo)
             ),
             None,
         )
-    check = solution_checks(request, response, config)
+    check = solution_checks(request, response, config, report)
     if check is not None:
         return run.finish(_check_failure(model, check), None)
     return run.finish(None, raw)

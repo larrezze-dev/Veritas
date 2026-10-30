@@ -81,6 +81,9 @@ PROVENANCE_KEYS: Final = frozenset(
         "mechanism_guard_high",
         "mechanism_residual_factor",
         "redundancy_tolerance",
+        "end_penalty_min_stagnation_iteration",
+        "end_penalty_stagnation_ratio",
+        "end_contrast_reference_margin",
     }
 )
 SPATIAL_ADAPTER_ID: Final = "veritas.fem.spatial"

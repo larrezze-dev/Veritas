@@ -33,7 +33,7 @@ Medidas de la puerta E2-c (plan T-018, hechos 19-24), frente a la solución exac
 
   - Con el factor 1e1, el error máximo de 6,2e-9 es de λ = 5000; con λ ≤ 500 es ≤ 3,8e-11.
   - El paso de la iteración se estanca en el suelo de redondeo; el criterio de §3 para todos los casos.
-- **`nodeReaction`** (hecho 24, sonda): excluye las cargas aplicadas en el nudo. Una pareja de cargas ±L en el maestro y en el aux no aparece en las reacciones; el multiplicador del `equalDOF` sí (hecho 17).
+- **`nodeReaction`** (hecho 24, sonda): es el desequilibrio F_int − P del nudo, es decir, **resta** las cargas aplicadas. Una pareja de cargas ±L en el maestro y en el aux no aparece en las reacciones; el multiplicador del `equalDOF` sí (hecho 17).
 
 ## Decisión propuesta
 
@@ -84,7 +84,7 @@ Medidas de la puerta E2-c (plan T-018, hechos 19-24), frente a la solución exac
    - Un test de paridad de `PROTOCOL_VERSION` compara el padre con el worker.
 6. **Fuerza del enlace y reacciones (hecho 24).**
    - Escalar publicado del enlace: λ_s + k_s·g_s, con el convenio de `basicForce` (positivo con g > 0). Su acción sobre el aux es −(λ_s + k_s·g_s)·b_s.
-   - La reacción publicada sigue siendo nodeReaction(N) + Σ nodeReaction(aux) (hecho 17). Las cargas correctoras **no** se suman a mano: `nodeReaction` ya las excluye.
+   - La reacción publicada sigue siendo nodeReaction(N) + Σ nodeReaction(aux) (hecho 17). Las cargas correctoras **no** se suman a mano: `nodeReaction` ya las resta (desequilibrio F_int − P) y la pareja se anula en N + aux.
    - El equilibrio de cada aux por separado (E2.5) incluye la acción del enlace.
 7. **Configuración** (`SpatialAnalysisConfiguration`). Este es el único contrato aceptado de E1 que cambia.
    - Campos nuevos:
@@ -134,3 +134,4 @@ Medidas de la puerta E2-c (plan T-018, hechos 19-24), frente a la solución exac
 - 2026-10-30: redactado (PROPOSED) tras la elección de la opción U por el usuario.
 - 2026-10-30: incorporadas las revisiones de structural-reviewer (M1-M4, m1-m3, o1-o3) y architecture-reviewer (M1-M6, m1-m7). Hechos 23 (factor 1e1 y criterio de parada) y 24 (`nodeReaction`) medidos en sonda.
 - 2026-10-30: el usuario aprueba el ADR y el detalle de E2.4-impl («Aprobar; implementar en sesión nueva»). Estado: ACCEPTED.
+- 2026-10-30 (E2.5, revisión de structural-reviewer m2; aprobado por el usuario): corrección de redacción en Contexto y §6. `nodeReaction` no «excluye» las cargas aplicadas: devuelve el desequilibrio F_int − P, que las resta. La conclusión no cambia (las correctoras no se suman a mano) y la decisión tampoco.

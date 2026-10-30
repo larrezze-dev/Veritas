@@ -281,26 +281,23 @@ def test_structure_without_free_dofs_is_rejected() -> None:
     assert error.value.diagnostic.message_key == "fem.no_free_dofs"
 
 
-def test_non_rigid_ends_keep_the_e1_rejection_until_e2_5() -> None:
-    """E2.2-d: el traductor admite extremos, pero la corrida los rechaza como en E1, antes
-    de la salvaguarda (nunca FAILED ``fem.invalid_stiffness`` ni OK)."""
+def test_non_rigid_ends_run_after_the_guard_is_removed() -> None:
+    """E2.5 retira la guarda E2.2-d: la ménsula con J articulado (giros huérfanos
+    coordenados con ``fix`` y aviso) termina OK con los controles de E2.5."""
     frame = Frame()
     a, b = frame.node(0.0, 0.0), frame.node(2.0, 0.0)
     member = frame.member(a, b)
     frame.support(a, fixed_restraints())
     frame.nodal(b, fz=-1000.0)
     frame.model.set_member_end(member.id, MemberEnd.J, EndConnection.pinned())
-    translate_spatial(frame.model, SpatialAnalysisConfiguration(frame.case_id))
-    with pytest.raises(InputValueError) as error:
-        analyze(frame)
-    assert error.value.diagnostic.code is DiagnosticCode.UNSUPPORTED_CONFIGURATION
-    assert error.value.diagnostic.message_key == "fem3d.member_end_not_rigid"
-    assert error.value.diagnostic.params_dict()["end"] == "J"
+    run = analyze(frame)
+    assert run.status is RunStatus.SUCCEEDED, run.diagnostics
+    assert "fem3d.orphan_rotation_restrained" in {d.message_key for d in run.diagnostics}
 
 
-def test_e1_rejection_order_is_kept() -> None:
-    """E2.2-d (revisión, m1): material no admitido y extremo no rígido en la misma barra; como
-    en E1, gana el material, que se comprueba antes que los extremos."""
+def test_material_is_rejected_before_the_ends() -> None:
+    """Revisión de E2.2-d, m1: material no admitido y extremo no rígido en la misma barra;
+    como en E1, gana el material, que se comprueba antes que los extremos."""
     frame = Frame(MaterialFamily.TIMBER)
     a, b = frame.node(0.0, 0.0), frame.node(2.0, 0.0)
     member = frame.member(a, b)
@@ -349,24 +346,13 @@ def test_invalid_stiffness_is_failed(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "propiedad no positiva" in (run.diagnostics[0].cause or "")
 
 
-# --- E2.3-b: huérfanos y modo con extremos (guarda E2.2-d sustituida) ---------------------
-
-
-def _without_e1_guard(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Traducción sin la guarda E2.2-d; solo en casos que no llegan al worker (E2.5)."""
-    real = translate_spatial
-
-    def unguarded(model: object, config: SpatialAnalysisConfiguration, **_: bool) -> object:
-        return real(model, config)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(spatial, "translate_spatial", unguarded)
+# --- E2.3-b: huérfanos y modo con extremos ------------------------------------------------
 
 
 def test_loaded_coordinate_orphan_is_singular_without_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Huérfano coordenado (Y, Z) con momento: FAILED antes de la salvaguarda, sin modo."""
-    _without_e1_guard(monkeypatch)
     frame = Frame()
     a, b = frame.node(0.0, 0.0), frame.node(2.0, 0.0)
     member = frame.member(a, b)
@@ -382,7 +368,6 @@ def test_loaded_coordinate_orphan_is_singular_without_mode(
 
 
 def test_oblique_orphan_has_its_own_key_and_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-    _without_e1_guard(monkeypatch)
     frame = ends._oblique_orphan()
     tip = cases.tip(frame)
     run = analyze(frame)
@@ -396,13 +381,16 @@ def test_oblique_orphan_has_its_own_key_and_mode(monkeypatch: pytest.MonkeyPatch
 
 def test_mode_names_member_ends(monkeypatch: pytest.MonkeyPatch) -> None:
     """E2-f, E2.3-a: el GDL propio del aux sale como extremo de barra sobre su nudo."""
-    _without_e1_guard(monkeypatch)
     frame = ends._o3()
     member_id = next(iter(frame.model.members))
     tip = cases.tip(frame)
     run = analyze(frame)
-    assert_failed(run, DiagnosticCode.ANALYSIS_SINGULAR, "fem.singular")
     assert run.pivot is not None
+    # Uy del aux y Rz del nudo empatan: el principal es el primero en orden (por id, sin
+    # etiquetas); si es el aux, la clave nombra la barra y el extremo (E2.5-d, m1).
+    first = run.pivot.mechanism[0]
+    key = "fem.singular" if first.member_id is None else "fem3d.singular_member_end"
+    assert_failed(run, DiagnosticCode.ANALYSIS_SINGULAR, key)
     assert run.pivot.nullity == 1
     items = [(i.node_id, i.component, i.member_id, i.end) for i in run.pivot.mechanism]
     assert set(items) == {(tip.id, "Uy", member_id, "J"), (tip.id, "Rz", None, None)}

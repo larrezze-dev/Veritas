@@ -1,6 +1,6 @@
 """Penalización iterada en los extremos de barra (ADR-004, plan T-018, pieza E2.4-impl).
 
-Modelos del dominio traducidos con ``translate_spatial`` (sin la guarda E2.2-d) y ejecutados
+Modelos del dominio traducidos con ``translate_spatial`` y ejecutados
 con el worker 3D: rejilla del hecho 22 (dos barras oblicuas I-J-K empotradas en I y K, extremo
 J de B1 no rígido) y casos aleatorios de giro (nudo J con 1-4 barras). Referencia: la K
 reducida de la salvaguarda (``reference_displacements(aux=True)``) y ``localForce`` con la k y
@@ -22,7 +22,7 @@ import pytest
 
 from fem3d_support import reference_displacements
 from fem_support import Frame
-from test_fem3d_analyze import _without_e1_guard, analyze, assert_failed, wrapper
+from test_fem3d_analyze import analyze, assert_failed, wrapper
 from test_fem3d_singularity import NORMAL
 from test_fem3d_singularity_ends import _local_force
 from test_fem3d_solver import WORKER_3D, run
@@ -49,11 +49,10 @@ from veritas.fem.spatial.protocol import (
     SpatialWorkerResponse,
     penalty_step,
 )
-from veritas.fem.spatial.stiffness import spring_direction, validate_request
+from veritas.fem.spatial.stiffness import force_scale, spring_direction, validate_request
 from veritas.fem.spatial.translator import (
     HYPOTHESIS_END_PENALTY,
     HYPOTHESIS_PENALTY,
-    force_scale,
     translate_spatial,
 )
 
@@ -590,9 +589,7 @@ def test_responses_without_end_penalty_match_v2() -> None:
 
 
 def test_not_converged_is_failed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``end_penalty_max_iterations`` = 1 con un enlace con fuerza: FAILED, nunca OK (guarda
-    E2.2-d sustituida, precedente E2.3)."""
-    _without_e1_guard(monkeypatch)
+    """``end_penalty_max_iterations`` = 1 con un enlace con fuerza: FAILED, nunca OK."""
     run_ = analyze(grid_frame(500, "uy"), end_penalty_max_iterations=1)
     assert_failed(run_, DiagnosticCode.ANALYSIS_NONCONVERGENCE, "fem3d.end_penalty_not_converged")
     assert run_.diagnostics[0].params_dict()["stop"] == "max_iterations"
@@ -611,7 +608,6 @@ def test_not_converged_is_failed(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_parent_rechecks_convergence(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, after: str
 ) -> None:
-    _without_e1_guard(monkeypatch)
     run_ = analyze(grid_frame(500, "uy"), wrapper(tmp_path, after=after))
     assert_failed(run_, DiagnosticCode.ANALYSIS_NONCONVERGENCE, "fem3d.end_penalty_not_converged")
 
@@ -620,10 +616,9 @@ def test_iterations_diagnostic_is_informative(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Con penalización de extremo convergida, ``fem3d.end_penalty_iterations`` (WARNING
-    informativo) se registra; los controles posteriores son de E2.5 (contraste y equilibrio
-    con aux), así que aquí el estado final no se afirma."""
-    _without_e1_guard(monkeypatch)
+    informativo) se registra y la corrida termina OK con los controles de E2.5."""
     run_ = analyze(grid_frame(500, "uy"))
+    assert run_.status is RunStatus.SUCCEEDED, run_.diagnostics
     found = [d for d in run_.diagnostics if d.message_key == "fem3d.end_penalty_iterations"]
     assert len(found) == 1
     assert found[0].severity is Severity.WARNING

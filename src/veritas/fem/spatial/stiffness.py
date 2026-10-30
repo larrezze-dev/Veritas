@@ -20,15 +20,16 @@ cambios (D2-A). La garantía es condicionada a ``tol_pivot`` y a la batería dec
 import math
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 from veritas.fem.adapters.singularity import (
     InvalidStiffnessError,
     Matrix,
     MechanismMode,
+    _Factorization,
     mechanism_mode,
-    pivot_check,
+    pivot_factorization,
 )
 from veritas.fem.spatial.protocol import (
     AXES,
@@ -640,13 +641,18 @@ class SpatialPivotReport:
     singular: bool
     labels: tuple[SpatialDof, ...] = ()
     mode: MechanismMode | None = None
+    # K reducida y su factorización, solo con penalización de extremo y sin singularidad:
+    # referencia del contraste exacto (ADR-004 §4, E2.5-b). Internas, fuera de la igualdad.
+    reduced: Matrix | None = field(default=None, compare=False, repr=False)
+    factor: _Factorization | None = field(default=None, compare=False, repr=False)
 
 
 def check_singularity(request: SpatialRequest, tol_pivot: float) -> SpatialPivotReport:
     """Salvaguarda completa sobre la petición; con singularidad, también el modo (T-017 D3)."""
     validate_request(request)
     reduced, labels = reduced_stiffness(request)
-    pivot, position, singular = pivot_check(reduced, tol_pivot)
+    pivot, position, singular, factor = pivot_factorization(reduced, tol_pivot)
+    keep = bool(request.end_penalties) and factor is not None
     return SpatialPivotReport(
         free_dofs=len(labels),
         min_pivot=pivot,
@@ -654,4 +660,23 @@ def check_singularity(request: SpatialRequest, tol_pivot: float) -> SpatialPivot
         singular=singular,
         labels=tuple(labels),
         mode=mechanism_mode(reduced, tol_pivot) if singular else None,
+        reduced=reduced if keep else None,
+        factor=factor if keep else None,
     )
+
+
+def force_scale(request: SpatialRequest) -> tuple[float, float]:
+    """(F, L_máx) del caso (ADR-004 §3): F = máx(máx|P| nodal, Σ|w|·L, máx|M| nodal / L_máx).
+
+    Normas euclídeas de las cargas traducidas (incluido el peso propio) y L de cada barra.
+    Escala del criterio de parada (traductor) y suelo del contraste exacto (E2.5)."""
+    coordinates = _coordinates(request)
+    lengths = {
+        beam.tag: math.dist(coordinates[beam.node_i], coordinates[beam.node_j])
+        for beam in request.beams
+    }
+    longest = max(lengths.values())
+    force = max((math.hypot(*load.values[:AXES]) for load in request.nodal_loads), default=0.0)
+    moment = max((math.hypot(*load.values[AXES:]) for load in request.nodal_loads), default=0.0)
+    distributed = sum(math.hypot(w.wy, w.wz, w.wx) * lengths[w.beam] for w in request.beam_loads)
+    return max(force, distributed, moment / longest), longest

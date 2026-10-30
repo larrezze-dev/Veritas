@@ -228,15 +228,24 @@ def pivot_check(matrix: Matrix, tol_pivot: float) -> tuple[float | None, int | N
     diagonal simétrico completo. No se compara la diagonal con max diag: mezclaría N/m con
     N·m/rad y un resorte muy rígido haría pasar por singular un GDL ajeno (revisión P10).
     """
+    pivot, position, singular, _ = pivot_factorization(matrix, tol_pivot)
+    return pivot, position, singular
+
+
+def pivot_factorization(
+    matrix: Matrix, tol_pivot: float
+) -> tuple[float | None, int | None, bool, "_Factorization | None"]:
+    """``pivot_check`` y la factorización completa si la matriz no es singular (para
+    ``solve_factored``; contraste espacial, T-018 E2.5); ``None`` si no la hay."""
     size = len(matrix)
     if size == 0:
-        return None, None, False
+        return None, None, False, None
     diagonal = _checked_diagonal(matrix)
     smallest = min(range(size), key=lambda i: diagonal[i])
     if diagonal[smallest] < sys.float_info.min:
-        return 0.0, smallest, True
+        return 0.0, smallest, True, None
     factor = _factor(matrix, tol_pivot)
-    return factor.pivot, factor.position, factor.singular
+    return factor.pivot, factor.position, factor.singular, None if factor.singular else factor
 
 
 def _checked_diagonal(matrix: Matrix) -> list[float]:
@@ -290,6 +299,30 @@ def _factor(matrix: Matrix, tol_pivot: float) -> _Factorization:
                     a - factor * b for a, b in zip(row_i[k + 1 :], row_k[k + 1 :], strict=True)
                 ]
     return _Factorization(min_pivot, min_index, False, scaled, work, order, size)
+
+
+def solve_factored(matrix: Matrix, factor: _Factorization, rhs: Sequence[float]) -> list[float]:
+    """x con K·x = rhs a partir de la factorización completa de K = ``matrix`` (T-018 E2.5).
+
+    K = S⁻¹·Ks·S⁻¹ con S el escalado de Jacobi (``scaled`` = Ks) y P·Ks·Pᵀ = L·D·Lᵀ, con
+    U = D·Lᵀ en las filas de ``work`` (P según ``order``): sustitución O(n²).
+    """
+    size = len(factor.order)
+    if factor.singular or factor.steps != size:
+        raise ValueError("factorización incompleta")
+    # Ks·y = S·rhs con x = S·y y S_ii = 1/√K_ii, el mismo escalado que ``_factor``.
+    scale = [1.0 / math.sqrt(matrix[i][i]) for i in range(size)]
+    u = factor.work
+    w = [rhs[factor.order[i]] * scale[factor.order[i]] for i in range(size)]
+    for i in range(size):  # L·w = c (L unitaria, L_ik = U_ki / U_kk).
+        w[i] -= sum(u[k][i] / u[k][k] * w[k] for k in range(i))
+    z = [0.0] * size
+    for i in reversed(range(size)):  # U·z = w.
+        z[i] = (w[i] - sum(u[i][j] * z[j] for j in range(i + 1, size))) / u[i][i]
+    x = [0.0] * size
+    for i in range(size):
+        x[factor.order[i]] = z[i] * scale[factor.order[i]]
+    return x
 
 
 # Modo de mecanismo (plan T-017, D3). Constantes declaradas, registradas en la procedencia.

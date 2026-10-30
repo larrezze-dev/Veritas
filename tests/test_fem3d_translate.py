@@ -11,7 +11,6 @@ import pytest
 
 import veritas
 from fem_support import AREA, E_PA, IY, IZ, Frame, inclined
-from veritas.core.connections.end import Dof, DofState, EndConnection, MemberEnd
 from veritas.core.diagnostics import DiagnosticCode, InputValueError
 from veritas.core.geometry.local_axes import ReferenceSource
 from veritas.core.geometry.vector import Vec3
@@ -82,7 +81,7 @@ def test_fem3d_keys_are_in_catalog() -> None:
         if path.name != "messages_es.py"
         for key in re.findall(r'"(fem3d\.[a-z_]+)"', path.read_text(encoding="utf-8"))
     }
-    assert "fem3d.member_end_not_rigid" in keys
+    assert "fem3d.end_link_check_failed" in keys
     assert keys <= set(MESSAGES_ES)
 
 
@@ -211,29 +210,6 @@ def test_empty_case_rejected() -> None:
     frame.member(a, b)
     frame.support(a, fixed_restraints())
     rejected(frame, "fem.empty_case", D.INPUT_OUT_OF_RANGE)
-
-
-@pytest.mark.parametrize("end", list(MemberEnd))
-@pytest.mark.parametrize(
-    "connection",
-    [EndConnection.pinned(), EndConnection.rigid().with_dof(Dof.RX, DofState.RELEASED)],
-    ids=["articulado", "torsion"],
-)
-def test_non_rigid_end_guard_keeps_the_e1_rejection(
-    end: MemberEnd, connection: EndConnection
-) -> None:
-    """E2.2-d: el traductor ya admite extremos; la guarda de orquestación conserva el
-    rechazo de E1, con sus parámetros, hasta E2.5."""
-    frame = cantilever(Frame())
-    (member_id,) = frame.model.members
-    frame.model.set_member_end(member_id, end, connection)
-    translate(frame)
-    with pytest.raises(InputValueError) as info:
-        translate_spatial(frame.model, config(frame), e1_end_guard=True)
-    assert info.value.code is D.UNSUPPORTED_CONFIGURATION
-    assert info.value.diagnostic.message_key == "fem3d.member_end_not_rigid"
-    assert info.value.diagnostic.params_dict()["end"] == str(end)
-    assert "{" not in render_message(info.value.diagnostic)
 
 
 def _with_property(frame: Frame, name: str, value: float | None) -> None:

@@ -65,7 +65,14 @@ from veritas.fem.spatial.protocol import (
     SpatialSpring,
 )
 from veritas.fem.spatial.protocol import Vec3 as Triple
-from veritas.fem.spatial.stiffness import UNIT_AXES, beam_axes, cross, dot, spring_direction
+from veritas.fem.spatial.stiffness import (
+    UNIT_AXES,
+    beam_axes,
+    cross,
+    dot,
+    force_scale,
+    spring_direction,
+)
 
 HYPOTHESIS_SPATIAL: Final = "fem3d.hypothesis_spatial"
 HYPOTHESIS_BEAM: Final = "fem3d.hypothesis_euler_bernoulli"
@@ -232,12 +239,9 @@ class _PendingEnd:
 
 
 class _Builder:
-    def __init__(
-        self, model: StructuralModel, config: SpatialAnalysisConfiguration, *, e1_end_guard: bool
-    ) -> None:
+    def __init__(self, model: StructuralModel, config: SpatialAnalysisConfiguration) -> None:
         self.model = model
         self.config = config
-        self.e1_end_guard = e1_end_guard
         self.node_tags: dict[UUID, int] = {}
         self.beam_tags: dict[UUID, int] = {}
         self.fixity: dict[int, list[int]] = {}
@@ -301,8 +305,6 @@ class _Builder:
                 raise _unsupported(
                     "fem.section_coupled_bending", {"member": label, "iyz": iyz}, location
                 )
-            if self.e1_end_guard:  # E2.2-d: el rechazo de E1, en el mismo punto que en E1.
-                _reject_non_rigid_end(member.end_i, member.end_j, label, location)
             axes = self.model.axes(member_id)
             e, g, length = material.elastic_modulus, material.shear_modulus, axes.length
             node_i, node_j = self.node_tags[member.node_i], self.node_tags[member.node_j]
@@ -620,18 +622,15 @@ class _Builder:
 
 
 def translate_spatial(
-    model: StructuralModel, config: SpatialAnalysisConfiguration, *, e1_end_guard: bool = False
+    model: StructuralModel, config: SpatialAnalysisConfiguration
 ) -> SpatialTranslation:
-    """Traduce el modelo y el caso ``config.load_case_id`` a una petición espacial.
-
-    ``e1_end_guard`` (E2.2-d, hasta E2.5): rechaza los extremos no rígidos como en E1, en el
-    mismo punto y orden; lo activa ``analyze_spatial``."""
+    """Traduce el modelo y el caso ``config.load_case_id`` a una petición espacial."""
     if not isinstance(model, StructuralModel):
         raise TypeError("model debe ser StructuralModel")
     if not isinstance(config, SpatialAnalysisConfiguration):
         raise TypeError("config debe ser SpatialAnalysisConfiguration")
     case = model.load_case(config.load_case_id)
-    builder = _Builder(model, config, e1_end_guard=e1_end_guard)
+    builder = _Builder(model, config)
     nodes = builder.nodes()
     beams = builder.beams()
     builder.supports()
@@ -694,22 +693,6 @@ def translate_spatial(
     )
 
 
-def force_scale(request: SpatialRequest) -> tuple[float, float]:
-    """(F, L_máx) del caso (ADR-004 §3): F = máx(máx|P| nodal, Σ|w|·L, máx|M| nodal / L_máx).
-
-    Normas euclídeas de las cargas traducidas (incluido el peso propio) y L de cada barra."""
-    coordinates = {node.tag: (node.x, node.y, node.z) for node in request.nodes}
-    lengths = {
-        beam.tag: math.dist(coordinates[beam.node_i], coordinates[beam.node_j])
-        for beam in request.beams
-    }
-    longest = max(lengths.values())
-    force = max((math.hypot(*load.values[:AXES]) for load in request.nodal_loads), default=0.0)
-    moment = max((math.hypot(*load.values[AXES:]) for load in request.nodal_loads), default=0.0)
-    distributed = sum(math.hypot(w.wy, w.wz, w.wx) * lengths[w.beam] for w in request.beam_loads)
-    return max(force, distributed, moment / longest), longest
-
-
 def _end_penalties(request: SpatialRequest) -> tuple[SpatialEndPenalty, ...]:
     """b_s y S_s de cada resorte de penalización de extremo (ADR-004 §1 y §3): S_s = F en
     traslaciones y F·L_máx en giros."""
@@ -725,25 +708,6 @@ def _end_penalties(request: SpatialRequest) -> tuple[SpatialEndPenalty, ...]:
         )
         for s in penalized
     )
-
-
-def _reject_non_rigid_end(
-    end_i: EndConnection, end_j: EndConnection, label: str, location: Location
-) -> None:
-    """Guarda hasta E2.5 (plan T-018, E2.2-d): el rechazo de E1, sin cambios ni de orden."""
-    for end, connection in (("I", end_i), ("J", end_j)):
-        if not connection.is_rigid:
-            dof = next(d for d in Dof if connection.state(d) is not DofState.RIGID)
-            raise _unsupported(
-                "fem3d.member_end_not_rigid",
-                {
-                    "member": label,
-                    "end": end,
-                    "dof": str(dof),
-                    "state": str(connection.state(dof)),
-                },
-                location,
-            )
 
 
 def _represented(connection: EndConnection, dof: Dof) -> bool:
