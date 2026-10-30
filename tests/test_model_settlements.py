@@ -25,6 +25,7 @@ from veritas.core.units import Quantity
 from veritas.fem.adapters.planar_xz import translate_planar_xz
 from veritas.fem.adapters.protocol import PlanarSettlement
 from veritas.fem.spatial.config import SpatialAnalysisConfiguration
+from veritas.fem.spatial.protocol import SpatialSettlement
 from veritas.fem.spatial.translator import translate_spatial
 
 D = DiagnosticCode
@@ -317,7 +318,7 @@ def test_remove_support_with_settlement_is_rejected() -> None:
     model.remove_support(a.id)  # tras retirar el asiento, se permite
 
 
-# --- Adaptadores (E1: rechazo explícito; E2.1 lo admite en el plano, E2-b) -------------
+# --- Adaptadores (E1: rechazo explícito; E2.1 y E2.2 lo admiten, E2-b) -----------------
 
 
 def settled_frame() -> Frame:
@@ -338,11 +339,12 @@ def test_planar_adapter_translates_settlement() -> None:
     assert request.settlements == (PlanarSettlement(node, 2, -0.01),)
 
 
-def test_spatial_adapter_rejects_settlement() -> None:
+def test_spatial_adapter_translates_settlement() -> None:
+    """E2.2 (E2-b): la misma petición que E1 rechazaba lleva ahora el asiento en Uz (GDL 3)."""
     frame = settled_frame()
-    with pytest.raises(InputValueError) as info:
-        translate_spatial(frame.model, SpatialAnalysisConfiguration(frame.case_id))
-    expect(info, D.UNSUPPORTED_CONFIGURATION, "fem.settlement_pending")
+    request = translate_spatial(frame.model, SpatialAnalysisConfiguration(frame.case_id)).request
+    (node,) = (n.tag for n in request.nodes if n.x == 0.0)
+    assert request.settlements == (SpatialSettlement(node, 3, -0.01),)
 
 
 def test_settlement_only_case_is_not_empty() -> None:

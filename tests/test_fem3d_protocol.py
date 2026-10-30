@@ -192,7 +192,7 @@ def test_protocol_version_matches_the_worker() -> None:
         PROTOCOL_ID,
         PROTOCOL_VERSION,
     )
-    assert PROTOCOL_VERSION == 3
+    assert PROTOCOL_VERSION == 4  # T-016: asientos
 
 
 @pytest.mark.parametrize(

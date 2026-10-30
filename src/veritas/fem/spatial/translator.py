@@ -45,7 +45,7 @@ from veritas.core.loads.loads import (
     SelfWeight,
     SupportSettlement,
 )
-from veritas.core.supports.support import RestraintKind, Support, SupportDof
+from veritas.core.supports.support import BasisKind, RestraintKind, Support, SupportDof
 from veritas.fem.adapters.planar_xz import (
     NEAR_RIGID_RATIO,
     SUPPORTED_FAMILIES,
@@ -68,6 +68,7 @@ from veritas.fem.spatial.protocol import (
     SpatialNode,
     SpatialOrphanFix,
     SpatialRequest,
+    SpatialSettlement,
     SpatialSpring,
 )
 from veritas.fem.spatial.protocol import Vec3 as Triple
@@ -586,7 +587,9 @@ class _Builder:
                     Location(entity_id=member_id, revision=member.revision),
                 )
 
-    def loads(self, case_id: UUID) -> tuple[list[SpatialNodalLoad], list[SpatialBeamLoad]]:
+    def loads(
+        self, case_id: UUID
+    ) -> tuple[list[SpatialNodalLoad], list[SpatialBeamLoad], list[SpatialSettlement]]:
         loads = sorted(self.model.loads_in_case(case_id), key=lambda load: str(load.id))
         case = self.model.load_case(case_id)
         if not loads:
@@ -600,6 +603,7 @@ class _Builder:
             )
         nodal: list[SpatialNodalLoad] = []
         beam: list[SpatialBeamLoad] = []
+        settlements: list[SpatialSettlement] = []
         for load in loads:
             if isinstance(load, NodalLoad):
                 values = (*load.force.components(), *load.moment.components())
@@ -616,18 +620,40 @@ class _Builder:
                         self._beam_load(member_id, self.model.axes(member_id).to_local(weight))
                     )
             elif isinstance(load, SupportSettlement):
-                raise _unsupported(
-                    "fem.settlement_pending",
-                    {},
-                    Location(entity_id=load.id, revision=load.revision),
-                )
+                settlements.extend(self._settlement(load))
             else:  # Nunca se descarta en silencio.
                 raise _unsupported(
                     "fem3d.load_type_unsupported",
                     {"type": type(load).__name__},
                     Location(entity_id=load.id, revision=load.revision),
                 )
-        return nodal, beam
+        # D4-bis-A: con asientos, ninguna penalización ni cadena en toda la petición.
+        penalized = any(s.penalty for s in self.springs) or any(s.penalty for s in self.end_springs)
+        if settlements and (penalized or self.chains):
+            raise _unsupported(
+                "fem.settlement_with_penalty_unsupported",
+                {},
+                Location(entity_id=case.id, revision=case.revision),
+            )
+        return nodal, beam, sorted(settlements, key=lambda t: (t.node, t.dof))
+
+    def _settlement(self, load: SupportSettlement) -> list[SpatialSettlement]:
+        """Asiento (T-016): componentes globales en los GDL 1-6; solo apoyos de base global
+        (D4-A)."""
+        support = self.model.supports[load.support_id]
+        if support.basis.kind is not BasisKind.GLOBAL:
+            raise _unsupported(
+                "fem.settlement_inclined_unsupported",
+                {},
+                Location(entity_id=load.id, revision=load.revision),
+            )
+        node = self.node_tags[support.node_id]
+        values = (*load.translation.components(), *load.rotation.components())
+        return [
+            SpatialSettlement(node, dof, value)
+            for dof, value in enumerate(values, start=1)
+            if value != 0.0
+        ]
 
     def _beam_load(self, member_id: UUID, local: Vec3) -> SpatialBeamLoad:
         return SpatialBeamLoad(self.beam_tags[member_id], local.y, local.z, local.x)
@@ -647,7 +673,7 @@ def translate_spatial(
     beams = builder.beams()
     builder.supports()
     builder.finish_ends()
-    nodal, beam_loads = builder.loads(case.id)
+    nodal, beam_loads, settlements = builder.loads(case.id)
     builder.check_axial_loads(beam_loads)
     fixity = sorted(builder.fixity.items())
     fixes = tuple(SpatialFix(node, _fixity(bits)) for node, bits in fixity if any(bits))
@@ -668,6 +694,7 @@ def translate_spatial(
         aux_nodes=tuple(builder.aux_nodes),
         end_equals=tuple(builder.end_equals),
         end_springs=tuple(builder.end_springs),
+        settlements=tuple(settlements),
     )
     restrained, loaded = _orphan_fixes(request, config.tol_axis)
     request = replace(

@@ -10,11 +10,13 @@ dirección global b_s y la escala S_s de cada uno y los parámetros de parada en
 y las iteraciones, el motivo de parada y los multiplicadores λ_s en la respuesta.
 """
 
+import math
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import Any, Final
 
 from veritas.fem.adapters.protocol import (
+    NonFiniteValueError,
     ProtocolError,
     WorkerStatus,
     _bool,
@@ -34,7 +36,7 @@ from veritas.fem.spatial.config import (
 )
 
 PROTOCOL_ID: Final = "veritas.opensees.spatial"
-PROTOCOL_VERSION: Final = 3  # 2: extremos de barra (E2-b); 3: penalización iterada (ADR-004)
+PROTOCOL_VERSION: Final = 4  # 2: extremos (E2-b); 3: penalización iterada (ADR-004); 4: asientos
 DOFS_PER_NODE: Final = 6
 AXES: Final = 3  # Componentes de una terna de un nudo (traslaciones o giros).
 RELEASE_CODES: Final = (0, 1, 2, 3)  # -releasey/-releasez: ninguno, I, J, ambos.
@@ -291,6 +293,19 @@ class SpatialBeamLoad:
 
 
 @dataclass(frozen=True, slots=True)
+class SpatialSettlement:
+    """Asiento impuesto (T-016) en un GDL global 1-6 del nudo, en m o rad.
+
+    El GDL debe estar en el ``fix`` del nudo; el worker lo retira del ``fix`` y lo impone
+    con ``sp`` dentro del patrón de carga (hechos 1, 5 y 6 del plan).
+    """
+
+    node: int
+    dof: int
+    value: float
+
+
+@dataclass(frozen=True, slots=True)
 class SpatialRequest:
     """Petición completa y determinista de una corrida espacial."""
 
@@ -314,6 +329,10 @@ class SpatialRequest:
     end_penalty_tolerance: float = DEFAULT_END_PENALTY_TOLERANCE
     end_penalty_stagnation: float = DEFAULT_TOL_PENALTY
     end_penalty_max_iterations: int = DEFAULT_END_PENALTY_MAX_ITERATIONS
+    settlements: tuple[SpatialSettlement, ...] = ()
+
+    def __post_init__(self) -> None:
+        _check_settlements(self)
 
     def element_node(self, beam: SpatialBeam, end: str) -> int:
         """Nudo al que se conecta el elemento en ese extremo: aux si lo hay, si no el nudo."""
@@ -404,6 +423,7 @@ class SpatialRequest:
             "end_penalty_tolerance": self.end_penalty_tolerance,
             "end_penalty_stagnation": self.end_penalty_stagnation,
             "end_penalty_max_iterations": self.end_penalty_max_iterations,
+            "settlements": [[t.node, t.dof, t.value] for t in self.settlements],
         }
 
     def to_json(self) -> str:
@@ -501,6 +521,10 @@ class SpatialRequest:
             SpatialBeamLoad(_int(w[0], "beam"), *_floats(w[1:], "beam_load", 3))
             for w in (_list(item, "beam_load", 4) for item in _list(data["beam_loads"], "bl"))
         )
+        settlements = tuple(
+            SpatialSettlement(_int(t[0], "node"), _dof(t[1]), _finite(t[2], "value"))
+            for t in (_list(item, "settlement", 3) for item in _list(data["settlements"], "st"))
+        )
         return cls(
             _int(data["model_revision"], "model_revision"),
             _str(data["case_id"], "case_id"),
@@ -522,7 +546,35 @@ class SpatialRequest:
             tolerance,
             stagnation,
             max_iterations,
+            settlements,
         )
+
+
+def _check_settlements(request: SpatialRequest) -> None:
+    """Validación estricta (plan T-016, D6): GDL 1-6 en el ``fix`` del nudo, sin repetir, y
+    un giro asentado nunca figura en ``orphan_fixes`` (revisión, hallazgo 9). Con asientos no
+    hay penalizaciones ni cadenas (D4-bis-A; revisión de E2.2, M3)."""
+    penalized = any(s.penalty for s in request.springs) or any(
+        s.penalty for s in request.end_springs
+    )
+    if request.settlements and (penalized or request.chains or request.end_penalties):
+        raise ProtocolError("asientos con penalizaciones o cadenas (D4-bis-A)")
+    fixity = {fix.node: fix.fixity for fix in request.fixes}
+    orphans = {orphan.node: orphan.rotations for orphan in request.orphan_fixes}
+    seen: set[tuple[int, int]] = set()
+    for settlement in request.settlements:
+        node, dof = settlement.node, settlement.dof
+        if not 1 <= dof <= DOFS_PER_NODE:
+            raise ProtocolError(f"asiento: GDL no válido {dof}")
+        if (node, dof) in seen:
+            raise ProtocolError(f"asiento repetido en el nudo {node}")
+        seen.add((node, dof))
+        if not fixity.get(node, (0,) * DOFS_PER_NODE)[dof - 1]:
+            raise ProtocolError(f"asiento fuera del fix del nudo {node}")
+        if dof > AXES and orphans.get(node, (0, 0, 0))[dof - AXES - 1]:
+            raise ProtocolError(f"giro asentado en orphan_fixes del nudo {node}")
+        if not math.isfinite(settlement.value):
+            raise NonFiniteValueError("asiento: valor no finito")
 
 
 def _check_end_penalties(
@@ -597,6 +649,7 @@ _REQUEST_KEYS: Final = frozenset(
         "end_penalty_tolerance",
         "end_penalty_stagnation",
         "end_penalty_max_iterations",
+        "settlements",
     }
 )
 _RESPONSE_KEYS: Final = frozenset(

@@ -46,7 +46,13 @@ from veritas.core.diagnostics import (
 )
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
-from veritas.core.loads.loads import LoadBasis, MemberUniformLoad, NodalLoad, SelfWeight
+from veritas.core.loads.loads import (
+    LoadBasis,
+    MemberUniformLoad,
+    NodalLoad,
+    SelfWeight,
+    SupportSettlement,
+)
 from veritas.core.supports.support import BasisKind, RestraintKind, Support, SupportDof
 from veritas.fem.results.normalized import (
     Component,
@@ -88,7 +94,7 @@ PROVENANCE_KEYS: Final = frozenset(
     }
 )
 SPATIAL_ADAPTER_ID: Final = "veritas.fem.spatial"
-SPATIAL_ADAPTER_VERSION: Final = "3"  # D10: "1" en E1, "2" en E2, "3" con ADR-004.
+SPATIAL_ADAPTER_VERSION: Final = "4"  # D10: "1" en E1, "2" en E2, "3" con ADR-004, "4" T-016.
 
 type Twelve = tuple[
     float, float, float, float, float, float, float, float, float, float, float, float
@@ -513,6 +519,8 @@ class _Normalizer:
                 for member_id in self.model.members:
                     weight = Vec3(*(c.si_value for c in self.model.self_weight_load(member_id)))
                     distributed[member_id] = distributed.get(member_id, _zero()) + weight
+            elif isinstance(load, SupportSettlement):
+                continue  # T-016, D7: acción sin fuerza prescrita; no aporta q ni P.
             else:  # pragma: no cover (el traductor ya la habría rechazado)
                 raise _postcondition("fem.results_unsupported_load", {"load": str(load.id)})
         return nodal, distributed

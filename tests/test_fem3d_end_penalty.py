@@ -515,7 +515,7 @@ def test_no_end_penalty_path_has_no_corrector(monkeypatch: pytest.MonkeyPatch) -
 
 
 def _upgrade(request: dict[str, Any]) -> str:
-    """Petición v2 capturada → v3 sin penalización de extremo."""
+    """Petición v2 capturada → versión actual sin penalización de extremo ni asientos."""
     assert not any(spring[6] for spring in request["end_springs"])
     return json.dumps(
         {
@@ -525,6 +525,7 @@ def _upgrade(request: dict[str, Any]) -> str:
             "end_penalty_tolerance": 1e-10,
             "end_penalty_stagnation": TOL_PENALTY,
             "end_penalty_max_iterations": 20,
+            "settlements": [],  # T-016: v4 sin asientos
         }
     )
 

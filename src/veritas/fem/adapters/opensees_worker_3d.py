@@ -18,7 +18,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 PROTOCOL_ID = "veritas.opensees.spatial"
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 # Patrón corrector de la penalización iterada (ADR-004 §1): serie y patrón propios.
 CORRECTOR_TAG = 2
 MIN_STAGNATION_ITERATION = 3  # Estancamiento aceptado desde la iteración 3 (ADR-004 §3).
@@ -62,8 +62,12 @@ def _fixes(ops: Any, request: dict[str, Any]) -> None:
     for node, rotations in request["orphan_fixes"]:
         fixity = fixity_by_node.setdefault(node, [0] * 6)
         fixity[3:] = [max(a, b) for a, b in zip(fixity[3:], rotations, strict=True)]
+    # Asiento (T-016): el GDL sale del fix (fix y sp chocan, hecho 5) y lleva solo el sp.
+    for node, dof, _value in request["settlements"]:
+        fixity_by_node[node][dof - 1] = 0
     for node, fixity in fixity_by_node.items():
-        ops.fix(node, *fixity)
+        if any(fixity):
+            ops.fix(node, *fixity)
 
 
 def _beams_and_ends(
@@ -153,6 +157,9 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
         ops.load(node, *values)
     for beam, wy, wz, wx in request["beam_loads"]:
         ops.eleLoad("-ele", beam, "-type", "-beamUniform", wy, wz, wx)
+    # sp dentro del patrón 1 (hecho 6); Lagrange con alpha = D lo impone exacto (hecho 1).
+    for node, dof, value in request["settlements"]:
+        ops.sp(node, dof, value)
     # Lagrange en todas las corridas (D3-A): Transformation falla en silencio con las
     # restricciones encadenadas de la cadena (hecho 6). Alphas escalados (hecho 13).
     ops.constraints("Lagrange", request["alpha_sp"], request["alpha_mp"])
@@ -224,6 +231,12 @@ def _iterate(ops: Any, request: dict[str, Any]) -> tuple[int, int, str, dict[int
 def _solve(request: dict[str, Any]) -> dict[str, Any]:
     if request.get("protocol") != PROTOCOL_ID or request.get("version") != PROTOCOL_VERSION:
         return _response("PROTOCOL_ERROR", "protocolo o versión no admitidos")
+    fixed = {(node, dof) for node, f in request["fixes"] for dof in range(1, 7) if f[dof - 1]}
+    if any((node, dof) not in fixed for node, dof, _value in request["settlements"]):
+        return _response("PROTOCOL_ERROR", "asiento fuera del fix del nudo")
+    penalized = any(s[8] for s in request["springs"]) or any(s[6] for s in request["end_springs"])
+    if request["settlements"] and (penalized or request["chains"] or request["end_penalties"]):
+        return _response("PROTOCOL_ERROR", "asientos con penalizaciones o cadenas (D4-bis-A)")
     # Solo tras validar la petición. OpenSeesPy no publica tipos.
     import openseespy.opensees as ops  # type: ignore[import-untyped]  # noqa: PLC0415
 

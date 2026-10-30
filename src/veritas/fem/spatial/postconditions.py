@@ -17,6 +17,9 @@ Se evalúan en el proceso padre sobre la respuesta del worker 3D, con la formula
   con la fuerza del enlace y las cargas correctoras (ADR-004 §6).
 - Contraste exacto de la penalización iterada de extremo (ADR-004 §4): desplazamientos y
   fuerzas de barra frente a la solución de la K reducida de la salvaguarda.
+- Asiento (T-016, D7): el desplazamiento en cada GDL asentado es el prescrito, con la cota
+  de alias ``CHAIN_ALIAS_FACTOR``·eps·s_u (s_θ en giros), porque Lagrange no es exacto
+  (hecho 1). Va antes del equilibrio; sin asientos no hace nada.
 
 Toda cota se evalúa como ``not (valor <= cota)``: un NaN da fallo. Las cotas de redondeo
 c·eps·Σ|k_ij·u_j| usan la c del plano (``PENALTY_EQUILIBRIUM_FACTOR``). Los controles
@@ -480,6 +483,39 @@ def coupled_scales(request: SpatialRequest, displacement: Displacements) -> tupl
     _, longest = force_scale(request)
     scale = max(translation_scale(displacement), longest * rotation_scale(displacement))
     return scale, scale / longest
+
+
+# Componente de dominio de cada GDL global (1-6) en el diagnóstico del asiento.
+SETTLEMENT_COMPONENT: Final = ("Ux", "Uy", "Uz", "Rx", "Ry", "Rz")
+
+
+def settlement_check(
+    request: SpatialRequest, response: SpatialWorkerResponse
+) -> CheckFailure | None:
+    """D7: |u − valor| ≤ ``CHAIN_ALIAS_FACTOR``·eps·s en cada GDL asentado, con (s_u, s_θ) de
+    ``link_scales`` (nudos de dominio y aux), como ``end_link_deviations``."""
+    if not request.settlements:
+        return None
+    displacement = displacements(response)
+    scales = link_scales(request, response)
+    node_ids = {node.tag: node.entity_id for node in request.nodes}
+    for settlement in request.settlements:
+        value = displacement[settlement.node][settlement.dof - 1]
+        difference = abs(value - settlement.value)
+        bound = CHAIN_ALIAS_FACTOR * _EPS * scales[(settlement.dof - 1) // AXES]
+        if _exceeds(difference, bound):
+            return CheckFailure(
+                "fem.settlement_mismatch",
+                {
+                    "component": SETTLEMENT_COMPONENT[settlement.dof - 1],
+                    "value": value,
+                    "prescribed": settlement.value,
+                    "difference": difference if math.isfinite(difference) else math.nan,
+                    "bound": bound,
+                },
+                node_id=node_ids[settlement.node],
+            )
+    return None
 
 
 def _triple(values: Sequence[float], triple: int) -> list[float]:

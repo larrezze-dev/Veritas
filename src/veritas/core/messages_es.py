@@ -179,9 +179,6 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "fem.member_load_out_of_plane": (
         "Carga de barra con componente global Y = {qy} N/m (límite {limit} N/m)."
     ),
-    "fem.settlement_pending": (
-        "El caso incluye un asiento de apoyo, que este análisis aún no admite; no se ignora."
-    ),
     "fem.settlement_out_of_plane": (
         "Asiento fuera del plano XZ (Uy = {uy} m, Rx = {rx} rad, Rz = {rz} rad); el análisis "
         "plano solo admite Ux, Uz y Ry."

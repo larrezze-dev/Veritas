@@ -44,6 +44,7 @@ from veritas.fem.spatial.postconditions import (
     REFERENCE_MARGIN,
     equilibrium_residual,
     node_reactions,
+    settlement_check,
     solution_checks,
 )
 from veritas.fem.spatial.protocol import (
@@ -564,24 +565,34 @@ def analyze_spatial(  # noqa: PLR0911 (un retorno por causa de fallo)
             _Failure(DiagnosticCode.ANALYSIS_FAILED, "fem.protocol_error", {}, cause=str(error)),
             None,
         )
+    return run.finish(_solution_failure(model, request, response, config, report), raw)
+
+
+def _solution_failure(
+    model: StructuralModel,
+    request: SpatialRequest,
+    response: SpatialWorkerResponse,
+    config: SpatialAnalysisConfiguration,
+    report: SpatialPivotReport,
+) -> _Failure | None:
+    """Controles de la solución en orden: asiento (T-016, D7; sin asientos no evalúa nada),
+    equilibrio y ``solution_checks`` (T-018)."""
+    check = settlement_check(request, response)
+    if check is not None:
+        return _check_failure(model, check)
     equilibrium = equilibrium_residual(request, response, config)
     if not equilibrium.ok:
-        return run.finish(
-            _Failure(
-                DiagnosticCode.ANALYSIS_FAILED,
-                "fem.equilibrium_failed",
-                {
-                    "force": _relative(equilibrium.force, equilibrium.force_scale),
-                    "moment": _relative(equilibrium.moment, equilibrium.moment_scale),
-                    "tolerance": config.tol_equilibrium,
-                },
-            ),
-            None,
+        return _Failure(
+            DiagnosticCode.ANALYSIS_FAILED,
+            "fem.equilibrium_failed",
+            {
+                "force": _relative(equilibrium.force, equilibrium.force_scale),
+                "moment": _relative(equilibrium.moment, equilibrium.moment_scale),
+                "tolerance": config.tol_equilibrium,
+            },
         )
     check = solution_checks(request, response, config, report)
-    if check is not None:
-        return run.finish(_check_failure(model, check), None)
-    return run.finish(None, raw)
+    return None if check is None else _check_failure(model, check)
 
 
 def _relative(value: float, scale: float) -> float:
