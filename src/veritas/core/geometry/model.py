@@ -51,10 +51,16 @@ from veritas.core.loads.loads import (
     Load,
     LoadBasis,
     LoadResultant,
+    MemberDistributedLoad,
+    MemberDistributedMoment,
+    MemberLinearLoad,
+    MemberPointLoad,
     MemberUniformLoad,
     NodalLoad,
     SelfWeight,
     SupportSettlement,
+    linear_contribution,
+    linear_moment_contribution,
     point_contribution,
     self_weight_intensity,
     uniform_contribution,
@@ -727,6 +733,105 @@ class StructuralModel:
         self._model_revision += 1
         return load
 
+    def add_member_point_load(  # noqa: PLR0913 (seis componentes opcionales por nombre)
+        self,
+        case_id: UUID,
+        member_id: UUID,
+        *,
+        position: float,
+        basis: LoadBasis = LoadBasis.GLOBAL,
+        fx: Quantity | None = None,
+        fy: Quantity | None = None,
+        fz: Quantity | None = None,
+        mx: Quantity | None = None,
+        my: Quantity | None = None,
+        mz: Quantity | None = None,
+    ) -> MemberPointLoad:
+        """Fuerza y par concentrados en ξ = ``position`` (0 < ξ < 1) de la barra; +1."""
+        self.load_case(case_id)
+        self.member(member_id)
+        load_id = new_entity_id()
+        location = Location(entity_id=load_id, revision=1)
+        force = _vector({"fx": fx, "fy": fy, "fz": fz}, FORCE, location)
+        moment = _vector({"mx": mx, "my": my, "mz": mz}, MOMENT, location)
+        load = MemberPointLoad(load_id, 1, case_id, member_id, basis, position, force, moment)
+        self._loads[load.id] = load
+        self._model_revision += 1
+        return load
+
+    def add_member_distributed_load(  # noqa: PLR0913 (seis componentes opcionales por nombre)
+        self,
+        case_id: UUID,
+        member_id: UUID,
+        *,
+        start: float,
+        end: float,
+        basis: LoadBasis = LoadBasis.GLOBAL,
+        qx_start: Quantity | None = None,
+        qy_start: Quantity | None = None,
+        qz_start: Quantity | None = None,
+        qx_end: Quantity | None = None,
+        qy_end: Quantity | None = None,
+        qz_end: Quantity | None = None,
+    ) -> MemberDistributedLoad:
+        """Fuerza distribuida lineal (N/m) entre ξa = ``start`` y ξb = ``end``; +1.
+
+        Componente omitida = 0 en ese extremo del tramo: una parcial uniforme da los mismos
+        valores en ``*_start`` y ``*_end``.
+        """
+        self.load_case(case_id)
+        self.member(member_id)
+        load_id = new_entity_id()
+        location = Location(entity_id=load_id, revision=1)
+        q_start = _vector(
+            {"qx_start": qx_start, "qy_start": qy_start, "qz_start": qz_start},
+            FORCE_PER_LENGTH,
+            location,
+        )
+        q_end = _vector(
+            {"qx_end": qx_end, "qy_end": qy_end, "qz_end": qz_end}, FORCE_PER_LENGTH, location
+        )
+        load = MemberDistributedLoad(
+            load_id, 1, case_id, member_id, basis, start, end, q_start, q_end
+        )
+        self._loads[load.id] = load
+        self._model_revision += 1
+        return load
+
+    def add_member_distributed_moment(  # noqa: PLR0913 (seis componentes opcionales por nombre)
+        self,
+        case_id: UUID,
+        member_id: UUID,
+        *,
+        start: float,
+        end: float,
+        basis: LoadBasis = LoadBasis.GLOBAL,
+        mx_start: Quantity | None = None,
+        my_start: Quantity | None = None,
+        mz_start: Quantity | None = None,
+        mx_end: Quantity | None = None,
+        my_end: Quantity | None = None,
+        mz_end: Quantity | None = None,
+    ) -> MemberDistributedMoment:
+        """Momento distribuido lineal (N·m/m) entre ξa = ``start`` y ξb = ``end``; +1.
+
+        N·m/m tiene la dimensión de una fuerza (plan T-015, D5-A): se exige ``FORCE``.
+        """
+        self.load_case(case_id)
+        self.member(member_id)
+        load_id = new_entity_id()
+        location = Location(entity_id=load_id, revision=1)
+        m_start = _vector(
+            {"mx_start": mx_start, "my_start": my_start, "mz_start": mz_start}, FORCE, location
+        )
+        m_end = _vector({"mx_end": mx_end, "my_end": my_end, "mz_end": mz_end}, FORCE, location)
+        load = MemberDistributedMoment(
+            load_id, 1, case_id, member_id, basis, start, end, m_start, m_end
+        )
+        self._loads[load.id] = load
+        self._model_revision += 1
+        return load
+
     def add_support_settlement(  # noqa: PLR0913 (seis componentes opcionales por nombre)
         self,
         case_id: UUID,
@@ -845,7 +950,7 @@ class StructuralModel:
         return (zero, zero, -q)
 
     def remove_load(self, load_id: UUID) -> Load:
-        """Retira una carga (nodal, de barra o peso propio); ``model_revision`` +1."""
+        """Retira una carga (nodal, de barra, peso propio o asiento); ``model_revision`` +1."""
         try:
             load = self._loads.pop(load_id)
         except (KeyError, TypeError):
@@ -856,9 +961,34 @@ class StructuralModel:
         return load
 
     def _member_load_global(self, load: MemberUniformLoad) -> Vec3:
-        if load.basis is LoadBasis.GLOBAL:
-            return load.intensity
-        return self.axes(load.member_id).to_global(load.intensity)
+        return self._to_global(load.member_id, load.basis, load.intensity)
+
+    def _to_global(self, member_id: UUID, basis: LoadBasis, vector: Vec3) -> Vec3:
+        if basis is LoadBasis.GLOBAL:
+            return vector
+        return self.axes(member_id).to_global(vector)
+
+    def _member_point(self, member_id: UUID, xi: float) -> Vec3:
+        """r(ξ) = r_I + ξ·(r_J − r_I) sobre el eje de la barra."""
+        member = self._members[member_id]
+        p_i = self._nodes[member.node_i].position
+        return p_i + (self._nodes[member.node_j].position - p_i).scaled(xi)
+
+    def _point_part(self, load: MemberPointLoad) -> tuple[Vec3, Vec3]:
+        return point_contribution(
+            self._member_point(load.member_id, load.position),
+            self._to_global(load.member_id, load.basis, load.force),
+            self._to_global(load.member_id, load.basis, load.moment),
+        )
+
+    def _linear_part(self, load: MemberLinearLoad) -> tuple[Vec3, Vec3]:
+        r_a = self._member_point(load.member_id, load.start)
+        r_b = self._member_point(load.member_id, load.end)
+        a = self._to_global(load.member_id, load.basis, load.intensity_start)
+        b = self._to_global(load.member_id, load.basis, load.intensity_end)
+        if isinstance(load, MemberDistributedLoad):
+            return linear_contribution(r_a, r_b, a, b)
+        return linear_moment_contribution(r_a, r_b, a, b)
 
     def _uniform_part(self, member_id: UUID, q_global: Vec3) -> tuple[Vec3, Vec3]:
         member = self._members[member_id]
@@ -881,6 +1011,10 @@ class StructuralModel:
                 parts = [point_contribution(position, load.force, load.moment)]
             elif isinstance(load, MemberUniformLoad):
                 parts = [self._uniform_part(load.member_id, self._member_load_global(load))]
+            elif isinstance(load, MemberPointLoad):
+                parts = [self._point_part(load)]
+            elif isinstance(load, MemberDistributedLoad | MemberDistributedMoment):
+                parts = [self._linear_part(load)]
             elif isinstance(load, SupportSettlement):
                 parts = []  # Sin fuerza prescrita: cuenta en load_count, no en ΣF ni ΣM.
             elif isinstance(load, SelfWeight):

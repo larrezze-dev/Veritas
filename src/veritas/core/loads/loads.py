@@ -1,4 +1,4 @@
-"""Cargas nodales, de barra, peso propio y asientos de apoyo (LD-002, LD-003; T-006, T-016).
+"""Cargas nodales, de barra, peso propio y asientos (LD-002, LD-003; T-006, T-015, T-016).
 
 Convenciones (ADR-001 §1-§2, ampliación aprobada en el plan T-006):
 
@@ -7,6 +7,10 @@ Convenciones (ADR-001 §1-§2, ampliación aprobada en el plan T-006):
 - Carga uniforme de barra: solo fuerzas, en toda la longitud, por metro de longitud REAL
   (no proyectada). En base LOCAL las componentes siguen a la base local actual de la
   barra: q_global = Qᵀ q_local.
+- Cargas de barra ampliadas (plan T-015, D1-D4): puntual (fuerza N y par N·m) en
+  ξ = x/L con 0 < ξ < 1; fuerza distribuida (N/m) y momento distribuido (N·m/m) lineales
+  entre ξa y ξb (0 ≤ ξa < ξb ≤ 1), nulos fuera del tramo. Base GLOBAL o LOCAL como la carga
+  uniforme; intensidades por metro de longitud real.
 - Peso propio: q = ρ·A·g por metro de longitud real, dirección -Z global, derivado bajo
   demanda de la revisión actual de material y sección de cada barra. g se declara en la
   definición; por defecto la gravedad normal convencional 9,80665 m/s² (CGPM 1901).
@@ -43,7 +47,7 @@ from veritas.core.units import (
     Dimension,
     Quantity,
 )
-from veritas.core.validation import invalid_type, positive_float
+from veritas.core.validation import invalid_type, positive_float, require_real
 
 STANDARD_GRAVITY: Final = Quantity(9.80665, ACCELERATION)
 
@@ -171,7 +175,148 @@ class SupportSettlement:
         check_load_vector({"translation": self.translation, "rotation": self.rotation}, location)
 
 
-type Load = NodalLoad | MemberUniformLoad | SelfWeight | SupportSettlement
+# Longitud relativa mínima de un tramo de carga distribuida (plan T-015, D2-A).
+MIN_SEGMENT: Final = 1e-9
+
+
+def _member_refs(
+    load: "MemberPointLoad | MemberDistributedLoad | MemberDistributedMoment",
+) -> Location:
+    """Identidad, referencias y base de una carga de barra ampliada."""
+    check_entity_identity(load.id, load.revision, type(load).__name__)
+    location = _check_refs(
+        load.id, load.revision, {"case_id": load.case_id, "member_id": load.member_id}
+    )
+    if not isinstance(load.basis, LoadBasis):
+        raise invalid_type("basis", "LoadBasis", load.basis, location)
+    return location
+
+
+def _position_error(
+    field: str, value: float, condition: str, location: Location
+) -> InputValueError:
+    return InputValueError(
+        Diagnostic.create(
+            DiagnosticCode.INPUT_OUT_OF_RANGE,
+            "load.position_out_of_range",
+            {"field": field, "value": repr(value), "condition": condition},
+            location=location,
+        )
+    )
+
+
+def _segment(start: object, end: object, location: Location) -> tuple[float, float]:
+    """(ξa, ξb) reales con 0 ≤ ξa < ξb ≤ 1 y ξb − ξa > ``MIN_SEGMENT``."""
+    start = require_real(start, "start", location)
+    end = require_real(end, "end", location)
+    if not 0.0 <= start <= 1.0:
+        raise _position_error("start", start, "0 ≤ ξ ≤ 1", location)
+    if not 0.0 <= end <= 1.0:
+        raise _position_error("end", end, "0 ≤ ξ ≤ 1", location)
+    if end - start <= MIN_SEGMENT:
+        raise InputValueError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                "load.segment_too_short",
+                {"start": repr(start), "end": repr(end), "minimum": repr(MIN_SEGMENT)},
+                location=location,
+            )
+        )
+    return start, end
+
+
+@dataclass(frozen=True, slots=True)
+class MemberPointLoad:
+    """Fuerza (N) y par (N·m) concentrados en ξ = x/L, 0 < ξ < 1, base global o local.
+
+    En los extremos (ξ = 0 o 1) se usa una carga nodal (plan T-015, D2-A).
+    """
+
+    id: UUID
+    revision: int
+    case_id: UUID
+    member_id: UUID
+    basis: LoadBasis
+    position: float
+    force: Vec3
+    moment: Vec3
+
+    def __post_init__(self) -> None:
+        location = _member_refs(self)
+        position = require_real(self.position, "position", location)
+        if not 0.0 < position < 1.0:
+            raise _position_error("position", position, "0 < ξ < 1", location)
+        object.__setattr__(self, "position", position)
+        check_load_vector({"force": self.force, "moment": self.moment}, location)
+
+
+@dataclass(frozen=True, slots=True)
+class MemberDistributedLoad:
+    """Fuerza distribuida (N/m de longitud real) lineal entre ξa y ξb, nula fuera.
+
+    ``intensity_start`` en ξa e ``intensity_end`` en ξb; iguales = parcial uniforme.
+    """
+
+    id: UUID
+    revision: int
+    case_id: UUID
+    member_id: UUID
+    basis: LoadBasis
+    start: float
+    end: float
+    intensity_start: Vec3
+    intensity_end: Vec3
+
+    def __post_init__(self) -> None:
+        location = _member_refs(self)
+        start, end = _segment(self.start, self.end, location)
+        object.__setattr__(self, "start", start)
+        object.__setattr__(self, "end", end)
+        check_load_vector(
+            {"intensity_start": self.intensity_start, "intensity_end": self.intensity_end},
+            location,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MemberDistributedMoment:
+    """Momento distribuido (N·m/m de longitud real) lineal entre ξa y ξb, nulo fuera.
+
+    La componente x (base local) es torsor; y, z flectores.
+    """
+
+    id: UUID
+    revision: int
+    case_id: UUID
+    member_id: UUID
+    basis: LoadBasis
+    start: float
+    end: float
+    intensity_start: Vec3
+    intensity_end: Vec3
+
+    def __post_init__(self) -> None:
+        location = _member_refs(self)
+        start, end = _segment(self.start, self.end, location)
+        object.__setattr__(self, "start", start)
+        object.__setattr__(self, "end", end)
+        check_load_vector(
+            {"intensity_start": self.intensity_start, "intensity_end": self.intensity_end},
+            location,
+        )
+
+
+type MemberLinearLoad = MemberDistributedLoad | MemberDistributedMoment
+
+type Load = (
+    NodalLoad
+    | MemberUniformLoad
+    | MemberPointLoad
+    | MemberDistributedLoad
+    | MemberDistributedMoment
+    | SelfWeight
+    | SupportSettlement
+)
 
 
 def self_weight_intensity(linear_mass: Quantity, gravity: Quantity) -> Quantity:
@@ -223,3 +368,35 @@ def uniform_contribution(p_i: Vec3, p_j: Vec3, q_global: Vec3) -> tuple[Vec3, Ve
             raise _unrepresentable("resultante q·L", None)
     middle = (p_i + p_j).scaled(0.5)
     return force, middle.cross(force)
+
+
+def linear_contribution(r_a: Vec3, r_b: Vec3, q_a: Vec3, q_b: Vec3) -> tuple[Vec3, Vec3]:
+    """(F, M) respecto al origen de una fuerza distribuida lineal en el tramo r_a -> r_b.
+
+    q(t) = q_a + t·(q_b − q_a) y r(t) = r_a + t·d, con d = r_b − r_a, t ∈ [0, 1] y s = |d|:
+    F = s·(q_a + q_b)/2 y M = s·[r_a × q_a + r_a × Δq/2 + d × q_a/2 + d × Δq/3], Δq = q_b − q_a.
+    """
+    d = r_b - r_a
+    s = d.norm()
+    delta = q_b - q_a
+    force = (q_a + q_b).scaled(s / 2.0)
+    for q, f in zip((q_a + q_b).components(), force.components(), strict=True):
+        if q != 0.0 and abs(f) < sys.float_info.min:
+            raise _unrepresentable("resultante de la carga distribuida", None)
+    moment = (
+        r_a.cross(q_a)
+        + r_a.cross(delta).scaled(0.5)
+        + d.cross(q_a).scaled(0.5)
+        + d.cross(delta).scaled(1.0 / 3.0)
+    ).scaled(s)
+    return force, moment
+
+
+def linear_moment_contribution(r_a: Vec3, r_b: Vec3, m_a: Vec3, m_b: Vec3) -> tuple[Vec3, Vec3]:
+    """(0, M) de un momento distribuido lineal en el tramo r_a -> r_b: M = s·(m_a + m_b)/2."""
+    s = (r_b - r_a).norm()
+    moment = (m_a + m_b).scaled(s / 2.0)
+    for m, total in zip((m_a + m_b).components(), moment.components(), strict=True):
+        if m != 0.0 and abs(total) < sys.float_info.min:
+            raise _unrepresentable("resultante del momento distribuido", None)
+    return Vec3(0.0, 0.0, 0.0), moment

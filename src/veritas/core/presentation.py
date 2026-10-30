@@ -37,6 +37,7 @@ class QuantityKind(StrEnum):
     TRANSLATIONAL_STIFFNESS = "TRANSLATIONAL_STIFFNESS"
     STRESS = "STRESS"
     MOMENT = "MOMENT"
+    MOMENT_PER_LENGTH = "MOMENT_PER_LENGTH"
     ANGLE = "ANGLE"
     ROTATIONAL_STIFFNESS = "ROTATIONAL_STIFFNESS"
     DIMENSIONLESS = "DIMENSIONLESS"
@@ -66,6 +67,7 @@ _KIND_DIMENSIONS: Final[dict[QuantityKind, u.Dimension]] = {
     QuantityKind.TRANSLATIONAL_STIFFNESS: u.FORCE_PER_LENGTH,
     QuantityKind.STRESS: u.STRESS,
     QuantityKind.MOMENT: u.MOMENT,
+    QuantityKind.MOMENT_PER_LENGTH: u.MOMENT_PER_LENGTH,
     QuantityKind.ANGLE: u.ANGLE,
     QuantityKind.ROTATIONAL_STIFFNESS: u.ROTATIONAL_STIFFNESS,
     QuantityKind.DIMENSIONLESS: u.DIMENSIONLESS,
@@ -178,6 +180,7 @@ PROFILE_SI: Final = _builtin(
         QuantityKind.TRANSLATIONAL_STIFFNESS: "N/m",
         QuantityKind.STRESS: "Pa",
         QuantityKind.MOMENT: "N·m",
+        QuantityKind.MOMENT_PER_LENGTH: "N·m/m",
         QuantityKind.ANGLE: "rad",
         QuantityKind.ROTATIONAL_STIFFNESS: "N·m/rad",
         QuantityKind.DIMENSIONLESS: "1",
@@ -202,6 +205,7 @@ PROFILE_KN_M: Final = _builtin(
         QuantityKind.TRANSLATIONAL_STIFFNESS: "kN/m",
         QuantityKind.STRESS: "N/mm²",
         QuantityKind.MOMENT: "kN·m",
+        QuantityKind.MOMENT_PER_LENGTH: "kN·m/m",
         QuantityKind.ANGLE: "rad",
         QuantityKind.ROTATIONAL_STIFFNESS: "kN·m/rad",
         QuantityKind.DIMENSIONLESS: "1",
@@ -226,6 +230,7 @@ PROFILE_N_MM: Final = _builtin(
         QuantityKind.TRANSLATIONAL_STIFFNESS: "N/mm",
         QuantityKind.STRESS: "N/mm²",
         QuantityKind.MOMENT: "N·mm",
+        QuantityKind.MOMENT_PER_LENGTH: "N·mm/mm",
         QuantityKind.ANGLE: "rad",
         QuantityKind.ROTATIONAL_STIFFNESS: "N·mm/rad",
         QuantityKind.DIMENSIONLESS: "1",

@@ -95,6 +95,13 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "GDL de extremo desconocido: «{dof}» (se admiten Ux, Uy, Uz, Rx, Ry, Rz)."
     ),
     "load.all_zero": "Una carga debe tener alguna componente no nula ({fields}).",
+    "load.position_out_of_range": (
+        "Posición {field} = {value} fuera de rango ({condition}); una carga en un extremo de la "
+        "barra se introduce como carga nodal."
+    ),
+    "load.segment_too_short": (
+        "Tramo de carga [{start}; {end}] demasiado corto: ξb − ξa debe superar {minimum}."
+    ),
     "load.self_weight_duplicate": (
         "El modelo ya tiene un peso propio (caso {case_id}); solo se admite uno. "
         "Retírelo antes de definirlo en otro caso."
@@ -636,6 +643,7 @@ QUANTITY_KIND_LABELS_ES: Final[dict[str, str]] = {
     "TRANSLATIONAL_STIFFNESS": "Rigidez traslacional",
     "STRESS": "Tensión / módulo",
     "MOMENT": "Momento",
+    "MOMENT_PER_LENGTH": "Momento por longitud",
     "ANGLE": "Ángulo",
     "ROTATIONAL_STIFFNESS": "Rigidez rotacional",
     "DIMENSIONLESS": "Adimensional",

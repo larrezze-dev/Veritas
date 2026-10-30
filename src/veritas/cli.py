@@ -95,6 +95,9 @@ from veritas.core.loads.load_case import LoadCategory
 from veritas.core.loads.loads import (
     STANDARD_GRAVITY,
     LoadBasis,
+    MemberDistributedLoad,
+    MemberDistributedMoment,
+    MemberPointLoad,
     MemberUniformLoad,
     NodalLoad,
     SelfWeight,
@@ -1157,6 +1160,40 @@ def _load_rows(
                     names[load.member_id],
                     str(load.basis),
                     "q = " + _fq3(q, QuantityKind.FORCE_PER_LENGTH, profile),
+                )
+            )
+        elif isinstance(load, MemberPointLoad):
+            rows.append(
+                (
+                    "puntual de barra",
+                    names[load.member_id],
+                    str(load.basis),
+                    f"ξ = {load.position:g}  F = "
+                    + _fq3(vector_quantities(load.force, u.FORCE), QuantityKind.FORCE, profile)
+                    + "  M = "
+                    + _fq3(vector_quantities(load.moment, u.MOMENT), QuantityKind.MOMENT, profile),
+                )
+            )
+        elif isinstance(load, MemberDistributedLoad | MemberDistributedMoment):
+            kind, dimension, symbol, label = (
+                (QuantityKind.FORCE_PER_LENGTH, u.FORCE_PER_LENGTH, "q", "distribuida de barra")
+                if isinstance(load, MemberDistributedLoad)
+                else (
+                    QuantityKind.MOMENT_PER_LENGTH,
+                    u.MOMENT_PER_LENGTH,
+                    "m",
+                    "momento distribuido",
+                )
+            )
+            rows.append(
+                (
+                    label,
+                    names[load.member_id],
+                    str(load.basis),
+                    f"ξ = [{load.start:g}; {load.end:g}]  {symbol}a = "
+                    + _fq3(vector_quantities(load.intensity_start, dimension), kind, profile)
+                    + f"  {symbol}b = "
+                    + _fq3(vector_quantities(load.intensity_end, dimension), kind, profile),
                 )
             )
         elif isinstance(load, SupportSettlement):

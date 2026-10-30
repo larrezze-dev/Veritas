@@ -177,6 +177,8 @@ FORCE_PER_LENGTH: Final = FORCE / LENGTH
 STRESS: Final = FORCE / AREA
 MOMENT: Final = FORCE * LENGTH
 ROTATIONAL_STIFFNESS: Final = MOMENT / ANGLE
+# N·m/m tiene la dimensión de una fuerza (plan T-015, D5-A): misma Dimension que FORCE.
+MOMENT_PER_LENGTH: Final = MOMENT / LENGTH
 
 
 # --- Unidades --------------------------------------------------------------------------
@@ -244,6 +246,9 @@ UNITS: Final[tuple[Unit, ...]] = (
     Unit("N·mm", MOMENT, 1e-3),
     Unit("kN·m", MOMENT, 1e3),
     Unit("kN·mm", MOMENT, 1.0),
+    Unit("N·m/m", MOMENT_PER_LENGTH, 1.0),
+    Unit("kN·m/m", MOMENT_PER_LENGTH, 1e3),
+    Unit("N·mm/mm", MOMENT_PER_LENGTH, 1.0),
     Unit("rad", ANGLE, 1.0),
     Unit("deg", ANGLE, math.pi / 180.0),
     Unit("N·m/rad", ROTATIONAL_STIFFNESS, 1.0),
