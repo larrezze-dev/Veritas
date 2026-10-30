@@ -1,6 +1,6 @@
 # ADR-005 — Cargas de barra no uniformes: fuerzas de empotramiento calculadas por Veritas
 
-**Estado: ACCEPTED.** Aprobado por el usuario el 2026-10-30 («ADR-005 aprobada»), tras la aprobación del plan T-015 (D6-A, D7-A). Implementación en T-015 (E2.0–E2.2). Aprobarlo no acredita implementación ni validación.
+**Estado: ACCEPTED.** Aprobado por el usuario el 2026-10-30 («ADR-005 aprobada»), tras la aprobación del plan T-015 (D6-A, D7-A). Implementación en T-015 (E2.0–E2.3). Aprobarlo no acredita implementación ni validación.
 
 **Fase:** F5A (adelantado). **Ticket:** T-015 ([plan](../../plans/T-015.md), D6 y D7).
 
