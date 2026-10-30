@@ -341,7 +341,8 @@ def full_stiffness(request: SpatialRequest) -> tuple[Matrix, dict[int, int]]:
 
 def load_vector(request: SpatialRequest) -> list[float]:
     """F global en los GDL de ``full_stiffness``: cargas nodales + Tᵀ·(−p0_c) de las cargas
-    de barra, en los nudos del elemento (el aux si lo hay)."""
+    de barra, en los nudos del elemento (el aux si lo hay), y ``member_end_loads`` (T-015)
+    en su nudo, que ya es el del elemento."""
     index = _node_index(request)
     vector = [0.0] * (DOFS_PER_NODE * len(index))
     for load in request.nodal_loads:
@@ -356,6 +357,10 @@ def load_vector(request: SpatialRequest) -> list[float]:
         t = matrices.transformation
         for i, dof in enumerate(_beam_dofs(request, index, beam)):
             vector[dof] -= sum(t[m][i] * p0[m] for m in range(12))
+    for end_load in request.member_end_loads:
+        base = DOFS_PER_NODE * index[end_load.node]
+        for k, value in enumerate(end_load.values):
+            vector[base + k] += value
     return vector
 
 
@@ -678,6 +683,7 @@ def force_scale(request: SpatialRequest) -> tuple[float, float]:
     """(F, L_máx) del caso (ADR-004 §3): F = máx(máx|P| nodal, Σ|w|·L, máx|M| nodal / L_máx).
 
     Normas euclídeas de las cargas traducidas (incluido el peso propio) y L de cada barra.
+    Las entradas de ``member_end_loads`` (T-015) cuentan como cargas nodales (E2.2-d).
     Escala del criterio de parada (traductor) y suelo del contraste exacto (E2.5)."""
     coordinates = _coordinates(request)
     lengths = {
@@ -685,7 +691,9 @@ def force_scale(request: SpatialRequest) -> tuple[float, float]:
         for beam in request.beams
     }
     longest = max(lengths.values())
-    force = max((math.hypot(*load.values[:AXES]) for load in request.nodal_loads), default=0.0)
-    moment = max((math.hypot(*load.values[AXES:]) for load in request.nodal_loads), default=0.0)
+    loads = [load.values for load in request.nodal_loads]
+    loads += [load.values for load in request.member_end_loads]
+    force = max((math.hypot(*values[:AXES]) for values in loads), default=0.0)
+    moment = max((math.hypot(*values[AXES:]) for values in loads), default=0.0)
     distributed = sum(math.hypot(w.wy, w.wz, w.wx) * lengths[w.beam] for w in request.beam_loads)
     return max(force, distributed, moment / longest), longest

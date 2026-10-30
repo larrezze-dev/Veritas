@@ -10,6 +10,8 @@ dirección global b_s y la escala S_s de cada uno y los parámetros de parada en
 y las iteraciones, el motivo de parada y los multiplicadores λ_s en la respuesta.
 v4 (T-016): ``settlements`` (asientos impuestos en GDL del ``fix``), sin penalizaciones ni
 cadenas en la misma petición (D4-bis-A).
+v5 (T-015, ADR-005): ``member_end_loads``, cargas nodales equivalentes −Tᵀ·p0_c de las cargas
+de barra de Veritas, en el nudo del elemento de cada extremo.
 """
 
 import math
@@ -38,7 +40,8 @@ from veritas.fem.spatial.config import (
 )
 
 PROTOCOL_ID: Final = "veritas.opensees.spatial"
-PROTOCOL_VERSION: Final = 4  # 2: extremos (E2-b); 3: penalización iterada (ADR-004); 4: asientos
+# 2: extremos (E2-b); 3: penalización iterada (ADR-004); 4: asientos; 5: cargas de barra (T-015)
+PROTOCOL_VERSION: Final = 5
 DOFS_PER_NODE: Final = 6
 AXES: Final = 3  # Componentes de una terna de un nudo (traslaciones o giros).
 RELEASE_CODES: Final = (0, 1, 2, 3)  # -releasey/-releasez: ninguno, I, J, ambos.
@@ -295,6 +298,21 @@ class SpatialBeamLoad:
 
 
 @dataclass(frozen=True, slots=True)
+class SpatialMemberEndLoad:
+    """Carga nodal equivalente −Tᵀ·p0_c de las cargas de barra de Veritas (T-015, D6-D7).
+
+    Global (Fx, Fy, Fz, Mx, My, Mz), en el nudo del elemento ``node`` (el aux si el extremo
+    lo tiene) de la barra ``beam``; p0_c ya condensado en los GDL de ``-release*``. Va
+    separada de ``nodal_loads`` para que los controles sepan qué carga procede de una barra;
+    el worker la aplica con ``ops.load`` sin calcular nada.
+    """
+
+    beam: int
+    node: int
+    values: Six
+
+
+@dataclass(frozen=True, slots=True)
 class SpatialSettlement:
     """Asiento impuesto (T-016) en un GDL global 1-6 del nudo, en m o rad.
 
@@ -332,9 +350,11 @@ class SpatialRequest:
     end_penalty_stagnation: float = DEFAULT_TOL_PENALTY
     end_penalty_max_iterations: int = DEFAULT_END_PENALTY_MAX_ITERATIONS
     settlements: tuple[SpatialSettlement, ...] = ()
+    member_end_loads: tuple[SpatialMemberEndLoad, ...] = ()
 
     def __post_init__(self) -> None:
         _check_settlements(self)
+        _check_member_end_loads(self)
 
     def element_node(self, beam: SpatialBeam, end: str) -> int:
         """Nudo al que se conecta el elemento en ese extremo: aux si lo hay, si no el nudo."""
@@ -426,6 +446,7 @@ class SpatialRequest:
             "end_penalty_stagnation": self.end_penalty_stagnation,
             "end_penalty_max_iterations": self.end_penalty_max_iterations,
             "settlements": [[t.node, t.dof, t.value] for t in self.settlements],
+            "member_end_loads": [[e.beam, e.node, list(e.values)] for e in self.member_end_loads],
         }
 
     def to_json(self) -> str:
@@ -527,6 +548,13 @@ class SpatialRequest:
             SpatialSettlement(_int(t[0], "node"), _dof(t[1]), _finite(t[2], "value"))
             for t in (_list(item, "settlement", 3) for item in _list(data["settlements"], "st"))
         )
+        end_loads = tuple(
+            SpatialMemberEndLoad(_int(e[0], "beam"), _int(e[1], "node"), _six(e[2], "load"))
+            for e in (
+                _list(item, "end_load", 3)
+                for item in _list(data["member_end_loads"], "member_end_loads")
+            )
+        )
         return cls(
             _int(data["model_revision"], "model_revision"),
             _str(data["case_id"], "case_id"),
@@ -549,6 +577,7 @@ class SpatialRequest:
             stagnation,
             max_iterations,
             settlements,
+            end_loads,
         )
 
 
@@ -577,6 +606,23 @@ def _check_settlements(request: SpatialRequest) -> None:
             raise ProtocolError(f"giro asentado en orphan_fixes del nudo {node}")
         if not math.isfinite(settlement.value):
             raise NonFiniteValueError("asiento: valor no finito")
+
+
+def _check_member_end_loads(request: SpatialRequest) -> None:
+    """D7 (T-015): cada carga va al nudo del elemento de un extremo de su barra, sin repetir."""
+    beams = {beam.tag: beam for beam in request.beams}
+    seen: set[tuple[int, int]] = set()
+    for load in request.member_end_loads:
+        beam = beams.get(load.beam)
+        if beam is None:
+            raise ProtocolError(f"carga de extremo: barra desconocida {load.beam}")
+        if load.node not in (request.element_node(beam, "I"), request.element_node(beam, "J")):
+            raise ProtocolError(f"carga de extremo: el nudo {load.node} no es de la barra")
+        if (load.beam, load.node) in seen:
+            raise ProtocolError(f"carga de extremo repetida en la barra {load.beam}")
+        seen.add((load.beam, load.node))
+        if not all(math.isfinite(v) for v in load.values):
+            raise NonFiniteValueError("carga de extremo: valor no finito")
 
 
 def _check_end_penalties(
@@ -652,6 +698,7 @@ _REQUEST_KEYS: Final = frozenset(
         "end_penalty_stagnation",
         "end_penalty_max_iterations",
         "settlements",
+        "member_end_loads",
     }
 )
 _RESPONSE_KEYS: Final = frozenset(

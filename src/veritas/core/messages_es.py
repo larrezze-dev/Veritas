@@ -309,9 +309,15 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Carga {load} de un tipo que la normalización no admite (error interno)."
     ),
     "fem3d.end_axial_with_axial_load": (
-        "La barra {member} tiene Ux de extremo liberado o con resorte y carga axial distribuida "
-        "en el caso (Wx = {wx} N/m, incluido el peso propio de una barra inclinada); el "
-        "análisis espacial no admite esa combinación."
+        "La barra {member} tiene Ux de extremo liberado o con resorte y carga axial de barra "
+        "en el caso (componente axial {wx}: N/m si es distribuida, N si es puntual; incluido "
+        "el peso propio de una barra inclinada); el análisis espacial no admite esa "
+        "combinación."
+    ),
+    "fem3d.end_torsion_with_torsional_load": (
+        "La barra {member} tiene Rx de extremo liberado o con resorte y par torsor de barra "
+        "en el caso (componente x {mx}: N·m/m si es distribuido, N·m si es puntual); el "
+        "análisis espacial no admite esa combinación (T-015, D8)."
     ),
     "fem3d.end_spring_near_rigid": (
         "El resorte {dof} del extremo {end} de la barra {member} es casi rígido (cociente "

@@ -14,7 +14,9 @@ huérfanos coordenados sin momento se fijan con aviso (R4).
 
 Mapeo: base global de ADR-001 con seis GDL por nudo; ``vecxz`` = ez de la barra (hecho 1);
 carga nodal global (Fx, Fy, Fz, Mx, My, Mz); carga de barra ``-beamUniform`` (Wy, Wz, Wx)
-en la base local de ADR-001 (hecho 9). Apoyos descompuestos eje a eje de su base (D4):
+en la base local de ADR-001 (hecho 9). Cargas de barra de Veritas (T-015, ADR-005): p0
+local de ``member_loads``, condensado en los GDL de ``-release*`` y aplicado como −Tᵀ·p0_c en
+los nudos del elemento (``member_end_loads``). Apoyos descompuestos eje a eje de su base (D4):
 ``fix`` en los ejes alineados con un eje global, cadena exacta en las traslaciones fijas
 según una normal no global, ``zeroLength`` orientado en los resortes y penalización solo en
 los giros fijos parciales de una base oblicua (D4-A), salvo que la fila libre esté alineada
@@ -24,6 +26,7 @@ los elementos de apoyo siguen, en el orden de tag de su nudo.
 """
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Final
 from uuid import UUID
@@ -40,6 +43,9 @@ from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
 from veritas.core.loads.loads import (
     LoadBasis,
+    MemberDistributedLoad,
+    MemberDistributedMoment,
+    MemberPointLoad,
     MemberUniformLoad,
     NodalLoad,
     SelfWeight,
@@ -53,9 +59,15 @@ from veritas.fem.adapters.planar_xz import (
     _ordered,
     _unsupported,
 )
+from veritas.fem.member_loads import (
+    distributed_fixed_end_forces,
+    distributed_moment_fixed_end_forces,
+    point_fixed_end_forces,
+)
 from veritas.fem.spatial.config import SpatialAnalysisConfiguration
 from veritas.fem.spatial.protocol import (
     AXES,
+    DOFS_PER_NODE,
     SpatialAuxNode,
     SpatialBeam,
     SpatialBeamLoad,
@@ -64,6 +76,7 @@ from veritas.fem.spatial.protocol import (
     SpatialEndPenalty,
     SpatialEndSpring,
     SpatialFix,
+    SpatialMemberEndLoad,
     SpatialNodalLoad,
     SpatialNode,
     SpatialOrphanFix,
@@ -75,9 +88,13 @@ from veritas.fem.spatial.protocol import Vec3 as Triple
 from veritas.fem.spatial.stiffness import (
     UNIT_AXES,
     beam_axes,
+    beam_matrices,
+    condense_beam,
     cross,
     dot,
     force_scale,
+    local_beam_stiffness,
+    released_indices,
     spring_direction,
 )
 
@@ -99,6 +116,7 @@ AUX_ROTATIONS: Final = (Dof.RY, Dof.RZ)
 DOFS: Final = tuple(Dof)  # Orden local de ADR-001: Ux, Uy, Uz, Rx, Ry, Rz.
 
 type Fixity = tuple[int, int, int, int, int, int]
+type MemberLoad = MemberPointLoad | MemberDistributedLoad | MemberDistributedMoment
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,6 +279,8 @@ class _Builder:
         self.translation_scale: dict[int, float] = {}
         self.pending_ends: list[_PendingEnd] = []
         self.axial_ends: dict[int, UUID] = {}  # Barras con Ux de extremo no rígido (E2-d).
+        self.twist_ends: set[int] = set()  # Barras con Rx de extremo no rígido (T-015, D8).
+        self.member_loads: list[MemberLoad] = []  # Cargas de barra de Veritas (T-015).
         self.aux_nodes: list[SpatialAuxNode] = []
         self.end_equals: list[SpatialEndEqual] = []
         self.end_springs: list[SpatialEndSpring] = []
@@ -360,6 +380,8 @@ class _Builder:
             effective_torsion = _effective(connections, Dof.RX, length, torsion, g)
             if axial:
                 self.axial_ends[tag] = member_id
+            if twist:
+                self.twist_ends.add(tag)
             self.uses_series |= axial or twist
             result.append(
                 SpatialBeam(
@@ -587,6 +609,70 @@ class _Builder:
                     Location(entity_id=member_id, revision=member.revision),
                 )
 
+    def check_member_loads(self) -> None:
+        """D8 (T-015, E2.2-a): con Ux no rígido, ninguna fuerza axial, y con Rx no rígido,
+        ningún par torsor, carga a carga y vector a vector en base local (|c_x| ≤
+        ``TOL_AXIAL_LOAD``·‖c‖): A y J efectivos solo son exactos con N y T constantes."""
+        for load in self.member_loads:
+            beam = self.beam_tags[load.member_id]
+            forces, moments = self._local_vectors(load)
+            for vectors, applies, key, param in (
+                (forces, beam in self.axial_ends, "fem3d.end_axial_with_axial_load", "wx"),
+                (moments, beam in self.twist_ends, "fem3d.end_torsion_with_torsional_load", "mx"),
+            ):
+                for vector in vectors if applies else ():
+                    if abs(vector.x) > TOL_AXIAL_LOAD * vector.norm():
+                        member = self.model.member(load.member_id)
+                        raise _unsupported(
+                            key,
+                            {"member": member.label or str(load.member_id), param: vector.x},
+                            Location(entity_id=load.id, revision=load.revision),
+                        )
+
+    def _local_vectors(self, load: MemberLoad) -> tuple[list[Vec3], list[Vec3]]:
+        """(fuerzas, pares o momentos) de la carga en la base local de ADR-001."""
+        axes = self.model.axes(load.member_id)
+
+        def local(vector: Vec3) -> Vec3:
+            return axes.to_local(vector) if load.basis is LoadBasis.GLOBAL else vector
+
+        if isinstance(load, MemberPointLoad):
+            return [local(load.force)], [local(load.moment)]
+        ends = [local(load.intensity_start), local(load.intensity_end)]
+        return (ends, []) if isinstance(load, MemberDistributedLoad) else ([], ends)
+
+    def member_end_loads(self, request: SpatialRequest) -> list[SpatialMemberEndLoad]:
+        """−Tᵀ·p0_c por barra en los nudos del elemento (T-015, D6-A): p0 local de
+        ``member_loads`` con la L y la T de ``beam_matrices`` (las de la salvaguarda),
+        condensado con ``condense_beam(…, length=L)`` si la barra tiene ``-release*``."""
+        beams = {beam.tag: beam for beam in request.beams}
+        totals: dict[int, list[float]] = {}
+        for load in self.member_loads:
+            tag = self.beam_tags[load.member_id]
+            length = beam_matrices(request, beams[tag]).length
+            p0 = _fixed_end_forces(load, self._local_vectors(load), length)
+            current = totals.setdefault(tag, [0.0] * 2 * DOFS_PER_NODE)
+            for k, value in enumerate(p0):
+                current[k] += value
+        result: list[SpatialMemberEndLoad] = []
+        for tag in sorted(totals):
+            beam, p0 = beams[tag], totals[tag]
+            matrices = beam_matrices(request, beam)
+            if released_indices(beam):
+                stiffness = local_beam_stiffness(beam, matrices.length)
+                _, condensed = condense_beam(beam, stiffness, p0, length=matrices.length)
+                assert condensed is not None
+                p0 = condensed
+            t = matrices.transformation
+            size = 2 * DOFS_PER_NODE
+            g = [-sum(t[m][i] * p0[m] for m in range(size)) for i in range(size)]
+            for end, offset in (("I", 0), ("J", DOFS_PER_NODE)):
+                a, b, c, d, e, f = g[offset : offset + DOFS_PER_NODE]
+                result.append(
+                    SpatialMemberEndLoad(tag, request.element_node(beam, end), (a, b, c, d, e, f))
+                )
+        return result
+
     def loads(
         self, case_id: UUID
     ) -> tuple[list[SpatialNodalLoad], list[SpatialBeamLoad], list[SpatialSettlement]]:
@@ -621,6 +707,10 @@ class _Builder:
                     )
             elif isinstance(load, SupportSettlement):
                 settlements.extend(self._settlement(load))
+            elif isinstance(
+                load, MemberPointLoad | MemberDistributedLoad | MemberDistributedMoment
+            ):
+                self.member_loads.append(load)  # T-015: −Tᵀ·p0_c tras formar la petición.
             else:  # Nunca se descarta en silencio.
                 raise _unsupported(
                     "fem3d.load_type_unsupported",
@@ -675,6 +765,7 @@ def translate_spatial(
     builder.finish_ends()
     nodal, beam_loads, settlements = builder.loads(case.id)
     builder.check_axial_loads(beam_loads)
+    builder.check_member_loads()
     fixity = sorted(builder.fixity.items())
     fixes = tuple(SpatialFix(node, _fixity(bits)) for node, bits in fixity if any(bits))
     # Lagrange con alphaSP = alphaMP = D (calibración de D3, hecho 13).
@@ -696,6 +787,8 @@ def translate_spatial(
         end_springs=tuple(builder.end_springs),
         settlements=tuple(settlements),
     )
+    if builder.member_loads:  # Antes de huérfanos y escalas: ambos leen el campo (D7).
+        request = replace(request, member_end_loads=tuple(builder.member_end_loads(request)))
     restrained, loaded = _orphan_fixes(request, config.tol_axis)
     request = replace(
         request,
@@ -749,6 +842,24 @@ def _end_penalties(request: SpatialRequest) -> tuple[SpatialEndPenalty, ...]:
     )
 
 
+def _fixed_end_forces(
+    load: MemberLoad, vectors: tuple[list[Vec3], list[Vec3]], length: float
+) -> list[float]:
+    """p0 local 12 de una carga de barra de Veritas (``member_loads``, ADR-005)."""
+    forces, moments = vectors
+    if isinstance(load, MemberPointLoad):
+        return point_fixed_end_forces(
+            load.position, forces[0].components(), moments[0].components(), length
+        )
+    start, end = forces or moments
+    function = (
+        distributed_fixed_end_forces
+        if isinstance(load, MemberDistributedLoad)
+        else distributed_moment_fixed_end_forces
+    )
+    return function(load.start, load.end, start.components(), end.components(), length)
+
+
 def _represented(connection: EndConnection, dof: Dof) -> bool:
     """Componente que representa el aux (E2-a): Uy/Uz no rígidos, Ry/Rz con resorte."""
     state = connection.state(dof)
@@ -798,19 +909,31 @@ def _orphan_fixes(
     request: SpatialRequest, tol_axis: float
 ) -> tuple[tuple[SpatialOrphanFix, ...], list[int]]:
     """Huérfanos coordenados sin momento aplicado → ``fix`` (R4); con momento sobre ellos,
-    sin fijar (mecanismo de la salvaguarda). Los oblicuos los trata E2.3."""
+    sin fijar (mecanismo de la salvaguarda). Los oblicuos los trata E2.3.
+
+    Un momento de ``member_end_loads`` (T-015) carga el eje solo si su componente supera
+    ``tol_axis``·‖m‖ (E2.2-b): está en el subespacio rígido de la barra, y el huérfano se
+    clasifica como coordenado con esa misma tolerancia."""
     moments: dict[int, list[float]] = {}
     for load in request.nodal_loads:
         current = moments.setdefault(load.node, [0.0] * AXES)
         for k in range(AXES):
             current[k] += load.values[AXES + k]
+    end_moments: dict[int, list[Sequence[float]]] = {}
+    for end_load in request.member_end_loads:
+        end_moments.setdefault(end_load.node, []).append(end_load.values[AXES:])
     restrained: list[SpatialOrphanFix] = []
     loaded: list[int] = []
     for orphan in orphan_rotations(request, tol_axis):
         if orphan.axes is None:
             continue
         moment = moments.get(orphan.node, [0.0] * AXES)
-        if any(moment[k] != 0.0 for k in orphan.axes):
+        from_ends = any(
+            abs(m[k]) > tol_axis * math.sqrt(dot(m, m))
+            for m in end_moments.get(orphan.node, [])
+            for k in orphan.axes
+        )
+        if from_ends or any(moment[k] != 0.0 for k in orphan.axes):
             loaded.append(orphan.node)
             continue
         x, y, z = (int(k in orphan.axes) for k in range(AXES))

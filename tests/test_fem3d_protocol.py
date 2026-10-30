@@ -192,7 +192,7 @@ def test_protocol_version_matches_the_worker() -> None:
         PROTOCOL_ID,
         PROTOCOL_VERSION,
     )
-    assert PROTOCOL_VERSION == 4  # T-016: asientos
+    assert PROTOCOL_VERSION == 5  # T-015: cargas de barra
 
 
 @pytest.mark.parametrize(

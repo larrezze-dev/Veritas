@@ -18,7 +18,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 PROTOCOL_ID = "veritas.opensees.spatial"
-PROTOCOL_VERSION = 4
+PROTOCOL_VERSION = 5
 # Patrón corrector de la penalización iterada (ADR-004 §1): serie y patrón propios.
 CORRECTOR_TAG = 2
 MIN_STAGNATION_ITERATION = 3  # Estancamiento aceptado desde la iteración 3 (ADR-004 §3).
@@ -157,6 +157,9 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
         ops.load(node, *values)
     for beam, wy, wz, wx in request["beam_loads"]:
         ops.eleLoad("-ele", beam, "-type", "-beamUniform", wy, wz, wx)
+    # Cargas de barra de Veritas (T-015, ADR-005): −Tᵀ·p0_c ya calculado por el padre.
+    for _beam, node, values in request["member_end_loads"]:
+        ops.load(node, *values)
     # sp dentro del patrón 1 (hecho 6); Lagrange con alpha = D lo impone exacto (hecho 1).
     for node, dof, value in request["settlements"]:
         ops.sp(node, dof, value)

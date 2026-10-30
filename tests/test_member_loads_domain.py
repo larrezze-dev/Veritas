@@ -521,9 +521,8 @@ def test_planar_translator_accepts_new_member_loads(kind: str) -> None:
 
 
 @pytest.mark.parametrize("kind", ["point", "distributed", "moment"])
-def test_spatial_translator_rejects_new_member_loads(kind: str) -> None:
+def test_spatial_translator_accepts_new_member_loads(kind: str) -> None:
+    """Desde E2.2 el espacial las traduce a ``member_end_loads`` (ver test_fem3d_member_loads)."""
     frame = loaded_frame(kind)
-    with pytest.raises(InputValueError) as info:
-        translate_spatial(frame.model, SpatialAnalysisConfiguration(frame.case_id))
-    assert info.value.code is D.UNSUPPORTED_CONFIGURATION
-    assert info.value.diagnostic.message_key == "fem3d.load_type_unsupported"
+    request = translate_spatial(frame.model, SpatialAnalysisConfiguration(frame.case_id)).request
+    assert len(request.member_end_loads) == 2

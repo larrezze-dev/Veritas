@@ -65,6 +65,7 @@ DELTA = Fraction(-1, 100)  # m
 THETA = Fraction(2, 1000)  # rad
 RELEASED_RZ = EndConnection.rigid().with_dof(Dof.RZ, DofState.RELEASED)
 WORKER_V3 = Path(__file__).parent / "data" / "opensees_worker_3d_v3.py"
+WORKER_V4 = Path(__file__).parent / "data" / "opensees_worker_3d_v4.py"
 FX, FY, FZ, MX, MY, MZ = range(6)
 
 
@@ -471,7 +472,7 @@ def test_request_round_trip_with_settlements() -> None:
     request = settled_request()
     assert request.settlements
     assert SpatialRequest.from_json(request.to_json()) == request
-    assert json.loads(request.to_json())["version"] == PROTOCOL_VERSION == 4
+    assert json.loads(request.to_json())["version"] == PROTOCOL_VERSION == 5
 
 
 @pytest.mark.parametrize(
@@ -550,17 +551,22 @@ def test_manipulated_displacement_fails_settlement_control(tmp_path: Path) -> No
 
 @pytest.mark.parametrize("case_id", sorted(SPATIAL_SPECS))
 def test_responses_without_settlements_match_v3(case_id: str) -> None:
-    """Bit a bit: worker v3 congelado con la petición v3 y worker v4 con la misma en v4."""
+    """Bit a bit: worker v3 congelado con la petición v3 y worker v4 con la misma en v4.
+
+    Desde T-015 (protocolo v5) el v4 también es una copia congelada (``WORKER_V4``).
+    """
     for spec in SPATIAL_SPECS[case_id]:
         case = _Case(spec.category)
         spec.build(case)
         request = translate_spatial(case.model, SpatialAnalysisConfiguration(case.load_case.id))
         assert request.request.settlements == ()
-        new_request = request.request.to_dict()
+        assert request.request.member_end_loads == ()
+        new_request = {**request.request.to_dict(), "version": 4}
+        del new_request["member_end_loads"]
         old_request = {**new_request, "version": 3}
         del old_request["settlements"]
         old = run_worker(json.dumps(old_request), 60.0, WORKER_V3)
-        new = run_worker(json.dumps(new_request), 60.0, WORKER_3D_PATH)
+        new = run_worker(json.dumps(new_request), 60.0, WORKER_V4)
         assert old.response_text is not None, old.stderr
         assert new.response_text is not None, new.stderr
         before, after = json.loads(old.response_text), json.loads(new.response_text)

@@ -526,6 +526,7 @@ def _upgrade(request: dict[str, Any]) -> str:
             "end_penalty_stagnation": TOL_PENALTY,
             "end_penalty_max_iterations": 20,
             "settlements": [],  # T-016: v4 sin asientos
+            "member_end_loads": [],  # T-015: v5 sin cargas de barra nuevas
         }
     )
 

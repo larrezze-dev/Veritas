@@ -3,7 +3,8 @@
 Se evalúan en el proceso padre sobre la respuesta del worker 3D, con la formulación de
 ``stiffness.py`` (Euler–Bernoulli 3D, restricciones exactas):
 
-- Equilibrio global ΣR + ΣP = 0, momentos respecto al centroide de los nudos.
+- Equilibrio global ΣR + ΣP = 0, momentos respecto al centroide de los nudos; P incluye
+  ``member_end_loads`` (T-015), en el nudo publicado (el maestro si es un aux).
 - Esfuerzos por barra: localForce ≈ k·T·u + p0, fila a fila.
 - Alias de la cadena (D3, DEV-2): u_C = u_N, n·u_N = 0 y u_C = θ_R × (C − R), con la cota
   ``CHAIN_ALIAS_FACTOR``·eps·máx(‖u_tras‖∞, a·‖θ‖∞) del modelo; reacción de R ≈ 0
@@ -56,6 +57,7 @@ from veritas.fem.spatial.stiffness import (
     full_stiffness,
     load_vector,
     reduced_coordinates,
+    released_indices,
     spring_direction,
     unit,
 )
@@ -263,12 +265,16 @@ def equilibrium_residual(
     """ΣR + ΣP = 0 en base global, fuerzas y momentos por separado (como en el plano).
 
     R: ``node_reactions`` y las reacciones de las tierras (fuerza sobre la estructura,
-    hecho 10). P: cargas nodales y resultante q·L de cada carga de barra en su punto medio.
+    hecho 10). P: cargas nodales, resultante q·L de cada carga ``-beamUniform`` en su punto
+    medio y ``member_end_loads`` (T-015) en su nudo, que comparte coordenadas con el maestro.
     """
     coords = {node.tag: (node.x, node.y, node.z) for node in request.nodes}
+    masters = {aux.tag: aux.master for aux in request.aux_nodes}
     actions: list[tuple[Triple, Sequence[float]]] = []  # punto, (F, M)
     for load in request.nodal_loads:
         actions.append((coords[load.node], load.values))
+    for end_load in request.member_end_loads:
+        actions.append((coords[masters.get(end_load.node, end_load.node)], end_load.values))
     beams = {beam.tag: beam for beam in request.beams}
     for beam_load in request.beam_loads:
         beam = beams[beam_load.beam]
@@ -320,6 +326,32 @@ def equilibrium_residual(
 
 def _matvec(matrix: Sequence[Sequence[float]], vector: Sequence[float]) -> list[float]:
     return [sum(m * v for m, v in zip(row, vector, strict=True)) for row in matrix]
+
+
+def member_fixed_end_forces(request: SpatialRequest) -> dict[int, list[float]]:
+    """p0_c local 12 de las cargas de barra de Veritas, por barra (T-015, D10-A).
+
+    Se recupera de ``member_end_loads`` como p0_c = −T·[g_I; g_J]: es la única fuente de p0
+    en el padre, la misma para la normalización. Los GDL de ``-release*`` se anulan exactos
+    (nulos por construcción; la recuperación dejaría ≈ eps·|p0|, E2.2-c). Solo aparecen las
+    barras con entradas (sin sumar ceros a las demás: conserva el signo de −0,0).
+    """
+    beams = {beam.tag: beam for beam in request.beams}
+    loads: dict[int, list[float]] = {}
+    for end_load in request.member_end_loads:
+        beam = beams[end_load.beam]
+        offset = 0 if end_load.node == request.element_node(beam, "I") else DOFS_PER_NODE
+        current = loads.setdefault(end_load.beam, [0.0] * 2 * DOFS_PER_NODE)
+        current[offset : offset + DOFS_PER_NODE] = end_load.values
+    result: dict[int, list[float]] = {}
+    for tag, values in loads.items():
+        beam = beams[tag]
+        t = beam_matrices(request, beam).transformation
+        p0 = [-dot(row, values) for row in t]
+        for index in released_indices(beam):
+            p0[index] = 0.0
+        result[tag] = p0
+    return result
 
 
 def beam_load_forces(request: SpatialRequest, beam: SpatialBeam, length: float) -> list[float]:
@@ -526,7 +558,8 @@ def _aux_actions(
     request: SpatialRequest, response: SpatialWorkerResponse, aux_tag: int
 ) -> tuple[list[float], list[float], list[float]]:
     """(F_int, P, escala por terna) del aux: F_int = Tᵀ·localForce del extremo + Σ basicForce·b
-    de sus resortes; P = −λ_s·b_s (carga correctora, ADR-004 §1). Escala: Σ de normas."""
+    de sus resortes; P = −λ_s·b_s (carga correctora, ADR-004 §1) + ``member_end_loads`` en
+    el aux (T-015). Escala: Σ de normas."""
     aux = next(item for item in request.aux_nodes if item.tag == aux_tag)
     beam = next(item for item in request.beams if item.tag == aux.beam)
     matrices = beam_matrices(request, beam)
@@ -550,6 +583,13 @@ def _aux_actions(
             internal[AXES * triple + k] += force * b[k]
             applied[AXES * triple + k] -= lam * b[k]
         scale[triple] += abs(force) + abs(lam)
+    for end_load in request.member_end_loads:
+        if end_load.node != aux_tag:
+            continue
+        for k, value in enumerate(end_load.values):
+            applied[k] += value
+        for triple in (0, 1):
+            scale[triple] += _norm(_triple(end_load.values, triple))
     return internal, applied, scale
 
 
