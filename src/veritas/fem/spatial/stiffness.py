@@ -33,6 +33,7 @@ from veritas.fem.adapters.singularity import (
     mechanism_mode,
     pivot_factorization,
 )
+from veritas.fem.member_loads import uniform_fixed_end_forces
 from veritas.fem.spatial.protocol import (
     AXES,
     DOFS_PER_NODE,
@@ -189,23 +190,30 @@ def condense(
 
 
 def condense_beam(
-    beam: SpatialBeam, k: Matrix, p0: Sequence[float] | None = None
+    beam: SpatialBeam,
+    k: Matrix,
+    p0: Sequence[float] | None = None,
+    *,
+    length: float | None = None,
 ) -> tuple[Matrix, list[float] | None]:
     """``condense`` en los GDL de ``-release*`` de la barra, fuente única de k_c y p0_c.
 
     Con el código 3 en un plano la rigidez de ese bloque es nula en aritmética exacta, pero
     la eliminación deja un residuo de redondeo (≈ 1e-11 relativo, de signo arbitrario) que
     podría ocultar un mecanismo de biela o dar una diagonal negativa (revisión de E2.3, B1):
-    el bloque se anula exacto. p0_c de ese plano: cortantes de biapoyada = los de p0 (wL/2)
-    y momentos nulos.
+    el bloque se anula exacto. p0_c de ese plano: momentos nulos y cortantes de biapoyada.
+    Sin ``length`` (``-beamUniform``, carga simétrica), los cortantes son los de p0 (wL/2):
+    camino de T-018, sin cambio. Con ``length`` (cargas de T-015, ADR-005), la forma cerrada
+    de la condensación exacta: V_I − s·(M_I + M_J)/L y V_J + s·(M_I + M_J)/L, con s = +1 en
+    (uy, rz) y −1 en (uz, ry); si M_I + M_J == 0, sin corrección.
     """
     released = released_indices(beam)
     if not released:
         return k, None if p0 is None else list(p0)
     work, loads = condense(k, released, p0)
-    for code, block, shears in (
-        (beam.release_z, BENDING_Z_BLOCK, (1, 7)),
-        (beam.release_y, BENDING_Y_BLOCK, (2, 8)),
+    for code, block, shears, sign in (
+        (beam.release_z, BENDING_Z_BLOCK, (1, 7), 1.0),
+        (beam.release_y, BENDING_Y_BLOCK, (2, 8), -1.0),
     ):
         if code != BOTH_ENDS:
             continue
@@ -216,6 +224,11 @@ def condense_beam(
         if loads is not None and p0 is not None:
             for i in block:
                 loads[i] = p0[i] if i in shears else 0.0
+            moments = [i for i in block if i not in shears]
+            total = p0[moments[0]] + p0[moments[1]]
+            if length is not None and total != 0.0:
+                loads[shears[0]] = p0[shears[0]] - sign * total / length
+                loads[shears[1]] = p0[shears[1]] + sign * total / length
     return work, loads
 
 
@@ -254,16 +267,10 @@ def beam_fixed_end_forces(beam: SpatialBeam, load: SpatialBeamLoad, length: floa
 def fixed_end_forces(load: SpatialBeamLoad, length: float) -> list[float]:
     """p0 local 12: fuerzas de extremo con u = 0 por ``-beamUniform`` (Wy, Wz, Wx) (hecho 9).
 
-    localForce = k·T·u + p0; la carga nodal equivalente global es Tᵀ·(−p0).
+    localForce = k·T·u + p0; la carga nodal equivalente global es Tᵀ·(−p0). Delega en
+    ``member_loads`` (fuente única de p0, ADR-005) con las mismas operaciones (bit a bit).
     """
-    ell = length
-    p0 = [0.0] * 12
-    p0[0] = p0[6] = -load.wx * ell / 2
-    p0[1] = p0[7] = -load.wy * ell / 2
-    p0[2] = p0[8] = -load.wz * ell / 2
-    p0[5], p0[11] = -load.wy * ell**2 / 12, load.wy * ell**2 / 12
-    p0[4], p0[10] = load.wz * ell**2 / 12, -load.wz * ell**2 / 12
-    return p0
+    return uniform_fixed_end_forces(load.wx, load.wy, load.wz, length)
 
 
 def _beam_dofs(request: SpatialRequest, index: dict[int, int], beam: SpatialBeam) -> list[int]:
