@@ -24,7 +24,7 @@ path = sys.argv[1]
 
 def respond(status="OK", code=0, nodes=None, aux=None, beams=None):
     data = {
-        "protocol": "veritas.opensees.planar", "version": 3, "status": status,
+        "protocol": "veritas.opensees.planar", "version": 4, "status": status,
         "analyze_code": code, "message": "simulado",
         "versions": {"python": "x", "openseespy": "y", "openseespywin": None},
         "nodes": nodes if nodes is not None else [
@@ -140,8 +140,8 @@ def test_balanced_response_succeeds_with_provenance(tmp_path: Path) -> None:
     assert first.model_revision == frame.model.model_revision
     assert first.case_id == frame.case_id
     assert first.configuration["timeout_s"] == 60.0
-    assert first.versions["adapter"] == "veritas.fem.planar_xz/4"  # T-017, D6; T-016, D6
-    assert first.versions["protocol"] == "3"
+    assert first.versions["adapter"] == "veritas.fem.planar_xz/5"  # T-017, D6; T-016, D6; T-015
+    assert first.versions["protocol"] == "4"
     assert first.pivot is not None
     assert first.pivot.free_dofs == 3
     reactions = {n.reaction for n in first.raw.nodes}

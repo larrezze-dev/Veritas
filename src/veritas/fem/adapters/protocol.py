@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 PROTOCOL_ID: Final = "veritas.opensees.planar"
-PROTOCOL_VERSION: Final = 3  # 2: extremos de barra liberados/resorte (T-010); 3: asientos (T-016)
+PROTOCOL_VERSION: Final = 4  # 2: extremos (T-010); 3: asientos (T-016); 4: cargas de barra (T-015)
 
 type Pair = tuple[float, float]
 type Triple = tuple[float, float, float]
@@ -178,6 +178,22 @@ class PlanarBeamLoad:
 
 
 @dataclass(frozen=True, slots=True)
+class PlanarMemberEndLoad:
+    """Carga nodal equivalente −Tᵀ·p0 de las cargas de barra de Veritas (T-015, D6-D7).
+
+    En la base del solver, en el nudo del elemento ``node`` (el aux si el extremo no es
+    rígido) de la barra ``beam``. Va separada de ``nodal_loads`` para que los controles sepan
+    qué carga procede de una barra; el worker la aplica con ``ops.load`` sin calcular nada.
+    """
+
+    beam: int
+    node: int
+    p1: float
+    p2: float
+    m: float
+
+
+@dataclass(frozen=True, slots=True)
 class PlanarSettlement:
     """Asiento impuesto (T-016) en la base del solver: ``dof`` 1 = u₁, 2 = u₂, 3 = θ.
 
@@ -206,12 +222,14 @@ class PlanarRequest:
     end_links: tuple[PlanarEndLink, ...] = ()
     orphan_fixes: tuple[int, ...] = ()
     settlements: tuple[PlanarSettlement, ...] = ()
+    member_end_loads: tuple[PlanarMemberEndLoad, ...] = ()
 
     def __post_init__(self) -> None:
         # M1 de E2.4 (T-016): como `_unique` del espacial; `_check_settlements` indexa por nudo.
         if len({fix.node for fix in self.fixes}) != len(self.fixes):
             raise ProtocolError("fixes: nudo repetido")
         _check_settlements(self)
+        _check_member_end_loads(self)
 
     def element_node(self, beam: PlanarBeam, end: str) -> int:
         """Nudo al que se conecta el elemento en ese extremo: aux si hay enlace, si no el nudo."""
@@ -265,6 +283,7 @@ class PlanarRequest:
             ],
             "orphan_fixes": list(self.orphan_fixes),
             "settlements": [[t.node, t.dof, t.value] for t in self.settlements],
+            "member_end_loads": [[e.beam, e.node, e.p1, e.p2, e.m] for e in self.member_end_loads],
         }
 
     def to_json(self) -> str:
@@ -339,6 +358,13 @@ class PlanarRequest:
             PlanarSettlement(_int(t[0], "node"), _int(t[1], "dof"), _finite(t[2], "value"))
             for t in (_list(item, "settlement", 3) for item in _list(data["settlements"], "st"))
         )
+        end_loads = tuple(
+            PlanarMemberEndLoad(_int(e[0], "beam"), _int(e[1], "node"), *_floats(e[2:], "load", 3))
+            for e in (
+                _list(item, "end_load", 5)
+                for item in _list(data["member_end_loads"], "member_end_loads")
+            )
+        )
         return cls(
             _int(data["model_revision"], "model_revision"),
             _str(data["case_id"], "case_id"),
@@ -352,6 +378,7 @@ class PlanarRequest:
             links,
             orphans,
             settlements,
+            end_loads,
         )
 
 
@@ -378,6 +405,23 @@ def _check_settlements(request: PlanarRequest) -> None:
             raise NonFiniteValueError("asiento: valor no finito")
 
 
+def _check_member_end_loads(request: PlanarRequest) -> None:
+    """D7 (T-015): cada carga va al nudo del elemento de un extremo de su barra, sin repetir."""
+    beams = {beam.tag: beam for beam in request.beams}
+    seen: set[tuple[int, int]] = set()
+    for load in request.member_end_loads:
+        beam = beams.get(load.beam)
+        if beam is None:
+            raise ProtocolError(f"carga de extremo: barra desconocida {load.beam}")
+        if load.node not in (request.element_node(beam, "I"), request.element_node(beam, "J")):
+            raise ProtocolError(f"carga de extremo: el nudo {load.node} no es de la barra")
+        if (load.beam, load.node) in seen:
+            raise ProtocolError(f"carga de extremo repetida en la barra {load.beam}")
+        seen.add((load.beam, load.node))
+        if not all(math.isfinite(v) for v in (load.p1, load.p2, load.m)):
+            raise NonFiniteValueError("carga de extremo: valor no finito")
+
+
 def _bool(value: object, field: str) -> bool:
     if not isinstance(value, bool):
         raise ProtocolError(f"{field}: se esperaba booleano")
@@ -400,6 +444,7 @@ _REQUEST_KEYS: Final = frozenset(
         "end_links",
         "orphan_fixes",
         "settlements",
+        "member_end_loads",
     }
 )
 _RESPONSE_KEYS: Final = frozenset(

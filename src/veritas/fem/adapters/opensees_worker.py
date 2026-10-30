@@ -17,7 +17,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 PROTOCOL_ID = "veritas.opensees.planar"
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 
 
 def _version(package: str) -> str | None:
@@ -108,6 +108,9 @@ def _build(ops: Any, request: dict[str, Any]) -> None:
     ops.timeSeries("Linear", 1)
     ops.pattern("Plain", 1, 1)
     for node, p1, p2, moment in request["nodal_loads"]:
+        ops.load(node, p1, p2, moment)
+    # Cargas de barra de Veritas (T-015, D6): −Tᵀ·p0 ya calculado por el padre.
+    for _beam, node, p1, p2, moment in request["member_end_loads"]:
         ops.load(node, p1, p2, moment)
     for beam, wy, wx in request["beam_loads"]:
         ops.eleLoad("-ele", beam, "-type", "-beamUniform", wy, wx)

@@ -7,7 +7,10 @@ Se evalúan en el proceso padre sobre la respuesta del worker, en la base del so
   barras), momento nulo en un extremo liberado, relación del resorte de extremo
   M = k·(θ maestro − θ aux) y giro libre del aux sin reacción.
 - D2: residuo Tᵀ(K·u − F) por coordenada reducida, con las cargas equivalentes de
-  ``beamUniform`` (traslaciones al maestro, momento al θ del aux en un extremo no rígido).
+  ``beamUniform`` y ``member_end_loads`` (traslaciones al maestro, momento al θ del aux en
+  un extremo no rígido).
+- Cargas de barra de Veritas (T-015): su p0 no pasa por el elemento, así que el control 2
+  no cambia y los controles de extremo usan el momento publicado localForce + p0.
 - Asiento (T-016, D7): el desplazamiento en cada GDL asentado es el prescrito. Va primero,
   porque los demás controles usan ese u; sin asientos no hace nada.
 
@@ -109,6 +112,29 @@ def global_equivalent_loads(request: PlanarRequest) -> dict[int, list[float]]:
     return result
 
 
+def member_fixed_end_forces(request: PlanarRequest) -> dict[int, list[float]]:
+    """p0 local (N, V, M de I y J) de las cargas de barra de Veritas, por barra (T-015).
+
+    Se recupera de ``member_end_loads`` como p0 = −T·[g_I; g_J]: es la única fuente de p0 en
+    el padre, la misma para los controles y para la normalización. Solo aparecen las barras
+    con entradas (sin sumar ceros a las demás: conserva el signo de −0,0).
+    """
+    coords = {node.tag: (node.x1, node.x2) for node in request.nodes}
+    beams = {beam.tag: beam for beam in request.beams}
+    loads: dict[int, list[float]] = {}
+    for load in request.member_end_loads:
+        beam = beams[load.beam]
+        offset = 0 if load.node == request.element_node(beam, "I") else 3
+        current = loads.setdefault(load.beam, [0.0] * 6)
+        current[offset : offset + 3] = [load.p1, load.p2, load.m]
+    result: dict[int, list[float]] = {}
+    for tag, values in loads.items():
+        beam = beams[tag]
+        _, rotation = beam_rotation(coords[beam.node_i], coords[beam.node_j])
+        result[tag] = [-sum(r * v for r, v in zip(row, values, strict=True)) for row in rotation]
+    return result
+
+
 def _matvec(matrix: Matrix, vector: Sequence[float]) -> list[float]:
     return [sum(m * v for m, v in zip(row, vector, strict=True)) for row in matrix]
 
@@ -160,11 +186,13 @@ def _end_failure(link: PlanarEndLink, control: str, value: float, bound: float) 
 
 @dataclass(frozen=True, slots=True)
 class _BeamState:
-    """localForce de la barra, filas esperadas y cota del control 2 por fila."""
+    """localForce de la barra, filas esperadas, cota del control 2 por fila y p0 de las
+    cargas de barra de Veritas (T-015; vacío si la barra no tiene)."""
 
     local_force: Sequence[float]
     rows: _BeamRows
     bounds: list[float]
+    fixed_end: Sequence[float] = ()
 
 
 def _alias_failure(link: PlanarEndLink, displacement: Displacements) -> CheckFailure | None:
@@ -212,18 +240,29 @@ def _link_failure(
     aux_reaction: Mapping[int, Sequence[float]],
     tol_equilibrium: float,
 ) -> CheckFailure | None:
-    """Controles 3 y 4 sobre un extremo no rígido; con liberación, M = 0 dentro de la cota."""
+    """Controles 3 y 4 sobre un extremo no rígido; con liberación, M = 0 dentro de la cota.
+
+    Usan el momento publicado localForce + p0 (T-015, hecho 8): la carga equivalente de una
+    carga de barra de Veritas llega al θ del aux como carga nodal, no por el elemento.
+    """
     index = END_MOMENT_INDEX[link.end]
-    moment = beam.local_force[index]
+    moment, extra = beam.local_force[index], 0.0
+    if beam.fixed_end:
+        moment += beam.fixed_end[index]
+        extra = _ROUNDING * abs(beam.fixed_end[index])
     if link.stiffness is None:
-        bound = beam.bounds[index]
+        bound = beam.bounds[index] + extra
         if _exceeds(abs(moment), bound):
             return _end_failure(link, CONTROL_RELEASED, abs(moment), bound)
     else:
         theta_master, theta_aux = displacement[link.master][2], displacement[link.aux][2]
         residual = abs(moment - link.stiffness * (theta_master - theta_aux))
         spring_scale = 2.0 * abs(link.stiffness) * (abs(theta_master) + abs(theta_aux))
-        bound = tol_equilibrium * abs(moment) + _ROUNDING * (beam.rows.scale[index] + spring_scale)
+        bound = (
+            tol_equilibrium * abs(moment)
+            + _ROUNDING * (beam.rows.scale[index] + spring_scale)
+            + extra
+        )
         if _exceeds(residual, bound):
             return _end_failure(link, CONTROL_SPRING, residual, bound)
     reaction = abs(aux_reaction[link.aux][2])
@@ -269,6 +308,7 @@ def member_checks(
     aux_reaction = {tag: reaction for tag, _disp, reaction in response.end_aux}
     forces = dict(response.beam_forces)
     equivalent = local_equivalent_loads(request)
+    fixed_end = member_fixed_end_forces(request)
     for beam in request.beams:
         links = sorted(
             (link for link in request.end_links if link.beam == beam.tag),
@@ -285,7 +325,7 @@ def member_checks(
         failure = _forces_failure(beam, links, local_force, rows, bounds)
         if failure is not None:
             return failure
-        state = _BeamState(local_force, rows, bounds)
+        state = _BeamState(local_force, rows, bounds, fixed_end.get(beam.tag, ()))
         for link in links:
             failure = _link_failure(link, state, displacement, aux_reaction, config.tol_equilibrium)
             if failure is not None:
@@ -294,18 +334,26 @@ def member_checks(
 
 
 def load_vector(request: PlanarRequest) -> list[float]:
-    """F completo en los GDL de ``full_stiffness``: cargas nodales y Tᵀ·F_eq de barra.
+    """F completo en los GDL de ``full_stiffness``: cargas nodales, ``member_end_loads``
+    (T-015) y Tᵀ·F_eq de barra.
 
     En un extremo no rígido las traslaciones van al maestro y el momento al θ del aux.
     """
     index = {node.tag: position for position, node in enumerate(request.nodes)}
     aux_theta = aux_rotation_index(request)
+    master = {link.aux: link.master for link in request.end_links}
     load = [0.0] * (3 * len(request.nodes) + len(aux_theta))
     for nodal in request.nodal_loads:
         base = 3 * index[nodal.node]
         load[base] += nodal.p1
         load[base + 1] += nodal.p2
         load[base + 2] += nodal.m
+    for end_load in request.member_end_loads:
+        base = 3 * index[master.get(end_load.node, end_load.node)]
+        theta = aux_theta[end_load.node] if end_load.node in aux_theta else base + 2
+        load[base] += end_load.p1
+        load[base + 1] += end_load.p2
+        load[theta] += end_load.m
     beams = {beam.tag: beam for beam in request.beams}
     for tag, values in global_equivalent_loads(request).items():
         beam = beams[tag]

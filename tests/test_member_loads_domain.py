@@ -513,12 +513,11 @@ def loaded_frame(kind: str) -> Frame:
 
 
 @pytest.mark.parametrize("kind", ["point", "distributed", "moment"])
-def test_planar_translator_rejects_new_member_loads(kind: str) -> None:
+def test_planar_translator_accepts_new_member_loads(kind: str) -> None:
+    """Desde E2.1 el plano las traduce a ``member_end_loads`` (ver test_fem_member_loads)."""
     frame = loaded_frame(kind)
-    with pytest.raises(InputValueError) as info:
-        translate_planar_xz(frame.model, frame.config())
-    assert info.value.code is D.UNSUPPORTED_CONFIGURATION
-    assert info.value.diagnostic.message_key == "fem.load_type_unsupported"
+    request = translate_planar_xz(frame.model, frame.config()).request
+    assert len(request.member_end_loads) == 2
 
 
 @pytest.mark.parametrize("kind", ["point", "distributed", "moment"])

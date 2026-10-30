@@ -401,6 +401,11 @@ def equilibrium_residual(
     forces: list[tuple[float, float, float, float, float]] = []  # x1, x2, F1, F2, M
     for load in request.nodal_loads:
         forces.append((*coords[load.node], load.p1, load.p2, load.m))
+    # Cargas equivalentes de barra (T-015): el aux está en las coordenadas de su maestro.
+    master = {link.aux: link.master for link in request.end_links}
+    for end_load in request.member_end_loads:
+        point = coords[master.get(end_load.node, end_load.node)]
+        forces.append((*point, end_load.p1, end_load.p2, end_load.m))
     beams = {beam.tag: beam for beam in request.beams}
     for beam_load in request.beam_loads:
         beam = beams[beam_load.beam]

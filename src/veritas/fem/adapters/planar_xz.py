@@ -6,7 +6,8 @@ T-005 R5/M6 y T-006); nunca lo ignora en silencio.
 
 Mapeo (gate G1-G4 del plan): x₁ = X, x₂ = Z, θ = −Ry; carga nodal (Fx, Fz, −My); asiento
 (Ux, Uz, −Ry) en apoyos de base global (T-016); carga
-de barra ``-beamUniform`` (Wy, Wx) en la base 2D del elemento, con ŷ = x̂ girado +90°.
+de barra ``-beamUniform`` (Wy, Wx) en la base 2D del elemento, con ŷ = x̂ girado +90°; cargas
+de barra de Veritas (T-015) como carga nodal equivalente −Tᵀ·p0 en ``member_end_loads``.
 Tags (D6): por orden del texto UUID canónico, independiente del orden de inserción.
 """
 
@@ -29,6 +30,9 @@ from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
 from veritas.core.loads.loads import (
     LoadBasis,
+    MemberDistributedLoad,
+    MemberDistributedMoment,
+    MemberPointLoad,
     MemberUniformLoad,
     NodalLoad,
     SelfWeight,
@@ -43,14 +47,23 @@ from veritas.fem.adapters.protocol import (
     PlanarBeamLoad,
     PlanarEndLink,
     PlanarFix,
+    PlanarMemberEndLoad,
     PlanarNodalLoad,
     PlanarNode,
     PlanarRequest,
     PlanarSettlement,
     PlanarSpring,
 )
-from veritas.fem.adapters.singularity import translational_diagonal
+from veritas.fem.adapters.singularity import beam_rotation, translational_diagonal
 from veritas.fem.config import AnalysisConfiguration
+from veritas.fem.member_loads import (
+    distributed_fixed_end_forces,
+    distributed_moment_fixed_end_forces,
+    planar_view,
+    point_fixed_end_forces,
+)
+
+type _MemberLoad = MemberPointLoad | MemberDistributedLoad | MemberDistributedMoment
 
 SUPPORTED_FAMILIES: Final = frozenset({MaterialFamily.STEEL, MaterialFamily.ALUMINIUM})
 OUT_OF_PLANE_DOFS: Final = (SupportDof.UY, SupportDof.RX, SupportDof.RZ)
@@ -118,6 +131,8 @@ class _Builder:
         self.uses_penalty = False
         self.pending_links: list[_PendingLink] = []
         self.link_warnings: list[Diagnostic] = []
+        # p0 plano (N, Vy, Mz de I y J) de las cargas de barra de Veritas por barra (T-015).
+        self.fixed_end: dict[int, list[float]] = {}
 
     def nodes(self) -> list[PlanarNode]:
         if not self.model.members:
@@ -401,6 +416,10 @@ class _Builder:
                     beam.append(self._beam_load(member_id, Vec3(0.0, 0.0, q_z)))
             elif isinstance(load, SupportSettlement):
                 settlements.extend(self._settlement(load, location))
+            elif isinstance(
+                load, MemberPointLoad | MemberDistributedLoad | MemberDistributedMoment
+            ):
+                self._fixed_end(load, location)
             else:  # Nunca se descarta en silencio.
                 raise _unsupported(
                     "fem.load_type_unsupported", {"type": type(load).__name__}, location
@@ -432,6 +451,85 @@ class _Builder:
             for dof, value in enumerate(values, start=1)
             if value != 0.0
         ]
+
+    def _in_plane(self, load: _MemberLoad, vector: Vec3) -> tuple[Vec3, float]:
+        """Vector global de la carga y su límite fuera del plano (D9 de T-015).
+
+        Base GLOBAL: límite 0; LOCAL: ``tol_member_load_y``·‖v‖, como ``_member_q``.
+        """
+        if load.basis is LoadBasis.GLOBAL:
+            return vector, 0.0
+        v = self.model.axes(load.member_id).to_global(vector)
+        return v, self.config.tol_member_load_y * v.norm()
+
+    def _fixed_end(self, load: _MemberLoad, location: Location) -> None:
+        """p0 plano de una carga de barra de Veritas (T-015, D6-A y D9-A), sumado por barra.
+
+        Base 2D del elemento (la de ``_beam_load`` y ``planar_view``): fuerza (wx, wy) y par o
+        momento «z» = −My, porque θ = −Ry.
+        """
+        member = self.model.member(load.member_id)
+        tag = self.beam_tags[load.member_id]
+        xi = self.coordinates[self.node_tags[member.node_i]]
+        xj = self.coordinates[self.node_tags[member.node_j]]
+        length = math.hypot(xj[0] - xi[0], xj[1] - xi[1])
+        ux, uz = (xj[0] - xi[0]) / length, (xj[1] - xi[1]) / length
+
+        def force(q: Vec3) -> tuple[float, float, float]:
+            v, bound = self._in_plane(load, q)
+            if abs(v.y) > bound:
+                raise _unsupported(
+                    "fem.member_load_out_of_plane", {"qy": v.y, "limit": bound}, location
+                )
+            return (v.x * ux + v.z * uz, v.x * -uz + v.z * ux, 0.0)
+
+        def moment(m: Vec3, key: str) -> tuple[float, float, float]:
+            v, bound = self._in_plane(load, m)
+            if abs(v.x) > bound or abs(v.z) > bound:
+                raise _unsupported(key, {"mx": v.x, "mz": v.z, "limit": bound}, location)
+            return (0.0, 0.0, -v.y)
+
+        if isinstance(load, MemberPointLoad):
+            f, f_bound = self._in_plane(load, load.force)
+            m, m_bound = self._in_plane(load, load.moment)
+            if abs(f.y) > f_bound or abs(m.x) > m_bound or abs(m.z) > m_bound:
+                raise _unsupported(
+                    "fem.member_point_load_out_of_plane",
+                    {
+                        "fy": f.y,
+                        "mx": m.x,
+                        "mz": m.z,
+                        "force_limit": f_bound,
+                        "moment_limit": m_bound,
+                    },
+                    location,
+                )
+            p0 = point_fixed_end_forces(
+                load.position,
+                (f.x * ux + f.z * uz, f.x * -uz + f.z * ux, 0.0),
+                (0.0, 0.0, -m.y),
+                length,
+            )
+        elif isinstance(load, MemberDistributedLoad):
+            p0 = distributed_fixed_end_forces(
+                load.start,
+                load.end,
+                force(load.intensity_start),
+                force(load.intensity_end),
+                length,
+            )
+        else:
+            key = "fem.member_moment_out_of_plane"
+            p0 = distributed_moment_fixed_end_forces(
+                load.start,
+                load.end,
+                moment(load.intensity_start, key),
+                moment(load.intensity_end, key),
+                length,
+            )
+        current = self.fixed_end.setdefault(tag, [0.0] * 6)
+        for k, value in enumerate(planar_view(p0)):
+            current[k] += value
 
     def _member_q(self, load: MemberUniformLoad, location: Location) -> Vec3:
         if load.basis is LoadBasis.GLOBAL:
@@ -465,8 +563,31 @@ def _orphans(request: PlanarRequest) -> tuple[list[int], list[int]]:
             if link is None or link.stiffness is not None:
                 stiffened.add(node)
     loaded = {load.node for load in request.nodal_loads if load.m != 0.0}
+    # Regla de lectura de D7 (T-015). No cambia nada: un extremo liberado carga su aux y un
+    # maestro con extremo rígido nunca es huérfano.
+    loaded |= {load.node for load in request.member_end_loads if load.m != 0.0}
     orphans = sorted(incident - stiffened)
     return [t for t in orphans if t not in loaded], [t for t in orphans if t in loaded]
+
+
+def _member_end_loads(
+    request: PlanarRequest, fixed_end: Mapping[int, list[float]]
+) -> tuple[PlanarMemberEndLoad, ...]:
+    """−Tᵀ·p0 por barra (T-015, D6-A), en el nudo del elemento de cada extremo (D7, hecho 7).
+
+    Sin condensación (D9-A): el aux de un extremo no rígido recibe la carga del extremo.
+    """
+    coords = {node.tag: (node.x1, node.x2) for node in request.nodes}
+    beams = {beam.tag: beam for beam in request.beams}
+    result: list[PlanarMemberEndLoad] = []
+    for tag in sorted(fixed_end):
+        beam, p0 = beams[tag], fixed_end[tag]
+        _, rotation = beam_rotation(coords[beam.node_i], coords[beam.node_j])
+        load = [-sum(rotation[m][i] * p0[m] for m in range(6)) for i in range(6)]
+        for offset, end in enumerate(("I", "J")):
+            node = request.element_node(beam, end)
+            result.append(PlanarMemberEndLoad(tag, node, *load[3 * offset : 3 * offset + 3]))
+    return tuple(result)
 
 
 def _global_index(axis: Pair) -> int | None:
@@ -524,6 +645,8 @@ def translate_planar_xz(model: StructuralModel, config: AnalysisConfiguration) -
         tuple(links),
         settlements=tuple(settlements),
     )
+    if builder.fixed_end:
+        request = replace(request, member_end_loads=_member_end_loads(request, builder.fixed_end))
     node_ids = {tag: node_id for node_id, tag in builder.node_tags.items()}
     restrained, loaded = _orphans(request)
     request = replace(request, orphan_fixes=tuple(restrained))

@@ -6,7 +6,8 @@ seis componentes con ejes y signos de ADR-001:
 1. Elevación a 3D global: (a₁, a₂) → (a₁, 0, a₂) y m → (0, −m, 0), porque x₁ × x₂ = −Y.
 2. ``localForce`` = (N_I, V_I, M_I, N_J, V_J, M_J): acciones del nudo sobre el elemento en
    la base 2D (x̂ de I a J, ŷ = x̂ girado +90°), con las fuerzas de empotramiento de
-   ``-beamUniform`` (gates G-N1…G-N3). Se elevan y se rotan con la Q de la barra.
+   ``-beamUniform`` (gates G-N1…G-N3), más el p0 de las cargas de barra de Veritas (T-015,
+   D10-A). Se elevan y se rotan con la Q de la barra.
 3. Reacción de apoyo = ``nodeReaction`` en los GDL con ``fix`` (con la de los aux de
    extremo de barra en traslación, T-010) + reacciones de sus nudos auxiliares de resorte;
    en base inclinada, además Q_apoyo·R.
@@ -39,16 +40,23 @@ from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
 from veritas.core.loads.loads import (
     LoadBasis,
+    MemberDistributedLoad,
+    MemberDistributedMoment,
+    MemberPointLoad,
     MemberUniformLoad,
     NodalLoad,
     SelfWeight,
     SupportSettlement,
+    linear_contribution,
+    linear_moment_contribution,
+    point_contribution,
 )
 from veritas.core.supports.support import BasisKind, RestraintKind, Support, SupportDof
 from veritas.fem.adapters.planar_xz import translate_planar_xz
 from veritas.fem.adapters.protocol import PlanarRequest
 from veritas.fem.adapters.singularity import beam_stiffness, element_displacement
 from veritas.fem.config import AnalysisConfiguration
+from veritas.fem.postconditions import member_fixed_end_forces
 from veritas.fem.results.run import AnalysisRun, RunStatus
 
 HYPOTHESIS_NORMALIZED: Final = "fem.hypothesis_normalized"
@@ -157,10 +165,11 @@ class MemberEndForces:
     """Fuerzas de extremo pI/pJ (acción del nudo sobre la barra) en base local.
 
     ``section_start`` = q(0+) = −pI y ``section_end`` = q(L−) = pJ, en el orden
-    (N, Vy, Vz, T, My, Mz); válidos porque no hay cargas puntuales ni offsets (se
-    rechazan). Con extremos liberados o con resorte (T-010) siguen siendo las acciones del
-    extremo de la barra; en un giro liberado el momento es nulo salvo redondeo. ``axes`` son
-    las filas de la Q usada (D8, trazabilidad).
+    (N, Vy, Vz, T, My, Mz); válidos porque no hay offsets ni cargas puntuales en los
+    extremos (T-015, D2-A). Con cargas de barra de Veritas, pI/pJ = localForce + p0 (D10-A).
+    Con extremos liberados o con resorte (T-010) siguen siendo las acciones del extremo de
+    la barra; en un giro liberado el momento es nulo salvo redondeo. ``axes`` son las filas
+    de la Q usada (D8, trazabilidad).
     """
 
     member_id: UUID
@@ -319,6 +328,8 @@ class _Normalizer:
         self.beams = {UUID(b.entity_id): b for b in request.beams}
         self.displacement = {n.node_id: n.displacement for n in self.raw.nodes}
         self.ends: dict[UUID, tuple[_End, _End]] = {}
+        # p0 de las cargas de barra de Veritas (T-015), de la petición (fuente única).
+        self.fixed_end = member_fixed_end_forces(request)
         self.reaction_force: dict[UUID, tuple[Vec3, Vec3]] = {}  # por nudo
 
     # Desplazamientos (D3-A: fuera del plano NOT_CALCULATED).
@@ -414,7 +425,11 @@ class _Normalizer:
             length = math.hypot(xj - xi, zj - zi)
             c, s = (xj - xi) / length, (zj - zi) / length
             x_hat, y_hat = Vec3(c, 0.0, s), Vec3(-s, 0.0, c)
-            n_i, v_i, m_i, n_j, v_j, m_j = raw.local_force
+            local_force: tuple[float, ...] = raw.local_force
+            p0 = self.fixed_end.get(beam.tag)
+            if p0 is not None:  # D10-A: publicado = localForce + p0; sin p0, intacto (−0,0).
+                local_force = tuple(f + v for f, v in zip(local_force, p0, strict=True))
+            n_i, v_i, m_i, n_j, v_j, m_j = local_force
             end_i = _End(x_hat.scaled(n_i) + y_hat.scaled(v_i), _elevate_moment(m_i))
             end_j = _End(x_hat.scaled(n_j) + y_hat.scaled(v_j), _elevate_moment(m_j))
             self.ends[raw.member_id] = (end_i, end_j)
@@ -439,7 +454,7 @@ class _Normalizer:
     # Postcondición de equilibrio (D7), con los vectores globales elevados (M1).
     def check_equilibrium(self) -> None:
         tol = self.config.tol_equilibrium
-        nodal, distributed = self._domain_loads()
+        nodal, distributed, resultants = self._domain_loads()
         bounds = self._rounding_bounds()
         for node_id, tag in self.tag_of.items():
             f_sum, m_sum = Vec3(0.0, 0.0, 0.0), Vec3(0.0, 0.0, 0.0)
@@ -467,16 +482,19 @@ class _Normalizer:
                 (m_sum.norm(), tol * m_scale + m_extra),
             )
         for member_id, beam in self.beams.items():
-            self._member_equilibrium(member_id, beam.node_i, beam.node_j, distributed, bounds)
-        self._global_equilibrium(nodal, distributed, bounds)
+            self._member_equilibrium(
+                member_id, beam.node_i, beam.node_j, (distributed, resultants), bounds
+            )
+        self._global_equilibrium(nodal, (distributed, resultants), bounds)
 
     def _global_equilibrium(
         self,
         nodal: dict[UUID, list[tuple[Vec3, Vec3]]],
-        distributed: dict[UUID, Vec3],
+        member_loads: tuple[dict[UUID, Vec3], dict[UUID, tuple[Vec3, Vec3]]],
         bounds: dict[int, tuple[float, float]],
     ) -> None:
         """ΣP + ΣR + Σq·L = 0, momentos respecto al centroide de los nudos (como en T-007)."""
+        distributed, resultants = member_loads
         points = {self.tag_of[k]: Vec3(x, 0.0, z) for k, (x, z) in self._node_xz().items()}
         centre = Vec3(0.0, 0.0, 0.0)
         for point in points.values():
@@ -492,6 +510,8 @@ class _Normalizer:
                 i, j = points[beam.node_i], points[beam.node_j]
                 load = Vec3(q.x, 0.0, q.z).scaled((j - i).norm())
                 actions.append(((i + j).scaled(0.5), load, Vec3(0.0, 0.0, 0.0)))
+            if member_id in resultants:  # T-015: resultante (F, M respecto a I).
+                actions.append((points[beam.node_i], *resultants[member_id]))
         force = moment = Vec3(0.0, 0.0, 0.0)
         f_scale = m_scale = 0.0
         for point, f, m in actions:
@@ -517,10 +537,11 @@ class _Normalizer:
         member_id: UUID,
         tag_i: int,
         tag_j: int,
-        distributed: dict[UUID, Vec3],
+        member_loads: tuple[dict[UUID, Vec3], dict[UUID, tuple[Vec3, Vec3]]],
         bounds: dict[int, tuple[float, float]],
     ) -> None:
         tol = self.config.tol_equilibrium
+        distributed, resultants = member_loads
         end_i, end_j = self.ends[member_id]
         (xi, zi), (xj, zj) = self.coords[tag_i], self.coords[tag_j]
         arm = Vec3(xj - xi, 0.0, zj - zi)
@@ -531,6 +552,11 @@ class _Normalizer:
         moment = end_i.moment + end_j.moment + arm.cross(end_j.force) + arm.scaled(0.5).cross(load)
         f_scale = end_i.force.norm() + end_j.force.norm() + load.norm()
         m_scale = end_i.moment.norm() + end_j.moment.norm() + length * f_scale
+        if member_id in resultants:  # T-015, D10-A: resultante respecto a I.
+            r_force, r_moment = resultants[member_id]
+            force, moment = force + r_force, moment + r_moment
+            f_scale += r_force.norm()
+            m_scale += r_moment.norm() + length * r_force.norm()
         fi, mi = bounds.get(tag_i, (0.0, 0.0))
         fj, mj = bounds.get(tag_j, (0.0, 0.0))
         self._require(
@@ -551,10 +577,20 @@ class _Normalizer:
                 Location(entity_id=entity),
             )
 
-    def _domain_loads(self) -> tuple[dict[UUID, list[tuple[Vec3, Vec3]]], dict[UUID, Vec3]]:
-        """Cargas del caso tomadas del dominio, no de la petición (M2)."""
+    def _domain_loads(
+        self,
+    ) -> tuple[
+        dict[UUID, list[tuple[Vec3, Vec3]]], dict[UUID, Vec3], dict[UUID, tuple[Vec3, Vec3]]
+    ]:
+        """Cargas del caso tomadas del dominio, no de la petición (M2).
+
+        Devuelve las nodales, la q uniforme por barra y, para las cargas de barra de Veritas
+        (T-015, D10-A), la resultante por barra (F, M respecto al extremo I) en el plano, en
+        forma cerrada del núcleo y no con ``member_loads``: es el control independiente de p0.
+        """
         nodal: dict[UUID, list[tuple[Vec3, Vec3]]] = {}
         distributed: dict[UUID, Vec3] = {}
+        resultants: dict[UUID, tuple[Vec3, Vec3]] = {}
         for load in self.model.loads_in_case(self.request_case()):
             if isinstance(load, NodalLoad):
                 nodal.setdefault(load.node_id, []).append((load.force, load.moment))
@@ -570,9 +606,45 @@ class _Normalizer:
                     distributed[member_id] = total
             elif isinstance(load, SupportSettlement):
                 continue  # T-016, D7: acción sin fuerza prescrita; no aporta q ni P.
+            elif isinstance(
+                load, MemberPointLoad | MemberDistributedLoad | MemberDistributedMoment
+            ):
+                force, moment = self._member_resultant(load)
+                previous = resultants.get(load.member_id)
+                if previous is not None:
+                    force, moment = previous[0] + force, previous[1] + moment
+                resultants[load.member_id] = (force, moment)
             else:  # pragma: no cover (O1: otro tipo de carga invalida q(0+) = −pI)
                 raise _postcondition("fem.results_unsupported_load", {"load": str(load.id)})
-        return nodal, distributed
+        return nodal, distributed, resultants
+
+    def _member_resultant(
+        self, load: MemberPointLoad | MemberDistributedLoad | MemberDistributedMoment
+    ) -> tuple[Vec3, Vec3]:
+        """(F, M respecto a I) en el plano: F en X, Z y M en Y (lo residual no se transmite)."""
+        beam = self.beams[load.member_id]
+        (xi, zi), (xj, zj) = self.coords[beam.node_i], self.coords[beam.node_j]
+        arm = Vec3(xj - xi, 0.0, zj - zi)
+
+        def to_global(vector: Vec3) -> Vec3:
+            if load.basis is LoadBasis.LOCAL:
+                return self.model.axes(load.member_id).to_global(vector)
+            return vector
+
+        if isinstance(load, MemberPointLoad):
+            force, moment = point_contribution(
+                arm.scaled(load.position), to_global(load.force), to_global(load.moment)
+            )
+        else:
+            r_a, r_b = arm.scaled(load.start), arm.scaled(load.end)
+            a, b = to_global(load.intensity_start), to_global(load.intensity_end)
+            contribution = (
+                linear_contribution
+                if isinstance(load, MemberDistributedLoad)
+                else linear_moment_contribution
+            )
+            force, moment = contribution(r_a, r_b, a, b)
+        return Vec3(force.x, 0.0, force.z), Vec3(0.0, moment.y, 0.0)
 
     def request_case(self) -> UUID:
         return UUID(self.request.case_id)

@@ -48,7 +48,7 @@ from veritas.fem.config import AnalysisConfiguration
 from veritas.fem.postconditions import residual_check
 from veritas.fem.results.normalized import PlanarResults, ReactionSource, normalize_planar_xz
 from veritas.fem.results.run import RunStatus
-from veritas.fem.runners.subprocess_runner import WORKER_PATH, run_worker
+from veritas.fem.runners.subprocess_runner import run_worker
 
 D = DiagnosticCode
 TOL = 1e-9
@@ -59,6 +59,7 @@ DELTA = Fraction(-1, 100)  # m, descenso
 THETA = Fraction(2, 1000)  # rad
 RELEASED_RY = EndConnection.rigid().with_dof(Dof.RY, DofState.RELEASED)
 WORKER_V2 = Path(__file__).parent / "data" / "opensees_worker_v2.py"
+WORKER_V3 = Path(__file__).parent / "data" / "opensees_worker_v3.py"
 
 # Componentes de Vector6 (ADR-001): (Fx, Fy, Fz, Mx, My, Mz) o (Ux, Uy, Uz, Rx, Ry, Rz).
 FX, FZ, MY = 0, 2, 4
@@ -405,7 +406,7 @@ def test_request_round_trip_with_settlements() -> None:
     request = settled_request()
     assert request.settlements
     assert PlanarRequest.from_json(request.to_json()) == request
-    assert json.loads(request.to_json())["version"] == PROTOCOL_VERSION == 3
+    assert json.loads(request.to_json())["version"] == PROTOCOL_VERSION == 4
 
 
 def test_settlement_outside_fix_is_protocol_error() -> None:
@@ -492,7 +493,7 @@ FAKE_WORKER = """
 import json, sys
 request = json.loads(sys.stdin.read())
 data = {
-    "protocol": "veritas.opensees.planar", "version": 3, "status": "OK",
+    "protocol": "veritas.opensees.planar", "version": 4, "status": "OK",
     "analyze_code": 0, "message": "simulado",
     "versions": {"python": "x", "openseespy": "y", "openseespywin": None},
     "nodes": [[n[0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] for n in request["nodes"]],
@@ -531,16 +532,22 @@ def _numeric(response: dict[str, Any]) -> dict[str, Any]:
 
 @pytest.mark.parametrize("case_id", sorted(SPECS))
 def test_responses_without_settlements_match_v2(case_id: str) -> None:
-    """Bit a bit: worker v2 congelado con la petición v2 y worker v3 con la misma en v3."""
+    """Bit a bit: worker v2 congelado con la petición v2 y worker v3 con la misma en v3.
+
+    Desde T-015 (protocolo v4) el v3 también es una copia congelada (``WORKER_V3``).
+    """
     for spec in SPECS[case_id]:
         case = _Case()
         spec.build(case)
         request = translate_planar_xz(case.model, AnalysisConfiguration(case.load_case.id)).request
         assert request.settlements == ()
-        old_request = {**request.to_dict(), "version": 2}
+        assert request.member_end_loads == ()
+        new_request = {**request.to_dict(), "version": 3}
+        del new_request["member_end_loads"]
+        old_request = {**new_request, "version": 2}
         del old_request["settlements"]
         old = run_worker(json.dumps(old_request), 60.0, WORKER_V2)
-        new = run_worker(request.to_json(), 60.0, WORKER_PATH)
+        new = run_worker(json.dumps(new_request), 60.0, WORKER_V3)
         assert old.response_text is not None, old.stderr
         assert new.response_text is not None, new.stderr
         before, after = json.loads(old.response_text), json.loads(new.response_text)

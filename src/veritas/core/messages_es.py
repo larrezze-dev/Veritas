@@ -186,6 +186,14 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "fem.member_load_out_of_plane": (
         "Carga de barra con componente global Y = {qy} N/m (límite {limit} N/m)."
     ),
+    "fem.member_point_load_out_of_plane": (
+        "Carga puntual de barra fuera del plano XZ (Fy = {fy} N, límite {force_limit} N; "
+        "Mx = {mx} N·m, Mz = {mz} N·m, límite {moment_limit} N·m)."
+    ),
+    "fem.member_moment_out_of_plane": (
+        "Momento distribuido de barra fuera del plano XZ (mx = {mx} N·m/m, mz = {mz} N·m/m; "
+        "límite {limit} N·m/m)."
+    ),
     "fem.settlement_out_of_plane": (
         "Asiento fuera del plano XZ (Uy = {uy} m, Rx = {rx} rad, Rz = {rz} rad); el análisis "
         "plano solo admite Ux, Uz y Ry."
