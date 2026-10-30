@@ -1,8 +1,9 @@
 """Configuración de una corrida espacial (plan T-018, D6).
 
 Snapshot inmutable: se registra completo en la procedencia de la corrida. Los valores por
-defecto de ``tol_pivot``, ``penalty_factor`` y ``tol_penalty`` están calibrados en E1 con
-márgenes medidos (``plans/T-018.md``); cualquier cambio es una desviación.
+defecto de ``tol_pivot``, ``penalty_factor`` y ``tol_penalty`` están calibrados en E1, y los
+``end_penalty_*`` en E2.4 (ADR-004, hecho 23), con márgenes medidos (``plans/T-018.md``);
+cualquier cambio es una desviación.
 """
 
 from dataclasses import dataclass

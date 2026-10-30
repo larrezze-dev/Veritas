@@ -14,6 +14,7 @@ import benchmark_cache
 import cli_golden
 from veritas import cli
 from veritas.core.connections.end import Dof, DofState, EndConnection
+from veritas.core.messages_es import MESSAGES_ES
 from veritas.core.units import Quantity
 from veritas.fem import RunStatus, benchmarks
 
@@ -208,6 +209,8 @@ def test_unions_match_and_exit_0(unions_output: tuple[str, int]) -> None:
     assert "Modo de mecanismo (nulidad 1" in out
     assert cli.SPATIAL_UNIONS_MISSED not in out
     assert cli.EXPERIMENTAL_WARNING in out
+    # Revisión de E2, m8: también las hipótesis de «Liberada», una vez por familia.
+    assert out.count(MESSAGES_ES["fem3d.hypothesis_end_releases"]) == 2
 
 
 def _family_solved(family: cli._UnionsFamily) -> list[cli._Solved]:
@@ -282,14 +285,51 @@ def test_unions_missed_mechanism_exits_3(monkeypatch: pytest.MonkeyPatch) -> Non
     real = cli._spatial_unions_variant
 
     def no_mechanism(
-        name: str, family: cli._UnionsFamily, end_j: object, *, mechanism: bool = False
+        name: str,
+        family: cli._UnionsFamily,
+        end_j: EndConnection | None,
+        *,
+        mechanism: bool = False,
     ) -> cli._Variant:
-        return real(name, family, end_j, mechanism=False)  # type: ignore[arg-type]
+        return real(name, family, end_j, mechanism=False)
 
     monkeypatch.setattr(cli, "_spatial_unions_variant", no_mechanism)
     out, code = cli.run_analyze_spatial("uniones", "60")
     assert code == cli.EXIT_ANALYSIS_FAILED
     assert cli.SPATIAL_UNIONS_MISSED in out
+
+
+def test_unions_mechanism_without_mode_exits_3(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Decisión D-2 de la revisión de E2: ANALYSIS_SINGULAR sin modo concluyente no basta."""
+    real = cli._solve_spatial
+
+    def no_mode(variant: cli._Variant, timeout: float) -> cli._Solved:
+        solved = real(variant, timeout)
+        if variant.name != "Mecanismo" or solved.run.pivot is None:
+            return solved
+        pivot = dataclasses.replace(solved.run.pivot, nullity=None, mechanism=())
+        return dataclasses.replace(solved, run=dataclasses.replace(solved.run, pivot=pivot))
+
+    monkeypatch.setattr(cli, "_solve_spatial", no_mode)
+    out, code = cli.run_analyze_spatial("uniones", "60")
+    assert code == cli.EXIT_ANALYSIS_FAILED
+    assert cli.SPATIAL_UNIONS_MISSED in out
+
+
+def test_unions_failed_variant_exits_3(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Revisión de E2, M2: una variante FAILED (aquí, «Resorte» por tiempo agotado) no
+    publica resultados y la salida es 3 con «no coincide», nunca 0."""
+    real = cli._solve_spatial
+
+    def failed_spring(variant: cli._Variant, timeout: float) -> cli._Solved:
+        return real(variant, 1e-3 if variant.name == "Resorte" else timeout)
+
+    monkeypatch.setattr(cli, "_solve_spatial", failed_spring)
+    out, code = cli.run_analyze_spatial("uniones", "60")
+    assert code == cli.EXIT_ANALYSIS_FAILED
+    assert f"[Resorte] Estado: {RunStatus.FAILED}" in out
+    assert f"Contraste de uniones: {cli.REFERENCE_MISMATCH}." in out
+    assert f"Contraste de uniones: {cli.REFERENCE_MATCH}." not in out
 
 
 def test_spatial_help_lists_unions(capsys: pytest.CaptureFixture[str]) -> None:

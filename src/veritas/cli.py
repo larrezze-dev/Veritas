@@ -40,13 +40,23 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   referencia, calculado, error relativo y tolerancia por magnitud. Código 0 si todas
   coinciden; 3 si alguna corrida falla, la normalización falla o alguna magnitud no
   coincide. «Coincide» no valida la aplicación.
+- ``veritas analyze espacial [--caso referencias|contraste-plano|mecanismo-torsion|uniones]
+  [--timeout S] [--profile P]``: adaptador espacial de seis GDL por nudo (plan T-018,
+  ADR-003 y ADR-004). ``referencias`` contrasta T-FEM3D-01…05 con fórmulas cerradas;
+  ``contraste-plano``, T-FEM-001…004 y T-CON-REF-01…04 construidos en 3D frente a sus
+  fórmulas y al adaptador plano (D1); ``uniones``, la viga de ``analyze uniones`` en una
+  dirección oblicua (rígida, liberada y resorte en Ry y Rz locales) y un mecanismo que debe
+  dar ANALYSIS_SINGULAR. Código 0 si todo coincide; 3 si una corrida falla o un contraste no
+  se supera. ``mecanismo-torsion`` sale siempre con 3: el mecanismo detectado no publica
+  resultados.
 - Subcomando u opción desconocidos: uso en stderr, stdout vacío, código 2.
 - Error de dominio (diagnóstico): ``CÓDIGO: mensaje`` en stderr, stdout vacío, código 2.
 
 Solo ``veritas analyze`` ejecuta un análisis estructural; sus valores están normalizados a
 ADR-001. La formulación plana solo se ha contrastado con T-FEM-001…004 y
-T-CON-REF-01…04 (``veritas analyze referencias``, T-009 y T-010); ningún resultado está
-validado.
+T-CON-REF-01…04 (``veritas analyze referencias``, T-009 y T-010), y la espacial con
+T-FEM3D-01…05 y el contraste D1 (``veritas analyze espacial``, T-018); ningún resultado
+está validado.
 """
 
 import argparse
@@ -153,13 +163,16 @@ MODULE_STATUS: Final[tuple[tuple[str, str], ...]] = (
     (
         "Uniones de extremo I/J",
         f"{AVAILABLE} (T-010): rígido, liberado o resorte por GDL; el análisis plano solo "
-        "calcula el giro de flexión del plano",
+        "calcula el giro de flexión del plano y el espacial, los seis GDL de cada extremo "
+        "(T-018)",
     ),
     ("Cargas", f"{AVAILABLE} (T-006)"),
     (
         "Análisis FEM",
         f"{AVAILABLE} (T-007): plano XZ, resultados normalizados (T-008), contrastados solo "
-        "con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010), no validados",
+        "con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); espacial de seis GDL por nudo "
+        "(T-018), contrastado solo con T-FEM3D-01…05 y el contraste con el plano (D1); "
+        "no validados",
     ),
     ("Interfaz gráfica", PENDING),
     ("Verificación normativa", NOT_CHECKED),
@@ -2532,7 +2545,8 @@ def _unions_family_lines(
         f"cambia el extremo J de B2: rígido, {name} liberado o resorte k = "
         f"{UNIONS_SPRING_RATIO}·EI/L = {stiffness}.",
         *_status_lines(solved),
-        *_hypothesis_lines(solved[2].run.hypotheses),
+        # Las de las tres variantes, sin repetir (revisión de E2, m8).
+        *_hypothesis_lines(list(dict.fromkeys(h for item in solved for h in item.run.hypotheses))),
         "",
         _comparison(solved, rows, profile, references, ("Coincide", "Err. rel. máx.")),
         *_spring_lines(contrast),
@@ -2561,7 +2575,14 @@ def _spatial_unions(timeout: float, profile: PresentationProfile) -> tuple[str, 
     mechanism = _solve_spatial(
         _spatial_unions_variant("Mecanismo", UNIONS_FAMILIES[0], None, mechanism=True), timeout
     )
-    singular = any(d.code is DiagnosticCode.ANALYSIS_SINGULAR for d in mechanism.run.diagnostics)
+    # FAILED con ANALYSIS_SINGULAR, como ``_spatial_torsion`` (revisión de E2, m1), y con
+    # modo concluyente (criterio de salida de E2, decisión D-2).
+    singular = (
+        mechanism.run.status is RunStatus.FAILED
+        and any(d.code is DiagnosticCode.ANALYSIS_SINGULAR for d in mechanism.run.diagnostics)
+        and mechanism.run.pivot is not None
+        and mechanism.run.pivot.nullity is not None
+    )
     lines += [
         "Referencias a mano: familia Ry = caso plano girado (PL/8, PL³/(192EI); liberada "
         "3PL/16, 7PL³/(768EI), reacciones 11P/16 y 5P/16); familia Rz = la misma con EIz y los "

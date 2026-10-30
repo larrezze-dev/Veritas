@@ -115,6 +115,14 @@ def test_info_declares_fem_normalized_but_not_validated() -> None:
     assert status.endswith("no validados")
 
 
+def test_info_declares_spatial_fem_contrasted_not_validated() -> None:
+    # T-018 E2.7-a: el análisis espacial y los seis GDL de extremo también se declaran.
+    status = dict(cli.MODULE_STATUS)
+    assert "espacial de seis GDL por nudo (T-018)" in status["Análisis FEM"]
+    assert "contrastado solo con T-FEM3D-01…05" in status["Análisis FEM"]
+    assert "los seis GDL de cada extremo (T-018)" in status["Uniones de extremo I/J"]
+
+
 # --- T-010, D7: uniones, tres materiales y biempotrada --------------------------------
 
 

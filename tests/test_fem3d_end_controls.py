@@ -437,6 +437,7 @@ def test_new_provenance_constants_are_recorded_and_filtered() -> None:
         "end_penalty_min_stagnation_iteration",
         "end_penalty_stagnation_ratio",
         "end_contrast_reference_margin",
+        "end_axial_load_tolerance",  # Revisión de E2, m2.
     }
     assert names <= set(provenance_constants())
     assert set(provenance_constants()) == PROVENANCE_KEYS

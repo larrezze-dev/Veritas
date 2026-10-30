@@ -84,6 +84,7 @@ PROVENANCE_KEYS: Final = frozenset(
         "end_penalty_min_stagnation_iteration",
         "end_penalty_stagnation_ratio",
         "end_contrast_reference_margin",
+        "end_axial_load_tolerance",
     }
 )
 SPATIAL_ADAPTER_ID: Final = "veritas.fem.spatial"
@@ -98,9 +99,11 @@ type Twelve = tuple[
 class RawSpatialNodeResult:
     """Desplazamiento global y reacción de las restricciones exactas del nudo.
 
-    ``reaction`` es ``nodeReaction`` proyectada sobre las direcciones restringidas por
-    ``fix`` o por una cadena (en las libres es el residuo del propio solver); ``None`` si
-    el nudo no tiene ninguna. La de los resortes está en ``RawSpatialGroundReaction``.
+    ``reaction`` es ``nodeReaction`` del nudo, sumada con la de sus aux de extremo (el
+    multiplicador del ``equalDOF`` aux−nudo se cancela, hecho 17), proyectada sobre las
+    direcciones restringidas por ``fix`` o por una cadena (en las libres es el residuo del
+    propio solver); ``None`` si el nudo no tiene ninguna. La de los resortes está en
+    ``RawSpatialGroundReaction``.
     """
 
     node_id: UUID
@@ -127,7 +130,8 @@ class RawSpatialMemberForces:
 
 @dataclass(frozen=True, slots=True)
 class RawSpatialResults:
-    """Salida bruta del solver espacial. Sin los nudos auxiliares (tierras, C y R)."""
+    """Salida bruta del solver espacial. Sin los nudos auxiliares (tierras, C, R y aux de
+    extremo)."""
 
     basis: str
     nodes: tuple[RawSpatialNodeResult, ...]

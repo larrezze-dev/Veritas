@@ -96,9 +96,9 @@ type Fixity = tuple[int, int, int, int, int, int]
 
 @dataclass(frozen=True, slots=True)
 class SpatialTranslation:
-    """Petición, avisos e hipótesis, con los datos que necesitan la salvaguarda y la
-    normalización: ``max_diagonal`` (D de la calibración de D3) y ``chain_length`` (a de la
-    cadena, D4).
+    """Petición, avisos e hipótesis, y dos datos de la traducción que solo leen los tests:
+    ``max_diagonal`` (D de la calibración de D3, que la petición lleva como alpha) y
+    ``chain_length`` (a de la cadena, D4, que la petición lleva en cada cadena).
     """
 
     request: SpatialRequest

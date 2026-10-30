@@ -77,6 +77,7 @@ from veritas.fem.spatial.stiffness import (
     validate_request,
 )
 from veritas.fem.spatial.translator import (
+    TOL_AXIAL_LOAD,
     SpatialTranslation,
     orphan_rotations,
     translate_spatial,
@@ -181,6 +182,8 @@ def provenance_constants() -> dict[str, float]:
         "end_penalty_min_stagnation_iteration": opensees_worker_3d.MIN_STAGNATION_ITERATION,
         "end_penalty_stagnation_ratio": opensees_worker_3d.STAGNATION_IMPROVEMENT,
         "end_contrast_reference_margin": REFERENCE_MARGIN,
+        # Rechazo de Wx ≠ 0 con Ux de extremo no rígido (E2-d; revisión de E2, m2).
+        "end_axial_load_tolerance": TOL_AXIAL_LOAD,
     }
 
 
@@ -236,6 +239,15 @@ def _pivot_summary(
     )
 
 
+def _principal(mechanism: Sequence[MechanismDof]) -> MechanismDof:
+    """Participante principal del modo: el de mayor participación; en empate, el primero
+    por etiqueta (T-017 D3-5)."""
+    largest = max(item.participation for item in mechanism)
+    return next(
+        item for item in mechanism if item.participation >= largest - MECHANISM_TIE_TOLERANCE
+    )
+
+
 def _singular_failure(
     model: StructuralModel, pivot: PivotSummary, config: SpatialAnalysisConfiguration
 ) -> _Failure:
@@ -246,12 +258,7 @@ def _singular_failure(
     node_id, component = pivot.node_id, pivot.component or ""
     member_id, end = pivot.member_id, pivot.end
     if pivot.mechanism:
-        largest = max(item.participation for item in pivot.mechanism)
-        top = next(
-            item
-            for item in pivot.mechanism
-            if item.participation >= largest - MECHANISM_TIE_TOLERANCE
-        )
+        top = _principal(pivot.mechanism)
         node_id, component = top.node_id, top.component
         member_id, end = top.member_id, top.end
     if member_id is not None:
@@ -316,13 +323,8 @@ def _singular_outcome(
         # un nudo con huérfano oblicuo; si no, otra causa domina (revisión de E2.3, M3).
         node_ids = {node.tag: UUID(node.entity_id) for node in request.nodes}
         orphans = [node_ids[tag] for tag in oblique]
-        # Mismo participante principal que ``_singular_failure`` (empate: el primero en orden).
-        largest = max(item.participation for item in run.pivot.mechanism)
-        top = next(
-            item
-            for item in run.pivot.mechanism
-            if item.participation >= largest - MECHANISM_TIE_TOLERANCE
-        )
+        # Mismo participante principal que ``_singular_failure``.
+        top = _principal(run.pivot.mechanism)
         if (
             top.member_id is None
             and top.component in ROTATION_COMPONENTS

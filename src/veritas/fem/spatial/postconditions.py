@@ -472,7 +472,11 @@ def link_scales(request: SpatialRequest, response: SpatialWorkerResponse) -> tup
     de los aux (precedente DEV-2: con torsión pura o traslación pura una sola escala sería
     ruido). Los aux cuentan: con todos los nudos de dominio fijos, solo el aux se mueve
     (revisión de E2.5, M1)."""
-    displacement = all_displacements(response)
+    return coupled_scales(request, all_displacements(response))
+
+
+def coupled_scales(request: SpatialRequest, displacement: Displacements) -> tuple[float, float]:
+    """(s_u, s_θ) = (máx(‖u_tras‖∞, L_máx·‖θ‖∞), s_u / L_máx) de ``displacement``."""
     _, longest = force_scale(request)
     scale = max(translation_scale(displacement), longest * rotation_scale(displacement))
     return scale, scale / longest
@@ -650,13 +654,6 @@ def contrast_reference(request: SpatialRequest, report: SpatialPivotReport) -> C
     return ContrastReference(expand(q), expand(delta))
 
 
-def _reference_scales(request: SpatialRequest, displacement: Displacements) -> tuple[float, float]:
-    """(s_u, s_θ) de la referencia (nudos y aux), como ``link_scales`` (E2.5-a)."""
-    _, longest = force_scale(request)
-    scale = max(translation_scale(displacement), longest * rotation_scale(displacement))
-    return scale, scale / longest
-
-
 def end_penalty_contrast(
     request: SpatialRequest,
     response: SpatialWorkerResponse,
@@ -677,7 +674,7 @@ def end_penalty_contrast(
     node_ids = {node.tag: node.entity_id for node in request.nodes}
     node_ids |= {aux.tag: node_ids[aux.master] for aux in request.aux_nodes}
     reference = contrast_reference(request, report)
-    scales = _reference_scales(request, reference.displacement)
+    scales = coupled_scales(request, reference.displacement)  # Como ``link_scales`` (E2.5-a).
     tol = config.tol_penalty
     for values in reference.correction.values():
         for k, value in enumerate(values):

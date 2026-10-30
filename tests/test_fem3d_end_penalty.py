@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 
+import test_fem3d_singularity as cases
 from fem3d_support import reference_displacements
 from fem_support import Frame
 from test_fem3d_analyze import analyze, assert_failed, wrapper
@@ -610,6 +611,28 @@ def test_parent_rechecks_convergence(
 ) -> None:
     run_ = analyze(grid_frame(500, "uy"), wrapper(tmp_path, after=after))
     assert_failed(run_, DiagnosticCode.ANALYSIS_NONCONVERGENCE, "fem3d.end_penalty_not_converged")
+
+
+@pytest.mark.parametrize(
+    "after",
+    [
+        "data['aux'] = []",  # Aux de la respuesta que no corresponde a la petición.
+        "data['end_springs'] = data['end_springs'][1:]",  # Resortes de extremo que faltan.
+    ],
+    ids=["aux", "resortes de extremo"],
+)
+def test_response_ends_not_matching_request(tmp_path: Path, after: str) -> None:
+    """Revisión de E2, M1: aux o resortes de extremo de la respuesta que no corresponden a
+    la petición dan FAILED con ``fem.protocol_error``, nunca OK."""
+    run_ = analyze(grid_frame(500, "uy"), wrapper(tmp_path, after=after))
+    assert_failed(run_, DiagnosticCode.ANALYSIS_FAILED, "fem.protocol_error")
+
+
+def test_iterations_without_end_penalty_is_protocol_error(tmp_path: Path) -> None:
+    """Revisión de E2, M1: iteraciones declaradas en un modelo sin penalización de extremo."""
+    after = "data.update(end_penalty_iterations=2, end_penalty_stop='tolerance')"
+    run_ = analyze(cases._loaded_cantilever(cases.OBLIQUE), wrapper(tmp_path, after=after))
+    assert_failed(run_, DiagnosticCode.ANALYSIS_FAILED, "fem.protocol_error")
 
 
 def test_iterations_diagnostic_is_informative(

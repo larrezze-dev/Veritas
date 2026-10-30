@@ -13,8 +13,10 @@ Extremos no rígidos (E2.3): la k de la barra se condensa en los GDL de ``-relea
 p0) y usa A y J efectivos; cada aux añade 6 GDL con u_aux = u_N + δ, sus ``equalDOF`` y
 penalizaciones son restricciones relativas exactas y sus resortes, rigideces relativas.
 
-La factorización y el modo de mecanismo se importan de ``fem.adapters.singularity`` sin
-cambios (D2-A). La garantía es condicionada a ``tol_pivot`` y a la batería declarada.
+La factorización y el modo de mecanismo se importan de ``fem.adapters.singularity`` (D2-A);
+desde E2.5-b, ``pivot_factorization`` conserva además la factorización y ``solve_factored``
+resuelve con ella (contraste exacto de ADR-004 §4). La garantía es condicionada a
+``tol_pivot`` y a la batería declarada.
 """
 
 import math
