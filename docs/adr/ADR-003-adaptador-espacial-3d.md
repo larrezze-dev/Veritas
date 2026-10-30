@@ -90,3 +90,4 @@ Entorno: CPython 3.12.9, `openseespy` y `openseespywin` 3.8.0.0. Scripts fuera d
 - 2026-10-28: borrador PROPUESTO tras las sondas de T-018 (hechos 1-8).
 - 2026-10-28: revisión structural-reviewer incorporada (axil en serie con Wx, huérfanos como subespacio, hechos 3-5 matizados, hecho 9). Pendiente de aprobación del usuario.
 - 2026-10-28: el usuario aprueba el ADR con el plan T-018 («aprobado»). Estado: ACCEPTED. Implementación en T-018 (E1 y E2).
+- 2026-10-30: enmendado por [ADR-004](ADR-004-penalizacion-iterada-extremos.md) (ACCEPTED): en los extremos de barra, la penalización simple con tolerancia calibrada (§5) se sustituye por la penalización iterada con contraste exacto; adaptador «3» y protocolo espacial v3 (enmienda de D10 del plan). Los apoyos D4 no cambian.
