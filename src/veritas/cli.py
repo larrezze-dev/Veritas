@@ -2108,6 +2108,65 @@ def _spring_lines(contrast: UnionsContrast) -> list[str]:
     ]
 
 
+def _unions_jump_lines(
+    solved: Sequence[_Solved], ei: float, k: float, q: Callable[[float, QuantityKind], str]
+) -> tuple[list[str], bool]:
+    """Salto de giro del extremo J de B2 (T-020, E2.1): extremo de la barra − nudo N2, en Ry
+    local. Liberada: −P·L²/(32·EI), por cuerpo libre (viga empotrada-articulada con carga
+    central; N2 empotrado, giro de nudo nulo). Resorte: el momento de extremo publicado es
+    M = −k·salto. Rígida: sin salto. Un contraste no superado nunca sale como «coincide»."""
+    length, load = UNIONS_L, UNIONS_P
+    reference = -load * length**2 / (32 * ei)
+    scale = load * length / 8
+    tolerance = benchmarks.TOL_EXACT
+    angle = QuantityKind.ANGLE
+    lines = [
+        "Salto de extremo J de B2 (extremo de la barra − nudo N2, Ry local; T-020):",
+    ]
+    ok = True
+    for item in solved:
+        name = item.variant.name
+        if not isinstance(item.results, PlanarResults):
+            lines.append(f"  {name}: {REFERENCE_NO_RESULTS}")
+            ok = False
+            continue
+        member_id = _id(item.variant, "B2")
+        jumps = [j for j in item.results.end_jumps if j.member_id == member_id and j.end == "J"]
+        rotation = jumps[0].value.components[4] if len(jumps) == 1 else None
+        if name == "Rígida":
+            matches = not jumps
+            note = (
+                "extremo rígido, sin salto" if matches else "salto inesperado en un extremo rígido"
+            )
+            lines.append(f"  {name}: {NOT_APPLICABLE_MARK} ({note})")
+        elif rotation is None or rotation.value is None:
+            matches = False
+            applicable = rotation is not None and rotation.status is ComponentStatus.NOT_APPLICABLE
+            lines.append(f"  {name}: {NOT_APPLICABLE_MARK if applicable else NOT_CALCULATED_MARK}")
+        else:
+            jump = rotation.value
+            if name == "Liberada":
+                error = abs(jump - reference) / abs(reference)
+                detail = (
+                    f"referencia −P·L²/(32·EI) = {q(reference, angle)}; error relativo {error:.1e}"
+                )
+            else:
+                moment_j = next(m for m in item.results.members if m.member_id == member_id).p_j
+                published = moment_j.components[4].value
+                error = math.inf if published is None else abs(published + k * jump) / scale
+                published = math.nan if published is None else published
+                detail = (
+                    f"M publicado = {q(published, QuantityKind.MOMENT)} frente a −k·salto = "
+                    f"{q(-k * jump, QuantityKind.MOMENT)}; diferencia relativa a P·L/8 {error:.1e}"
+                )
+            matches = error <= tolerance
+            lines.append(f"  {name}: {q(jump, angle)} ({detail})")
+        ok = ok and matches
+    verdict = REFERENCE_MATCH if ok else REFERENCE_MISMATCH
+    lines.append(f"Contraste del salto (tolerancia {tolerance:g}): {verdict}.")
+    return lines, ok
+
+
 def run_analyze_unions(
     timeout_text: str, profile_name: str = "SI", digits: str | None = None
 ) -> tuple[str, int]:
@@ -2149,6 +2208,7 @@ def run_analyze_unions(
             rows, pairs, contrast.row_matches, contrast.row_errors, strict=True
         )
     ]
+    jump_lines, jump_ok = _unions_jump_lines(solved, ei, k, q)
     mechanism = _solve(_unions_variant("Mecanismo", None, mechanism=True), timeout)
     stiffness = format_quantity(
         u.Quantity(k, Dof.RY.stiffness_dimension), QuantityKind.ROTATIONAL_STIFFNESS, profile
@@ -2173,6 +2233,8 @@ def run_analyze_unions(
         *_spring_lines(contrast),
         COMPARISON_NOTE,
         "",
+        *jump_lines,
+        "",
         "Mecanismo: la misma viga sobre articulación (N1) y rodillo (N2) con el extremo J de B1 "
         "también liberado (rótula en N3).",
         *_status_lines([mechanism]),
@@ -2183,6 +2245,7 @@ def run_analyze_unions(
         all(item.results is not None for item in solved)
         and any(d.code is DiagnosticCode.ANALYSIS_SINGULAR for d in mechanism.run.diagnostics)
         and contrast.matches
+        and jump_ok
     )
     return "\n".join(lines), EXIT_OK if ok else EXIT_ANALYSIS_FAILED
 

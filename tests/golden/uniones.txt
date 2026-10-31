@@ -18,6 +18,12 @@ Resorte: s = # (dispersión #, tolerancia #); entre Rígida y Liberada: sí.
 Contraste de uniones: coincide.
 Comparación de variantes del mismo modelo; «—» = sin valor (no aplicable o corrida fallida). Los valores no están validados (aplicación experimental).
 
+Salto de extremo J de B2 (extremo de la barra − nudo N2, Ry local; T-020):
+Rígida: — (extremo rígido, sin salto)
+Liberada: # rad (referencia −P·L²/(#·EI) = # rad; error relativo #)
+Resorte: # rad (M publicado = # N·m frente a −k·salto = # N·m; diferencia relativa a P·L/# #)
+Contraste del salto (tolerancia #): coincide.
+
 Mecanismo: la misma viga sobre articulación (N1) y rodillo (N2) con el extremo J de B1 también liberado (rótula en N3).
 [Mecanismo] Estado: FAILED
 ERROR ANALYSIS_SINGULAR: Rigidez singular (pivote escalado # ≤ #): mecanismo en el que participa el giro del extremo J de la barra B1. Los GDL que participan se registran con el modo de mecanismo; si el modo no es concluyente, la ubicación es orientativa (un GDL del mecanismo). No se calcula.

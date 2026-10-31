@@ -53,3 +53,17 @@ Leer docs/CONTEXT_POLICY.md. Revisar uso de contexto con /context cuando sea pos
 - tasks/TEMPLATE.md: definición de tareas.
 - plans/: planes de tickets, aprobación y revisiones.
 - handoffs/TEMPLATE.md: checkpoint para sesiones nuevas.
+
+## Plan de Implementación
+
+Primer paso: evaluar en detalle el proyecto utilizando el MCP rea para determinar su complejidad. Luego elaborar un detallado plan de implementación y guardarlo en el archivo .planning.md - este plan de implementación debe de ser elaborado de forma que te sirva de guía durante todo el proceso de desarrollo. Detallar todas las funcionalidades e GUI a clonar en una secuencia lógica y dentro de lo posible secuencial.
+
+## Control de tareas
+
+Elabora una lista desglosada de tareas atómicas basada en el plan de implementación. Crea el archivo .tasks.md como referencia para el control de tareas. Cada vez que realices total o parcialmente una tarea, o altere tareas ya realizadas, actualiza el estado de la tarea en el archivo .tasks.md. En la columna "Comentarios" del archivo .tasks.md, anota que has realizado la tarea y cualquier comentario relevante.
+
+Caso una tarea no pueda ser realizada debido a dependencia de features aun no desarrolladas o cualquier otro motivo, en el archivo .ticktets.md crea un "Ticket" asociando la tarea pendiente a su tarea complementaria futura, de forma que una tarea pendiente pueda ser finalizada en el momento correcto.
+
+Serás el único responsable de marcar una tarea como realizada, pendiente o en marcha. Las tareas pendientes se marcarán con "[ ]", las tareas finalizadas con "[x]" y las tareas en marcha con "[o]"
+
+Para que el usuario pueda realizar un seguimiento proactivo del desarrollo del proyecto crea un informe en .tasks.html con un dashboard indicativo del avance del desarrollo desde de diversas perspectivas. Actualizalo al finalizar cada tarea atómica.

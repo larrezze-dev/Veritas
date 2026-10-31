@@ -1,10 +1,18 @@
 """CLI ``veritas analyze demo`` (planes T-007 y T-008): tablas normalizadas, códigos 0/2/3."""
 
+import dataclasses
+
 import pytest
 
 from veritas import cli
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode
-from veritas.fem.results.normalized import ResultsNormalizationError
+from veritas.fem.results.normalized import (
+    Component,
+    ComponentStatus,
+    ResultsNormalizationError,
+    Vector6,
+    normalize_planar_xz,
+)
 
 
 @pytest.mark.solver
@@ -167,6 +175,47 @@ def test_unions_altered_reference_exits_3(
     assert cli.main(["analyze", "uniones"]) == cli.EXIT_ANALYSIS_FAILED
     out = capsys.readouterr().out
     assert f"Contraste de uniones: {cli.REFERENCE_MISMATCH}." in out
+
+
+@pytest.mark.solver
+def test_unions_shows_the_end_jump_and_contrasts_it(capsys: pytest.CaptureFixture[str]) -> None:
+    """T-020, E2.1: salto de giro del extremo J de B2 y su contraste (D6-A)."""
+    assert cli.main(["analyze", "uniones"]) == cli.EXIT_OK
+    out = capsys.readouterr().out
+    assert "Salto de extremo J de B2 (extremo de la barra − nudo N2, Ry local; T-020):" in out
+    assert "Rígida: — (extremo rígido, sin salto)" in out
+    assert "Liberada: -2.232e-05 rad (referencia −P·L²/(32·EI) = -2.232e-05 rad" in out
+    assert "Resorte: -1.786e-05 rad (M publicado = 1000.000 N·m" in out
+    assert "Contraste del salto (tolerancia 1e-09): coincide." in out
+
+
+@pytest.mark.solver
+def test_unions_altered_jump_exits_3(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = normalize_planar_xz
+
+    def altered(run: object, model: object) -> object:
+        results = real(run, model)  # type: ignore[arg-type]
+        jumps = []
+        for jump in results.end_jumps:
+            cells = list(jump.value.components)
+            old = cells[4].value
+            assert old is not None
+            cells[4] = Component(old * 1.001, ComponentStatus.CALCULATED)
+            jumps.append(
+                dataclasses.replace(
+                    jump,
+                    value=Vector6(jump.value.basis, tuple(cells)),  # type: ignore[arg-type]
+                )
+            )
+        return dataclasses.replace(results, end_jumps=tuple(jumps))
+
+    monkeypatch.setattr("veritas.cli.normalize_planar_xz", altered)
+    assert cli.main(["analyze", "uniones"]) == cli.EXIT_ANALYSIS_FAILED
+    out = capsys.readouterr().out
+    assert f"Contraste del salto (tolerancia 1e-09): {cli.REFERENCE_MISMATCH}." in out
+    assert "Contraste de uniones: coincide." in out  # la tabla de referencias no cambia
 
 
 SCALES = [1.0, 1.0, 1.0]

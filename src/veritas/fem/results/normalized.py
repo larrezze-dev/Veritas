@@ -186,6 +186,23 @@ class MemberEndForces:
 
 
 @dataclass(frozen=True, slots=True)
+class EndJump:
+    """Salto de un extremo no rígido de barra (T-020, D1-D3): movimiento del extremo de la
+    barra menos el del nudo, en la base local de la barra (ADR-001; ``axes`` son las filas
+    de la Q usada) con los signos de ADR-001 (en el plano, Ry = −θ).
+
+    Solo hay entrada para los extremos liberados o con resorte. Por componente:
+    CALCULATED en el GDL no rígido; NOT_APPLICABLE en los GDL rígidos (cero por restricción)
+    y en un giro con el nudo huérfano (sin valor propio); NOT_CALCULATED fuera del plano.
+    """
+
+    member_id: UUID
+    end: str
+    axes: tuple[Vec3, Vec3, Vec3]
+    value: Vector6
+
+
+@dataclass(frozen=True, slots=True)
 class PlanarResults:
     """Resultados normalizados de una corrida plana XZ. Sin validación de referencia."""
 
@@ -197,6 +214,7 @@ class PlanarResults:
     reactions: tuple[SupportReaction, ...]
     members: tuple[MemberEndForces, ...]
     hypotheses: tuple[str, ...]
+    end_jumps: tuple[EndJump, ...] = ()
 
 
 # --- Errores ---------------------------------------------------------------------------
@@ -452,6 +470,32 @@ class _Normalizer:
                     _to_vector(local_i, branch, -1.0),
                     _to_vector(local_j, branch),
                 )
+            )
+        return tuple(result)
+
+    def end_jumps(self) -> tuple[EndJump, ...]:
+        """Salto de giro de cada extremo con aux (T-020, D1-D3): θ del aux − θ del nudo, con
+        Ry = −θ, en la base local. El giro del aux ya es el de la salida bruta."""
+        theta_aux = {(str(r.member_id), r.end): r.theta for r in self.raw.end_rotations}
+        node_of = {tag: node_id for node_id, tag in self.tag_of.items()}
+        orphan_tags = set(self.request.orphan_fixes)
+        result = []
+        for link in self.request.end_links:
+            member_id = UUID(link.member_id)
+            q = self.model.axes(member_id).matrix()
+            rows = (Vec3(*q[0]), Vec3(*q[1]), Vec3(*q[2]))
+            branch = self.beams[member_id].inertia_axis
+            index = 4 if branch == "Iy" else 5
+            if link.master in orphan_tags:
+                rotation = _NA
+            else:
+                node_theta = self.displacement[node_of[link.master]][2]
+                jump = _elevate_moment(theta_aux[(link.member_id, link.end)] - node_theta)
+                rotation = _calc(_rows(rows, jump)[index - 3])
+            cells = [_NA if i in _IN_PLANE[branch] else _NC for i in range(6)]
+            cells[index] = rotation
+            result.append(
+                EndJump(member_id, link.end, rows, _vector(ResultBasis.MEMBER_LOCAL, cells))
             )
         return tuple(result)
 
@@ -727,6 +771,7 @@ def normalize_planar_xz(run: AnalysisRun, model: StructuralModel) -> PlanarResul
     nodes = normalizer.nodes()
     reactions = normalizer.reactions()
     members = normalizer.members()
+    end_jumps = normalizer.end_jumps()
     normalizer.check_equilibrium()
     hypotheses = [*run.hypotheses, HYPOTHESIS_NORMALIZED]
     if any(r.support_basis is not None for r in reactions):
@@ -740,4 +785,5 @@ def normalize_planar_xz(run: AnalysisRun, model: StructuralModel) -> PlanarResul
         reactions,
         members,
         tuple(hypotheses),
+        end_jumps,
     )
