@@ -998,7 +998,8 @@ class StructuralModel:
                     location=location,
                 )
             )
-        if current.mode is SelfWeightMode.MASS_DENSITY and current.gravity is not None:
+        if current.mode is SelfWeightMode.MASS_DENSITY:
+            assert current.gravity is not None  # invariante de ``set_self_weight`` (D2)
             q = self_weight_intensity(
                 self.linear_mass(member_id), Quantity(current.gravity, ACCELERATION)
             )

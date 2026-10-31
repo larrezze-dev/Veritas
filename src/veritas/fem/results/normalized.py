@@ -604,8 +604,11 @@ class _Normalizer:
                     q = self.model.axes(load.member_id).to_global(q)
                 distributed[load.member_id] = distributed.get(load.member_id, Vec3(0, 0, 0)) + q
             elif isinstance(load, SelfWeight):
+                included = self.model.self_weight_loads()  # T-019, D4-A: solo las incluidas.
                 for member_id in self.beams:
-                    q_z = self.model.self_weight_load(member_id)[2].si_value
+                    if member_id not in included:
+                        continue
+                    q_z = included[member_id][2].si_value
                     total = distributed.get(member_id, Vec3(0, 0, 0)) + Vec3(0.0, 0.0, q_z)
                     distributed[member_id] = total
             elif isinstance(load, SupportSettlement):

@@ -53,6 +53,13 @@ Ampliación aprobada en el plan T-006 (D4, D5), 2026-10-27. Concreta el «valor 
 - Derivación bajo demanda: el valor no se guarda; reasignar material o sección cambia el peso propio derivado.
 - Sin duplicidad (interpretación del proyecto de LD-003): como máximo un peso propio en el modelo, solo en un caso permanente.
 
+**Ampliación T-019** (plan T-019, D1–D10 = A, aprobada por el usuario el 2026-10-31 con «A en todas»; D10-A: sin ADR nuevo). Amplía la segunda viñeta y no toca la «derivación bajo demanda» ni «uno por modelo, caso permanente»:
+
+- `SelfWeight` lleva un `mode` explícito: `MASS_DENSITY` (por defecto, q = ρ·A·g con g declarada, como antes) o `SPECIFIC_WEIGHT` (q = γ·A, con γ opcional del material en N/m³, finito y > 0; `gravity` debe omitirse). Sin mezcla silenciosa: una barra incluida con material sin γ en modo γ falla con `material.specific_weight_missing`.
+- `excluded_members` (ids de barra, no revisiones) deja barras sin peso propio; vacío = comportamiento anterior. Una barra nueva se incluye por defecto; una barra inexistente da `REFERENCE_NOT_FOUND`; excluir todas, `INPUT_OUT_OF_RANGE`; una barra excluida no se deriva.
+- Fuente única: `StructuralModel.self_weight_loads()` da las barras incluidas y su q; la resultante del caso, los dos traductores y las dos normalizaciones la usan y conservan su orden de iteración. Los valores derivados siguen sin guardarse.
+- ρ·g puede no coincidir con γ tabulado; no se compara ni se corrige en silencio (D9-A). No hay valores normativos de γ en el proyecto.
+
 Carga uniforme de barra en base LOCAL: las componentes siguen a la base local **actual** de la barra, q_global = Qᵀ·q_local.
 
 ### Ejes de sección
@@ -159,3 +166,4 @@ Implementación y validación numérica del producto: NO_IMPLEMENTADA.
 - 2026-10-27: ampliación de la tabla §5 con `INPUT_OUT_OF_RANGE` (plan T-004, D7, aprobado por el usuario: «Apruebo D1–D8 = A»).
 - 2026-10-27: plan T-005 aprobado: §1 añade «Base de apoyo inclinada» (R3); §5 amplía los usos de `INPUT_OUT_OF_RANGE` (apoyo sin GDL restringido, rigidez ≤ 0).
 - 2026-10-27: plan T-006 aprobado («Aprobado, adelante»): §1 añade «Peso propio y gravedad» y la base LOCAL de cargas de barra; §5 amplía los usos de `INPUT_OUT_OF_RANGE` (carga nula, g ≤ 0, segundo peso propio, peso propio en caso no permanente).
+- 2026-10-31: plan T-019 aprobado («A en todas», D10-A): §1 «Peso propio y gravedad» añade la nota «Ampliación T-019» (peso específico γ, modo del peso propio y barras excluidas); sin ADR nuevo. Nota escrita al cierre de E2.

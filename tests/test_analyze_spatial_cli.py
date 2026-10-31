@@ -29,6 +29,9 @@ def cached_runs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         benchmarks, "run_settlement_battery", benchmark_cache.run_settlement_battery
     )
+    monkeypatch.setattr(
+        benchmarks, "run_peso_propio_battery", benchmark_cache.run_peso_propio_battery
+    )
 
 
 def run(capsys: pytest.CaptureFixture[str], *args: str) -> tuple[int, str]:

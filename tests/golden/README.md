@@ -15,3 +15,5 @@ Historial: 2026-10-29, regenerados con el `cli.py` de 5d69bb8 en un worktree, tr
 Historial: 2026-10-30, `asientos.txt` nuevo (plan T-016, E2.3-d), generado solo para `analyze asientos` con la CLI de E2.3 (`cli_golden.capture`); los demás archivos no se regeneraron. Su contenido inicial forma parte de la aceptación de E2.3.
 
 Historial: 2026-10-31, `cargas_barra.txt` nuevo (plan T-015, E2.3), generado solo para `analyze cargas-barra` con la CLI de E2.3 (`cli_golden.capture`); los demás archivos no se regeneraron. Su contenido inicial forma parte de la aceptación de E2.3.
+
+Historial: 2026-10-31, `peso_propio.txt` nuevo (plan T-019, E2), generado solo para `analyze peso-propio` con la CLI de E2 (`cli_golden.capture`); los demás archivos no se regeneraron. Su contenido inicial forma parte de la aceptación de E2.

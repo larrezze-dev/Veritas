@@ -49,7 +49,6 @@ from veritas.core.loads.loads import (
     MemberUniformLoad,
     NodalLoad,
     SelfWeight,
-    SelfWeightMode,
     SupportSettlement,
 )
 from veritas.core.supports.support import BasisKind, RestraintKind, Support, SupportDof
@@ -701,14 +700,9 @@ class _Builder:
                     q = self.model.axes(load.member_id).to_local(q)
                 beam.append(self._beam_load(load.member_id, q))
             elif isinstance(load, SelfWeight):
-                if load.mode is not SelfWeightMode.MASS_DENSITY or load.excluded_members:
-                    raise _unsupported(
-                        "fem3d.self_weight_option_pending",
-                        {},
-                        Location(entity_id=load.id, revision=load.revision),
-                    )
-                for member_id, _ in _ordered(self.model.members):
-                    weight = Vec3(*(c.si_value for c in self.model.self_weight_load(member_id)))
+                # Fuente única (T-019, D4-A): solo las barras incluidas, con γ·A o ρ·A·g.
+                for member_id, components in _ordered(self.model.self_weight_loads()):
+                    weight = Vec3(*(c.si_value for c in components))
                     beam.append(
                         self._beam_load(member_id, self.model.axes(member_id).to_local(weight))
                     )

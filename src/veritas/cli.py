@@ -58,6 +58,10 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   ampliadas (plan T-015): T-CB-01…05 en el adaptador plano, T-CB-06 (barra subdividida) en el
   plano, T-CB-07 en el espacial y T-CB-08 (barra subdividida) en el espacial. Código 0 si todo
   coincide; 3 si una corrida falla o un contraste no se supera.
+- ``veritas analyze peso-propio [--timeout S] [--profile P]``: batería de peso propio con γ y
+  selección de barras (plan T-019): T-PP-01 (modo γ y modo ρ·A·g) y T-PP-02 (barra excluida)
+  en el adaptador plano, y T-PP-03 (los mismos casos en 3D frente a sus fórmulas y al plano).
+  Código 0 si todo coincide; 3 si una corrida falla o un contraste no se supera.
 - Subcomando u opción desconocidos: uso en stderr, stdout vacío, código 2.
 - Error de dominio (diagnóstico): ``CÓDIGO: mensaje`` en stderr, stdout vacío, código 2.
 
@@ -66,7 +70,8 @@ ADR-001. La formulación plana solo se ha contrastado con T-FEM-001…004 y
 T-CON-REF-01…04 (``veritas analyze referencias``, T-009 y T-010), y la espacial con
 T-FEM3D-01…05 y el contraste D1 (``veritas analyze espacial``, T-018), y los asientos con
 T-ASI-01…10 (``veritas analyze asientos``, T-016) y las cargas de barra con T-CB-01…08
-(``veritas analyze cargas-barra``, T-015); ningún resultado está validado.
+(``veritas analyze cargas-barra``, T-015) y el peso propio con T-PP-01…03
+(``veritas analyze peso-propio``, T-019); ningún resultado está validado.
 """
 
 import argparse
@@ -385,6 +390,17 @@ def _add_analyze_parser(
         "--timeout", default="60", help="Tiempo máximo de cada corrida en s (por defecto 60)."
     )
     settlements.add_argument(
+        "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
+    )
+    self_weight = analyze_sub.add_parser(
+        "peso-propio",
+        help="Batería de peso propio con γ y selección de barras T-PP-01…03 en los "
+        "adaptadores plano y espacial (T-019).",
+    )
+    self_weight.add_argument(
+        "--timeout", default="60", help="Tiempo máximo de cada corrida en s (por defecto 60)."
+    )
+    self_weight.add_argument(
         "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
     )
     member_loads = analyze_sub.add_parser(
@@ -2373,6 +2389,24 @@ def run_analyze_member_loads(timeout_text: str, profile_name: str = "SI") -> tup
     )
 
 
+# --- Peso propio con γ y selección de barras (T-019, E2) ----------------------------------
+
+
+def run_analyze_self_weight(timeout_text: str, profile_name: str = "SI") -> tuple[str, int]:
+    """``veritas analyze peso-propio``: (texto, código de salida 0 o 3); D7-A, sin ``--caso``."""
+    timeout = _parse_number(timeout_text)
+    profile = _profile(profile_name)
+    return _format_outcomes(
+        benchmarks.run_peso_propio_battery(timeout),
+        profile,
+        "Peso propio con γ y selección de barras T-PP-01…03 (plan T-019): T-PP-01 (modo γ y "
+        "modo ρ·A·g) y T-PP-02 (barra excluida) en el adaptador plano, y T-PP-03 (los mismos "
+        "casos en 3D frente a sus fórmulas y al plano):",
+        benchmarks.PP_HYPOTHESES,
+        "con sus fórmulas cerradas y el adaptador plano dentro de la tolerancia",
+    )
+
+
 # --- Adaptador espacial (T-018, D7-A) -----------------------------------------------------
 
 SPATIAL_REFERENCES: Final = "referencias"
@@ -2856,6 +2890,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 text, code = run_analyze_settlements(args.timeout, args.profile)
             elif args.analyze_command == "cargas-barra":
                 text, code = run_analyze_member_loads(args.timeout, args.profile)
+            elif args.analyze_command == "peso-propio":
+                text, code = run_analyze_self_weight(args.timeout, args.profile)
             elif args.analyze_command == "uniones":
                 text, code = run_analyze_unions(args.timeout, args.profile)
             elif args.caso == "tres-materiales":

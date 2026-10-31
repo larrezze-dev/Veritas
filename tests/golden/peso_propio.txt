@@ -1,0 +1,340 @@
+Peso propio con γ y selección de barras T-PP-01…03 (plan T-019): T-PP-01 (modo γ y modo ρ·A·g) y T-PP-02 (barra excluida) en el adaptador plano, y T-PP-03 (los mismos casos en #D frente a sus fórmulas y al plano):
+- Peso propio (plan T-019): Euler-Bernoulli, estática lineal, sección rectangular constante, dos elementos por vano; carga uniforme hacia −Z con q = γ·A o q = ρ·A·g. Referencias por cuerpo libre con EI = E·b·h³/#; γ y g son valores sintéticos, sin tabla normativa.
+- γ = # kN/m³ (q = # N/m), g = # m/s² con ρ = # kg/m³ (q = # N/m); las barras excluidas no se derivan ni cargan.
+- Acero E = # GPa, G = # GPa, R #×#; A, Iy, Iz y J (= # m⁴, serie de Saint-Venant) de las propiedades de la sección.
+
+== T-PP-01 a — Biempotrada con peso propio por γ·A ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3, A = # m². Peso propio en modo γ con γ = # kN/m³: q = # N/m en B1 y B2.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +qL/# # N # N # # coincide
+R_Z N3 +qL/# # N # N # # coincide
+R_X N1 # # N # N # # coincide
+R_My N1 −qL²/# # N·m # N·m # # coincide
+R_My N3 +qL²/# # N·m # N·m # # coincide
+Uz N2 −qL⁴/(#EI) # m # m # # coincide
+T-PP-01 a: #/# magnitudes, coincide.
+
+== T-PP-01 b — Biempotrada con peso propio por ρ·A·g (modo por defecto) ==
+Misma viga y mismo modelo que la variante a, sin γ: peso propio por ρ·A·g con g = # m/s²: q = # N/m en B1 y B2.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +qL/# # N # N # # coincide
+R_Z N3 +qL/# # N # N # # coincide
+R_X N1 # # N # N # # coincide
+R_My N1 −qL²/# # N·m # N·m # # coincide
+R_My N3 +qL²/# # N·m # N·m # # coincide
+Uz N2 −qL⁴/(#EI) # m # m # # coincide
+T-PP-01 b: #/# magnitudes, coincide.
+
+== T-PP-02 — Voladizo con una barra excluida del peso propio ==
+Voladizo de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrado en N1, A = # m². Peso propio en modo γ con γ = # kN/m³ (q = # N/m) y B2 excluida: solo B1 pesa y B2 es un tramo sin peso que gira como sólido rígido.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Hipótesis:
+- Análisis estático lineal en el plano XZ: x₁ = X, x₂ = Z, θ = −Ry.
+- Barras Euler–Bernoulli #D (sin deformación por cortante); se usan A, E e Iy o Iz.
+- Uy, Rx y Rz quedan restringidos implícitamente en todos los nudos; sus reacciones no se calculan.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas); formulación plana contrastada solo con T-FEM-001…004 (T-009) y T-CON-REF-01…04 (T-010); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +q·L₁ (solo B1) # N # N # # coincide
+R_X N1 # # N # N # # coincide
+R_My N1 −q·L₁²/# # N·m # N·m # # coincide
+Uz N2 −q·L₁⁴/(#EI) # m # m # # coincide
+Uz N3 Uz(N2) + (dUz/dx)(N2)·L₂ # m # m # # coincide
+T-PP-02: #/# magnitudes, coincide.
+
+== T-PP-03 · T-PP-01 a — Biempotrada con peso propio por γ·A ==
+Viga de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3, A = # m². Peso propio en modo γ con γ = # kN/m³: q = # N/m en B1 y B2.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Corrida plana del contraste: SUCCEEDED · run_id <uuid> · fórmulas del plano: coincide
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +qL/# # N # N # # coincide
+R_Z N3 +qL/# # N # N # # coincide
+R_X N1 # # N # N # # coincide
+R_My N1 −qL²/# # N·m # N·m # # coincide
+R_My N3 +qL²/# # N·m # N·m # # coincide
+Uz N2 −qL⁴/(#EI) # m # m # # coincide
+Ux N1 plano # m # m # # coincide
+Uy N1 # (fuera del plano) # m # m # # coincide
+Uz N1 plano # m # m # # coincide
+Rx N1 # (fuera del plano) # rad # rad # # coincide
+Ry N1 plano # rad # rad # # coincide
+Rz N1 # (fuera del plano) # rad # rad # # coincide
+Ux N2 plano # m # m # # coincide
+Uy N2 # (fuera del plano) # m # m # # coincide
+Uz N2 plano # m # m # # coincide
+Rx N2 # (fuera del plano) # rad # rad # # coincide
+Ry N2 plano # rad # rad # # coincide
+Rz N2 # (fuera del plano) # rad # rad # # coincide
+Ux N3 plano # m # m # # coincide
+Uy N3 # (fuera del plano) # m # m # # coincide
+Uz N3 plano # m # m # # coincide
+Rx N3 # (fuera del plano) # rad # rad # # coincide
+Ry N3 plano # rad # rad # # coincide
+Rz N3 # (fuera del plano) # rad # rad # # coincide
+R_X N1 plano # N # N # # coincide
+R_Y N1 # (fuera del plano) # N # N # # coincide
+R_Z N1 plano # N # N # # coincide
+R_MX N1 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N1 plano # N·m # N·m # # coincide
+R_MZ N1 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N2 # (fuera del plano) # N # N # # coincide
+R_MX N2 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N2 # (fuera del plano) # N·m # N·m # # coincide
+R_X N3 plano # N # N # # coincide
+R_Y N3 # (fuera del plano) # N # N # # coincide
+R_Z N3 plano # N # N # # coincide
+R_MX N3 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N3 plano # N·m # N·m # # coincide
+R_MZ N3 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B1 plano # N # N # # coincide
+pI_Vy B1 # (fuera del plano) # N # N # # coincide
+pI_Vz B1 plano # N # N # # coincide
+pI_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B1 plano # N·m # N·m # # coincide
+pI_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B1 plano # N # N # # coincide
+pJ_Vy B1 # (fuera del plano) # N # N # # coincide
+pJ_Vz B1 plano # N # N # # coincide
+pJ_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B1 plano # N·m # N·m # # coincide
+pJ_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B2 plano # N # N # # coincide
+pI_Vy B2 # (fuera del plano) # N # N # # coincide
+pI_Vz B2 plano # N # N # # coincide
+pI_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B2 plano # N·m # N·m # # coincide
+pI_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B2 plano # N # N # # coincide
+pJ_Vy B2 # (fuera del plano) # N # N # # coincide
+pJ_Vz B2 plano # N # N # # coincide
+pJ_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B2 plano # N·m # N·m # # coincide
+pJ_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. Fórmulas sobre el #D con #, y #D frente a plano con #; fuera del plano, frente a #.
+T-PP-03 · T-PP-01 a: #/# magnitudes, coincide.
+
+== T-PP-03 · T-PP-01 b — Biempotrada con peso propio por ρ·A·g (modo por defecto) ==
+Misma viga y mismo modelo que la variante a, sin γ: peso propio por ρ·A·g con g = # m/s²: q = # N/m en B1 y B2.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Corrida plana del contraste: SUCCEEDED · run_id <uuid> · fórmulas del plano: coincide
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +qL/# # N # N # # coincide
+R_Z N3 +qL/# # N # N # # coincide
+R_X N1 # # N # N # # coincide
+R_My N1 −qL²/# # N·m # N·m # # coincide
+R_My N3 +qL²/# # N·m # N·m # # coincide
+Uz N2 −qL⁴/(#EI) # m # m # # coincide
+Ux N1 plano # m # m # # coincide
+Uy N1 # (fuera del plano) # m # m # # coincide
+Uz N1 plano # m # m # # coincide
+Rx N1 # (fuera del plano) # rad # rad # # coincide
+Ry N1 plano # rad # rad # # coincide
+Rz N1 # (fuera del plano) # rad # rad # # coincide
+Ux N2 plano # m # m # # coincide
+Uy N2 # (fuera del plano) # m # m # # coincide
+Uz N2 plano # m # m # # coincide
+Rx N2 # (fuera del plano) # rad # rad # # coincide
+Ry N2 plano # rad # rad # # coincide
+Rz N2 # (fuera del plano) # rad # rad # # coincide
+Ux N3 plano # m # m # # coincide
+Uy N3 # (fuera del plano) # m # m # # coincide
+Uz N3 plano # m # m # # coincide
+Rx N3 # (fuera del plano) # rad # rad # # coincide
+Ry N3 plano # rad # rad # # coincide
+Rz N3 # (fuera del plano) # rad # rad # # coincide
+R_X N1 plano # N # N # # coincide
+R_Y N1 # (fuera del plano) # N # N # # coincide
+R_Z N1 plano # N # N # # coincide
+R_MX N1 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N1 plano # N·m # N·m # # coincide
+R_MZ N1 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N2 # (fuera del plano) # N # N # # coincide
+R_MX N2 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N2 # (fuera del plano) # N·m # N·m # # coincide
+R_X N3 plano # N # N # # coincide
+R_Y N3 # (fuera del plano) # N # N # # coincide
+R_Z N3 plano # N # N # # coincide
+R_MX N3 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N3 plano # N·m # N·m # # coincide
+R_MZ N3 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B1 plano # N # N # # coincide
+pI_Vy B1 # (fuera del plano) # N # N # # coincide
+pI_Vz B1 plano # N # N # # coincide
+pI_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B1 plano # N·m # N·m # # coincide
+pI_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B1 plano # N # N # # coincide
+pJ_Vy B1 # (fuera del plano) # N # N # # coincide
+pJ_Vz B1 plano # N # N # # coincide
+pJ_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B1 plano # N·m # N·m # # coincide
+pJ_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B2 plano # N # N # # coincide
+pI_Vy B2 # (fuera del plano) # N # N # # coincide
+pI_Vz B2 plano # N # N # # coincide
+pI_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B2 plano # N·m # N·m # # coincide
+pI_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B2 plano # N # N # # coincide
+pJ_Vy B2 # (fuera del plano) # N # N # # coincide
+pJ_Vz B2 plano # N # N # # coincide
+pJ_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B2 plano # N·m # N·m # # coincide
+pJ_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. Fórmulas sobre el #D con #, y #D frente a plano con #; fuera del plano, frente a #.
+T-PP-03 · T-PP-01 b: #/# magnitudes, coincide.
+
+== T-PP-03 · T-PP-02 — Voladizo con una barra excluida del peso propio ==
+Voladizo de # m en +X (B1 = N1→N2, B2 = N2→N3), empotrado en N1, A = # m². Peso propio en modo γ con γ = # kN/m³ (q = # N/m) y B2 excluida: solo B1 pesa y B2 es un tramo sin peso que gira como sólido rígido.
+
+Estado: SUCCEEDED
+run_id: <uuid>
+model_revision: # · caso <uuid> rev #
+Versiones: <entorno>
+Inicio (UTC): <utc> · duración # s
+Salvaguarda de singularidad: <pivote>
+Diagnósticos: ninguno
+Corrida plana del contraste: SUCCEEDED · run_id <uuid> · fórmulas del plano: coincide
+Hipótesis:
+- Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la base global de ADR-001.
+- Barras Euler–Bernoulli #D sin deformación por cortante; torsión uniforme de Saint-Venant sin alabeo; se usan A, Iy, Iz, J, E y G; Iyz = #.
+- Restricciones por multiplicadores de Lagrange con factores escalados a la mayor rigidez diagonal de las barras.
+- Resultados normalizados a ADR-001 (ejes globales y locales de Veritas) con seis componentes calculadas; formulación espacial contrastada solo con su batería declarada (T-018); este resultado no está validado; aplicación experimental.
+
+Magnitud Fórmula Referencia Calculado Error rel. Tol. Resultado
+--- --- --- --- --- --- ---
+R_Z N1 +q·L₁ (solo B1) # N # N # # coincide
+R_X N1 # # N # N # # coincide
+R_My N1 −q·L₁²/# # N·m # N·m # # coincide
+Uz N2 −q·L₁⁴/(#EI) # m # m # # coincide
+Uz N3 Uz(N2) + (dUz/dx)(N2)·L₂ # m # m # # coincide
+Ux N1 plano # m # m # # coincide
+Uy N1 # (fuera del plano) # m # m # # coincide
+Uz N1 plano # m # m # # coincide
+Rx N1 # (fuera del plano) # rad # rad # # coincide
+Ry N1 plano # rad # rad # # coincide
+Rz N1 # (fuera del plano) # rad # rad # # coincide
+Ux N2 plano # m # m # # coincide
+Uy N2 # (fuera del plano) # m # m # # coincide
+Uz N2 plano # m # m # # coincide
+Rx N2 # (fuera del plano) # rad # rad # # coincide
+Ry N2 plano # rad # rad # # coincide
+Rz N2 # (fuera del plano) # rad # rad # # coincide
+Ux N3 plano # m # m # # coincide
+Uy N3 # (fuera del plano) # m # m # # coincide
+Uz N3 plano # m # m # # coincide
+Rx N3 # (fuera del plano) # rad # rad # # coincide
+Ry N3 plano # rad # rad # # coincide
+Rz N3 # (fuera del plano) # rad # rad # # coincide
+R_X N1 plano # N # N # # coincide
+R_Y N1 # (fuera del plano) # N # N # # coincide
+R_Z N1 plano # N # N # # coincide
+R_MX N1 # (fuera del plano) # N·m # N·m # # coincide
+R_MY N1 plano # N·m # N·m # # coincide
+R_MZ N1 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N2 # (fuera del plano) # N # N # # coincide
+R_MX N2 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N2 # (fuera del plano) # N·m # N·m # # coincide
+R_Y N3 # (fuera del plano) # N # N # # coincide
+R_MX N3 # (fuera del plano) # N·m # N·m # # coincide
+R_MZ N3 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B1 plano # N # N # # coincide
+pI_Vy B1 # (fuera del plano) # N # N # # coincide
+pI_Vz B1 plano # N # N # # coincide
+pI_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B1 plano # N·m # N·m # # coincide
+pI_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B1 plano # N # N # # coincide
+pJ_Vy B1 # (fuera del plano) # N # N # # coincide
+pJ_Vz B1 plano # N # N # # coincide
+pJ_T B1 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B1 plano # N·m # N·m # # coincide
+pJ_Mz B1 # (fuera del plano) # N·m # N·m # # coincide
+pI_N B2 plano # N # N # # coincide
+pI_Vy B2 # (fuera del plano) # N # N # # coincide
+pI_Vz B2 plano # N # N # # coincide
+pI_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pI_My B2 plano # N·m # N·m # # coincide
+pI_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_N B2 plano # N # N # # coincide
+pJ_Vy B2 # (fuera del plano) # N # N # # coincide
+pJ_Vz B2 plano # N # N # # coincide
+pJ_T B2 # (fuera del plano) # N·m # N·m # # coincide
+pJ_My B2 plano # N·m # N·m # # coincide
+pJ_Mz B2 # (fuera del plano) # N·m # N·m # # coincide
+Contraste espacial-plano: modelo plano con Uy, Rx y Rz fijos en todos los nudos. Fórmulas sobre el #D con #, y #D frente a plano con #; fuera del plano, frente a #.
+T-PP-03 · T-PP-02: #/# magnitudes, coincide.
+
+«coincide» = |calculado − referencia| ≤ tolerancia · max(|referencia|, S), con S la mayor |referencia| de la misma magnitud en el caso. Coincidir con la referencia analítica dentro de la tolerancia no valida la aplicación.
+Las # variantes coinciden con sus fórmulas cerradas y el adaptador plano dentro de la tolerancia; no valida la aplicación.
+
+AVISO: aplicación experimental. No apta para justificar obras reales sin validación independiente por profesionales competentes.
+--- stderr
+
+--- 0

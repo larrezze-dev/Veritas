@@ -31,7 +31,7 @@ from veritas.core.diagnostics import DiagnosticError, ParamValue
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.vector import Vec3
 from veritas.core.loads.load_case import LoadCategory
-from veritas.core.loads.loads import LoadBasis
+from veritas.core.loads.loads import LoadBasis, SelfWeightMode
 from veritas.core.materials.material import MaterialFamily
 from veritas.core.presentation import QuantityKind
 from veritas.core.sections.rectangular import rectangular_properties
@@ -237,6 +237,12 @@ class _Case:
         )
         self.ids[label] = member.id
         return member.id
+
+    def use_specific_weight(self, value_n_m3: float) -> None:
+        """Declara γ en el material (nueva revisión); las barras creadas después la usan (T-019)."""
+        self.material = self.model.revise_material(
+            self.material.id, specific_weight=u.Quantity.of(value_n_m3, "N/m³")
+        )
 
     def settle(self, node: str, **components: float) -> None:
         """Asiento en el caso del modelo: ux, uy y uz en m; rx, ry y rz en rad (T-016)."""
@@ -789,7 +795,7 @@ def _run_spec(spec: _Spec, timeout_s: float | None) -> ReferenceOutcome:
 
 
 def _planar_case(spec: _Spec, timeout_s: float | None) -> tuple[_Case, ReferenceOutcome]:
-    case = _Case()
+    case = _Case(spec.category)
     spec.build(case)
     config = AnalysisConfiguration(case.load_case.id)
     if timeout_s is not None:
@@ -2898,4 +2904,161 @@ def run_cargas_barra_battery(
     outcomes: list[ReferenceOutcome | SpatialReferenceOutcome] = []
     for case_id in CB_CASES:
         outcomes += run_cargas_barra_reference(case_id, timeout_s)
+    return tuple(outcomes)
+
+
+# === Peso propio con γ y selección de barras T-PP (plan T-019, E2) ==========================
+#
+# Referencias independientes de ``self_weight_loads``: fórmulas cerradas de Euler-Bernoulli con
+# q = γ·A (o ρ·A·g) como carga uniforme hacia −Z, sin valores normativos (γ y g son sintéticos
+# y redondos). Signos de T-ASI: carga hacia −Z da R_My < 0 en el extremo I y R_My > 0 en el J.
+
+PP_GAMMA: Final = 25_000.0  # N/m³ (25 kN/m³), sintético
+PP_GRAVITY: Final = 10.0  # m/s², sintético
+PP_AREA: Final = B * H  # 0,08 m²
+PP_Q_GAMMA: Final = PP_GAMMA * PP_AREA  # 2000 N/m
+PP_Q_DENSITY: Final = 7850.0 * PP_AREA * PP_GRAVITY  # 6280 N/m
+PP_CASES: Final = ("T-PP-01", "T-PP-02")
+PP_CROSS_CASE: Final = "T-PP-03"
+
+PP_HYPOTHESES: Final = (
+    Text.of("benchmark.hypothesis_peso_propio"),
+    Text.of(
+        "benchmark.hypothesis_peso_propio_values",
+        gamma_kn_m3=PP_GAMMA / 1000,
+        gravity=PP_GRAVITY,
+        q_gamma=PP_Q_GAMMA,
+        q_density=PP_Q_DENSITY,
+    ),
+    SPATIAL_HYPOTHESES[1],
+)
+
+
+def _build_pp01a(case: _Case) -> None:
+    case.use_specific_weight(PP_GAMMA)
+    _settled_beam(case, fixed_restraints(), "Empotramiento 2")
+    case.model.set_self_weight(case.load_case.id, mode=SelfWeightMode.SPECIFIC_WEIGHT)
+
+
+def _build_pp01b(case: _Case) -> None:
+    _settled_beam(case, fixed_restraints(), "Empotramiento 2")
+    case.model.set_self_weight(case.load_case.id, gravity=u.Quantity.of(PP_GRAVITY, "m/s²"))
+
+
+def _rows_pp01(c: _Case, q: float) -> list[Row]:
+    force, moment = q * SPAN / 2, q * SPAN**2 / 12
+    return [
+        ("R_Z N1", "+qL/2", FORCE, force, c.reaction("N1", FZ)),
+        ("R_Z N3", "+qL/2", FORCE, force, c.reaction("N3", FZ)),
+        ("R_X N1", "0", FORCE, 0.0, c.reaction("N1", FX)),
+        ("R_My N1", "−qL²/12", MOMENT, -moment, c.reaction("N1", MY)),
+        ("R_My N3", "+qL²/12", MOMENT, moment, c.reaction("N3", MY)),
+        ("Uz N2", "−qL⁴/(384EI)", DISP, -q * SPAN**4 / (384 * EI), c.disp("N2", UZ)),
+    ]
+
+
+def _build_pp02(case: _Case) -> None:
+    """Voladizo B1 + B2 con B2 excluida: solo B1 (L/2) pesa; B2 es un tramo sin peso."""
+    case.use_specific_weight(PP_GAMMA)
+    case.node("N1", 0.0)
+    case.node("N2", SPAN / 2)
+    case.node("N3", SPAN)
+    case.member("B1", "N1", "N2")
+    case.member("B2", "N2", "N3")
+    case.support("N1", fixed_restraints(), "Empotramiento")
+    case.model.set_self_weight(
+        case.load_case.id,
+        mode=SelfWeightMode.SPECIFIC_WEIGHT,
+        excluded_members=[case.ids["B2"]],
+    )
+
+
+def _rows_pp02(c: _Case) -> list[Row]:
+    q, ell = PP_Q_GAMMA, SPAN / 2  # L de B1 y de B2
+    tip = -q * ell**4 / (8 * EI)
+    slope = -q * ell**3 / (6 * EI)  # pendiente dUz/dx de N2 (no el giro Ry)
+    return [
+        ("R_Z N1", "+q·L₁ (solo B1)", FORCE, q * ell, c.reaction("N1", FZ)),
+        ("R_X N1", "0", FORCE, 0.0, c.reaction("N1", FX)),
+        ("R_My N1", "−q·L₁²/2", MOMENT, -q * ell**2 / 2, c.reaction("N1", MY)),
+        ("Uz N2", "−q·L₁⁴/(8EI)", DISP, tip, c.disp("N2", UZ)),
+        ("Uz N3", "Uz(N2) + (dUz/dx)(N2)·L₂", DISP, tip + slope * ell, c.disp("N3", UZ)),
+    ]
+
+
+def _pp_spec(
+    case_id: str,
+    name: str,
+    build: Callable[[_Case], None],
+    rows: Callable[[_Case], list[Row]],
+    params: Mapping[str, ParamValue],
+) -> _Spec:
+    return _Spec(
+        case_id,
+        Text.of(f"benchmark.title_peso_propio_{name}"),
+        Text.of(f"benchmark.description_peso_propio_{name}", **params),
+        TOL_EXACT,
+        build,
+        rows,
+        _no_notes,
+        None,
+        LoadCategory.PERMANENT,
+    )
+
+
+_PP_PARAMS: Final = {"span": SPAN, "area": PP_AREA}
+
+PP_SPECS: Final[dict[str, tuple[_Spec, ...]]] = {
+    "T-PP-01": (
+        _pp_spec(
+            "T-PP-01 a",
+            "gamma_fixed",
+            _build_pp01a,
+            lambda c: _rows_pp01(c, PP_Q_GAMMA),
+            {**_PP_PARAMS, "gamma_kn_m3": PP_GAMMA / 1000, "q": PP_Q_GAMMA},
+        ),
+        _pp_spec(
+            "T-PP-01 b",
+            "density_fixed",
+            _build_pp01b,
+            lambda c: _rows_pp01(c, PP_Q_DENSITY),
+            {**_PP_PARAMS, "gravity": PP_GRAVITY, "q": PP_Q_DENSITY},
+        ),
+    ),
+    "T-PP-02": (
+        _pp_spec(
+            "T-PP-02",
+            "excluded",
+            _build_pp02,
+            _rows_pp02,
+            {**_PP_PARAMS, "gamma_kn_m3": PP_GAMMA / 1000, "q": PP_Q_GAMMA},
+        ),
+    ),
+}
+
+
+def run_peso_propio_cross(timeout_s: float | None = None) -> tuple[SpatialReferenceOutcome, ...]:
+    """T-PP-03: T-PP-01 y T-PP-02 en 3D frente a sus fórmulas y al adaptador plano (D1 de T-018)."""
+    outcomes = (_run_cross_spec(spec, timeout_s) for item in PP_CASES for spec in PP_SPECS[item])
+    return tuple(replace(o, case_id=f"{PP_CROSS_CASE} · {o.case_id}") for o in outcomes)
+
+
+def run_peso_propio_reference(
+    case_id: str, timeout_s: float | None = None
+) -> tuple[ReferenceOutcome | SpatialReferenceOutcome, ...]:
+    """T-PP-01 y T-PP-02 con el adaptador plano; T-PP-03, el contraste con el espacial."""
+    if case_id in PP_CASES:
+        return tuple(_run_spec(spec, timeout_s) for spec in PP_SPECS[case_id])
+    if case_id == PP_CROSS_CASE:
+        return run_peso_propio_cross(timeout_s)
+    raise ValueError(f"caso de peso propio desconocido: {case_id}")
+
+
+def run_peso_propio_battery(
+    timeout_s: float | None = None,
+) -> tuple[ReferenceOutcome | SpatialReferenceOutcome, ...]:
+    """Batería completa de ``veritas analyze peso-propio``: T-PP-01…03, en ese orden."""
+    outcomes: list[ReferenceOutcome | SpatialReferenceOutcome] = []
+    for case_id in (*PP_CASES, PP_CROSS_CASE):
+        outcomes += run_peso_propio_reference(case_id, timeout_s)
     return tuple(outcomes)

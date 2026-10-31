@@ -29,6 +29,8 @@ El Product Owner puede probar cada fase y detener el desarrollo sin invalidar lo
 
 **T-015 (cargas de barra ampliadas, F5A adelantado; [plan](../plans/T-015.md), [ADR-005](adr/ADR-005-fuerzas-empotramiento-veritas.md) ACCEPTED):** casi cerrado. E1 (dominio) y E2.0–E2.3 (biblioteca de p0, adaptador plano, adaptador espacial y batería T-CB con `veritas analyze cargas-barra`) aceptadas por el usuario el 2026-10-30 y el 2026-10-31. Protocolo plano v4 y espacial v5, adaptadores «5». **E2.4 (cierre documental) pendiente de aceptación del usuario**; su aceptación cierra T-015. No altera la puerta de F5A ni el estado de F1–F1C.
 
+**T-019 (peso específico γ y selección de barras del peso propio, F5A adelantado; [plan](../plans/T-019.md), sin ADR nuevo):** plan aprobado el 2026-10-31 (D1–D10 = A). E1 (dominio, unidades y `load selfweight --gamma`) aceptada el 2026-10-31. E2 (los cinco consumidores sobre `self_weight_loads()`, batería T-PP-01…03 con `veritas analyze peso-propio` y cierre documental) aceptada por el usuario el 2026-10-31: **T-019 ACEPTADO**. Adaptadores «5» y protocolos v4/v5 sin cambio. No altera la puerta de F5A ni el estado de F1–F1C.
+
 Estados admitidos: `NO INICIADA`, `EN CURSO`, `EN VALIDACIÓN` (entregada, esperando aceptación del usuario), `ACEPTADA` (con fecha y referencia a la aceptación expresa) y `RECHAZADA` (en corrección dentro de la misma fase).
 
 ## Prioridades internas

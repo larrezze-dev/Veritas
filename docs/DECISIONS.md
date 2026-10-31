@@ -62,6 +62,8 @@ Fecha de base: 2026-10-24. Fuente: decisiones del Product Owner incorporadas en 
 - E2.3 (aceptada 2026-10-31, «E2.3 (con E2.3-a..e) aceptado»): E2.3-a, barra auxiliar descargada en T-CB-01 y 02, y variantes a/b/c y a/b; E2.3-b, R-SUB contrasta con la barra subdividida; E2.3-c, T-CB-07 sin flexión 3D (cubierta por E2.2); E2.3-d, nueva línea «Cargas» de `info`; E2.3-e, golden solo para el comando nuevo.
 - E2.4 (cierre documental, 2026-10-31): en curso; pendiente de aceptación del usuario, que cierra T-015.
 
+**Aprobación del plan T-019** (peso específico γ y selección de barras del peso propio), registrada en el [plan T-019](../plans/T-019.md): plan aprobado el 2026-10-31 («A en todas»), D1–D10 = A, con las reglas derivadas de D3-A y D8-A. Sin ADR nuevo (D10-A): nota «Ampliación T-019» y línea de historial en ADR-001. E1 aceptada el 2026-10-31 (incluido el rechazo provisional de los traductores y el cambio de `units list`/`units profiles`). E2 (2026-10-31): sin desviaciones; D6-A confirmada por la prueba de identidad de la petición (adaptadores «5», protocolos v4/v5); retirado el rechazo provisional; batería T-PP-01…03 y `veritas analyze peso-propio`. E2 aceptada el 2026-10-31 («todo aceptado»): **T-019 ACEPTADO**.
+
 Los ADR complementan DEC-001…010 sin sustituirlas. Aprobar un ADR no declara implementadas sus capacidades ni valida un solver. Al aprobar o rechazar un ADR, actualizar su estado aquí y en el propio ADR con fecha y referencia a la aprobación expresa del usuario.
 
 No desarrollar verificación normativa de aluminio bajo etiqueta «CTE»: no existe un DB-SE específico de aluminio equivalente a acero/madera. El análisis FEM seguirá disponible; mostrar NO_COMPROBADO hasta seleccionar/validar normativa.

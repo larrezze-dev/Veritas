@@ -228,10 +228,6 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "fem.load_type_unsupported": (
         "Carga de tipo {type} que el análisis plano no admite; no se ignora."
     ),
-    "fem.self_weight_option_pending": (
-        "El peso propio con peso específico γ o con barras excluidas aún no se traduce en el "
-        "análisis plano (plan T-019, E2); no se aplica como peso propio de todas las barras."
-    ),
     "fem.empty_case": "El caso «{case}» no tiene cargas.",
     "fem.too_many_dofs": (
         "El modelo tiene {count} GDL libres; la comprobación de singularidad admite como máximo "
@@ -371,10 +367,6 @@ MESSAGES_ES: Final[dict[str, str]] = {
     ),
     "fem3d.load_type_unsupported": (
         "Carga de tipo {type} que el análisis espacial no admite; no se ignora."
-    ),
-    "fem3d.self_weight_option_pending": (
-        "El peso propio con peso específico γ o con barras excluidas aún no se traduce en el "
-        "análisis espacial (plan T-019, E2); no se aplica como peso propio de todas las barras."
     ),
     "fem3d.hypothesis_spatial": (
         "Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la "
@@ -654,6 +646,35 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "benchmark.note_settlement_superposition": (
         "Filas «A + Q»: la corrida A+Q frente a la suma de las corridas A y Q en cada "
         "componente calculada; las fórmulas cerradas son la referencia independiente."
+    ),
+    "benchmark.hypothesis_peso_propio": (
+        "Peso propio (plan T-019): Euler-Bernoulli, estática lineal, sección rectangular "
+        "constante, dos elementos por vano; carga uniforme hacia −Z con q = γ·A o q = ρ·A·g. "
+        "Referencias por cuerpo libre con EI = E·b·h³/12; γ y g son valores sintéticos, sin "
+        "tabla normativa."
+    ),
+    "benchmark.hypothesis_peso_propio_values": (
+        "γ = {gamma_kn_m3:g} kN/m³ (q = {q_gamma:g} N/m), g = {gravity:g} m/s² con ρ = 7850 "
+        "kg/m³ (q = {q_density:g} N/m); las barras excluidas no se derivan ni cargan."
+    ),
+    "benchmark.title_peso_propio_gamma_fixed": "Biempotrada con peso propio por γ·A",
+    "benchmark.title_peso_propio_density_fixed": (
+        "Biempotrada con peso propio por ρ·A·g (modo por defecto)"
+    ),
+    "benchmark.title_peso_propio_excluded": "Voladizo con una barra excluida del peso propio",
+    "benchmark.description_peso_propio_gamma_fixed": (
+        "Viga de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrada en N1 y N3, A = "
+        "{area:g} m². Peso propio en modo γ con γ = {gamma_kn_m3:g} kN/m³: q = {q:g} N/m "
+        "en B1 y B2."
+    ),
+    "benchmark.description_peso_propio_density_fixed": (
+        "Misma viga y mismo modelo que la variante a, sin γ: peso propio por ρ·A·g con g = "
+        "{gravity:g} m/s²: q = {q:g} N/m en B1 y B2."
+    ),
+    "benchmark.description_peso_propio_excluded": (
+        "Voladizo de {span:g} m en +X (B1 = N1→N2, B2 = N2→N3), empotrado en N1, A = {area:g} "
+        "m². Peso propio en modo γ con γ = {gamma_kn_m3:g} kN/m³ (q = {q:g} N/m) y B2 "
+        "excluida: solo B1 pesa y B2 es un tramo sin peso que gira como sólido rígido."
     ),
     "benchmark.hypothesis_cargas_barra": (
         "Cargas de barra ampliadas (plan T-015): Euler-Bernoulli prismático, estática lineal; "

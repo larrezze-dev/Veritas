@@ -36,7 +36,6 @@ from veritas.core.loads.loads import (
     MemberUniformLoad,
     NodalLoad,
     SelfWeight,
-    SelfWeightMode,
     SupportSettlement,
 )
 from veritas.core.materials.material import MaterialFamily
@@ -412,15 +411,9 @@ class _Builder:
             elif isinstance(load, MemberUniformLoad):
                 beam.append(self._beam_load(load.member_id, self._member_q(load, location)))
             elif isinstance(load, SelfWeight):
-                if load.mode is not SelfWeightMode.MASS_DENSITY or load.excluded_members:
-                    raise _unsupported(
-                        "fem.self_weight_option_pending",
-                        {},
-                        Location(entity_id=load.id, revision=load.revision),
-                    )
-                for member_id, _ in _ordered(self.model.members):
-                    q_z = self.model.self_weight_load(member_id)[2].si_value
-                    beam.append(self._beam_load(member_id, Vec3(0.0, 0.0, q_z)))
+                # Fuente única (T-019, D4-A): solo las barras incluidas, con γ·A o ρ·A·g.
+                for member_id, weight in _ordered(self.model.self_weight_loads()):
+                    beam.append(self._beam_load(member_id, Vec3(0.0, 0.0, weight[2].si_value)))
             elif isinstance(load, SupportSettlement):
                 settlements.extend(self._settlement(load, location))
             elif isinstance(

@@ -557,8 +557,11 @@ class _Normalizer:
                     q = self.model.axes(load.member_id).to_global(q)
                 distributed[load.member_id] = distributed.get(load.member_id, _zero()) + q
             elif isinstance(load, SelfWeight):
+                included = self.model.self_weight_loads()  # T-019, D4-A: solo las incluidas.
                 for member_id in self.model.members:
-                    weight = Vec3(*(c.si_value for c in self.model.self_weight_load(member_id)))
+                    if member_id not in included:
+                        continue
+                    weight = Vec3(*(c.si_value for c in included[member_id]))
                     distributed[member_id] = distributed.get(member_id, _zero()) + weight
             elif isinstance(load, SupportSettlement):
                 continue  # T-016, D7: acción sin fuerza prescrita; no aporta q ni P.

@@ -192,21 +192,16 @@ def test_default_set_self_weight_is_unchanged() -> None:
     assert sw.gravity == 9.80665
 
 
-def test_translators_reject_new_options_until_e2() -> None:
-    """E1: ningún adaptador aplica γ ni exclusiones; falla explícito, no peso equivocado."""
-    model, (first, _), case = build(members=2)
-    model.set_self_weight(case.id, excluded_members=[first.id])
-    with pytest.raises(InputValueError) as info:
-        translate_planar_xz(model, AnalysisConfiguration(case.id))
-    assert info.value.diagnostic.message_key == "fem.self_weight_option_pending"
-    with pytest.raises(InputValueError) as info:
-        translate_spatial(model, SpatialAnalysisConfiguration(case.id))
-    assert info.value.diagnostic.message_key == "fem3d.self_weight_option_pending"
-    gamma_model, _, gamma_case = build()
-    gamma_model.set_self_weight(gamma_case.id, mode=SelfWeightMode.SPECIFIC_WEIGHT)
-    with pytest.raises(InputValueError) as info:
-        translate_planar_xz(gamma_model, AnalysisConfiguration(gamma_case.id))
-    assert info.value.diagnostic.message_key == "fem.self_weight_option_pending"
+def test_translators_apply_gamma_and_exclusions() -> None:
+    """E2: los dos traductores aplican γ y exclusiones (ya no se rechazan como en E1)."""
+    model, (first, second), case = build(members=2)
+    model.set_self_weight(case.id, mode=SelfWeightMode.SPECIFIC_WEIGHT, excluded_members=[first.id])
+    planar = translate_planar_xz(model, AnalysisConfiguration(case.id)).request
+    spatial = translate_spatial(model, SpatialAnalysisConfiguration(case.id)).request
+    for request in (planar, spatial):
+        (beam,) = [b for b in request.beams if b.entity_id == str(second.id)]
+        assert [load.beam for load in request.beam_loads] == [beam.tag]
+    assert planar.beam_loads[0].wy == pytest.approx(-2000.0, rel=1e-12)
 
 
 SELFWEIGHT = ["load", "selfweight", "--b", "0.2", "--h", "0.4", "--length", "2 m"]

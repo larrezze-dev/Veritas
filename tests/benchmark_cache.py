@@ -77,3 +77,22 @@ def run_cargas_barra_battery(
     if timeout_s not in (None, DEFAULT_TIMEOUT_S):
         return _RUN_CARGAS_BARRA_BATTERY(timeout_s)
     return _cargas_barra_battery()
+
+
+_RUN_PESO_PROPIO_BATTERY = benchmarks.run_peso_propio_battery
+
+
+@cache
+def _peso_propio_battery() -> tuple[
+    benchmarks.ReferenceOutcome | benchmarks.SpatialReferenceOutcome, ...
+]:
+    return _RUN_PESO_PROPIO_BATTERY()
+
+
+def run_peso_propio_battery(
+    timeout_s: float | None = None,
+) -> tuple[benchmarks.ReferenceOutcome | benchmarks.SpatialReferenceOutcome, ...]:
+    """Batería T-PP (plan T-019, E2), una vez por sesión con el tiempo límite por defecto."""
+    if timeout_s not in (None, DEFAULT_TIMEOUT_S):
+        return _RUN_PESO_PROPIO_BATTERY(timeout_s)
+    return _peso_propio_battery()
