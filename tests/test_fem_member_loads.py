@@ -302,11 +302,11 @@ SUB_CASES = {
     "rigido": (None, pinned_j, TOL),
     "liberado": (RELEASED_RY, fixed_j, TOL),
     "resorte": (spring_ry(5e6), pinned_j, TOL),
+    # Rodillo inclinado penalizado (D11): T-021 corrigió la cota de la normalización, que
+    # rechazaba a veces el modelo subdividido según el orden de los UUID (E2.1-e).
+    "penalizado": (None, inclined_roller_j, TOL),
 }
-# Apoyo inclinado penalizado (D11) solo en R-EQ: el modelo subdividido de referencia, que solo
-# usa tipos ya aceptados, falla a veces el equilibrio de nudos de la normalización según el
-# orden de tags (hallazgo previo a T-015, registrado en el plan).
-EQ_CASES = {**SUB_CASES, "penalizado": (None, inclined_roller_j, TOL)}
+EQ_CASES = SUB_CASES
 
 
 @pytest.mark.solver

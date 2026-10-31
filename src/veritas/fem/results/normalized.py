@@ -64,6 +64,10 @@ HYPOTHESIS_SUPPORT_PROJECTION: Final = "fem.hypothesis_support_projection"
 
 # Constante c de la cota de redondeo c·eps·Σ|k_ij·u_j| (la de T-007, R1-R2).
 ROUNDING_FACTOR: Final = 10.0
+# Fila de momento de un nudo con resorte de penalización (T-021): la eliminación con un nudo
+# 1e2…1e12 veces más rígido amplifica el redondeo de esa fila hasta 33,5·eps·Σ|k·u| (sonda de
+# E1, 900 corridas); 200 deja un margen de 6×. No depende de k_pen: el residuo no escala con él.
+ROUNDING_FACTOR_PENALTY_MOMENT: Final = 200.0
 # Coherencia de Q (B1): |componente fuera del plano| ≤ (2·tol_axis + 4·eps)·‖v‖. El factor 2
 # acota |ex·Y| + |ez·Y| (≈ √2·tol_axis con Q casi ortogonal). Es una defensa: rama y Q salen
 # del mismo modelo ya verificado, así que no es alcanzable por la API pública. No distingue
@@ -650,7 +654,11 @@ class _Normalizer:
         return UUID(self.request.case_id)
 
     def _rounding_bounds(self) -> dict[int, tuple[float, float]]:
-        """Cota c·eps·Σ|k_ij·u_j| por nudo, en filas de fuerza y de momento (M2)."""
+        """Cota c·eps·Σ|k_ij·u_j| por nudo, en filas de fuerza y de momento (M2).
+
+        c = ``ROUNDING_FACTOR``; en la fila de momento de un nudo con resorte de penalización,
+        ``ROUNDING_FACTOR_PENALTY_MOMENT`` (T-021).
+        """
         displacement: dict[int, tuple[float, ...]] = {
             self.tag_of[k]: v for k, v in self.displacement.items()
         }
@@ -673,9 +681,12 @@ class _Normalizer:
                 entry[1 if row % 3 == 2 else 0] += sum(  # noqa: PLR2004 (filas de giro)
                     abs(k * v) for k, v in zip(values, u, strict=True)
                 )
+        penalized: set[int] = set()
         for spring in self.request.springs:
             node_u = displacement[spring.node]
             entry = bounds.setdefault(spring.node, [0.0, 0.0])
+            if spring.penalty:
+                penalized.add(spring.node)
             if spring.dof == 3:  # noqa: PLR2004 (dirección 3 = giro)
                 entry[1] += spring.stiffness * abs(node_u[2])
             else:
@@ -687,7 +698,11 @@ class _Normalizer:
                 entry = bounds.setdefault(link.master, [0.0, 0.0])
                 entry[1] += 2.0 * link.stiffness * rotations
         scale = ROUNDING_FACTOR * _EPS
-        return {tag: (scale * f, scale * m) for tag, (f, m) in bounds.items()}
+        moment_scale = ROUNDING_FACTOR_PENALTY_MOMENT * _EPS
+        return {
+            tag: (scale * f, (moment_scale if tag in penalized else scale) * m)
+            for tag, (f, m) in bounds.items()
+        }
 
 
 def normalize_planar_xz(run: AnalysisRun, model: StructuralModel) -> PlanarResults:
