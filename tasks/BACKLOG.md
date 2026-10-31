@@ -112,3 +112,4 @@ Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se 
 - 2026-10-31: plan T-021 aprobado por el usuario («Aplica lo que propones como recomendación»): D1–D5 = A. T-021 empieza tras cerrar T-015 (E2.4), no antes.
 - 2026-10-31: T-015 E2.4 aceptada por el usuario («todo aceptado»): **T-015 ACEPTADO**. Se inicia T-021 E1 (sonda y regla).
 - 2026-10-31: T-021 E1 aceptada (regla c_p = 200). E2 entregada: cota corregida, 19 pruebas nuevas y caso «penalizado» en R-SUB; suite 2532 passed. Pendiente de aceptación del usuario.
+- 2026-10-31: T-021 E2 aceptada por el usuario («aceptado»): **T-021 ACEPTADO**. Siguiente según el orden: T-019, solo con autorización para planificarlo.
