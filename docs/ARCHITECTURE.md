@@ -101,6 +101,10 @@ Límites de T-016:
 
 Carpetas de trabajo de Claude Code (no son código de producto): `.claude/agents/` (subagentes del proyecto), `tasks/` (backlog y plantilla de ticket), `plans/` (plan y estado de aprobación por ticket), `handoffs/` (checkpoints de sesión).
 
+**Cifras significativas por magnitud (T-020 E1, plan [T-020](../plans/T-020.md); sin ADR nuevo, D9-A: la nota de ADR-001 se escribe en el cierre de E2).** E1 aceptada el 2026-10-31.
+- `core/presentation.py`: `Precision(mode, digits)` con `PrecisionMode.DECIMALS` (0 a 15) o `SIGNIFICANT` (1 a 15); `PresentationProfile.precision` (una por `QuantityKind`, por defecto 3 decimales, de modo que los perfiles integrados no cambian su salida); `precision_for` y `derive(name, changes, precision=…)`. `format_quantity(…, decimals=None)` usa la precisión del perfil y, con `decimals` explícito, el comportamiento anterior. Con cifras significativas, decimales fijos desde 10⁻³ y científica por debajo; un valor no nulo nunca se muestra como cero.
+- CLI: `--cifras MAGNITUD=N[,…]` solo en `analyze demo` (incluido `tres-materiales`) y `analyze uniones`; construye en memoria un perfil derivado (sin persistencia, T-012). Una magnitud o un N no válidos: `UNSUPPORTED_CONFIGURATION` con `presentation.invalid_digits_option`, código 2, sin ejecutar el análisis. Ninguna otra salida aceptada cambia.
+
 ## Convenciones
 
 Unidades SI internas; presentación configurable. [ADR-001](adr/ADR-001-convenciones-dominio.md), **aprobado** por el usuario el 2026-10-27, define los contratos de ejes, signos, identidad, revisiones y errores antes del primer cálculo. La UI nunca será el almacenamiento primario. Los contratos persistidos se versionan; cambios incompatibles requieren migración y prueba round-trip.

@@ -31,6 +31,8 @@ El Product Owner puede probar cada fase y detener el desarrollo sin invalidar lo
 
 **T-019 (peso específico γ y selección de barras del peso propio, F5A adelantado; [plan](../plans/T-019.md), sin ADR nuevo):** plan aprobado el 2026-10-31 (D1–D10 = A). E1 (dominio, unidades y `load selfweight --gamma`) aceptada el 2026-10-31. E2 (los cinco consumidores sobre `self_weight_loads()`, batería T-PP-01…03 con `veritas analyze peso-propio` y cierre documental) aceptada por el usuario el 2026-10-31: **T-019 ACEPTADO**. Adaptadores «5» y protocolos v4/v5 sin cambio. No altera la puerta de F5A ni el estado de F1–F1C.
 
+**T-020 (salto de extremo y cifras significativas, F6 adelantado; [plan](../plans/T-020.md), sin ADR nuevo):** plan aprobado el 2026-10-31 (D1–D9 = A). E1 (cifras significativas por magnitud y `--cifras`) aceptada el 2026-10-31; E2 (salto de extremo) pendiente de orden de inicio. No altera la puerta de F6 ni el estado de F1–F1C.
+
 Estados admitidos: `NO INICIADA`, `EN CURSO`, `EN VALIDACIÓN` (entregada, esperando aceptación del usuario), `ACEPTADA` (con fecha y referencia a la aceptación expresa) y `RECHAZADA` (en corrección dentro de la misma fase).
 
 ## Prioridades internas

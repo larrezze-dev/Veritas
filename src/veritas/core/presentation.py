@@ -9,6 +9,7 @@ usuario se crea con ``derive`` y no puede reutilizar sus nombres. La persistenci
 perfiles de usuario queda para el ticket de persistencia.
 """
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -76,6 +77,9 @@ _KIND_DIMENSIONS: Final[dict[QuantityKind, u.Dimension]] = {
 }
 
 MAX_DECIMALS: Final = 15
+# Notación científica con cifras significativas solo bajo 10⁻³: por encima el valor va en
+# decimales fijos (T-020, D7).
+_SIGNIFICANT_FIXED_MIN_EXPONENT: Final = -3
 
 _RESERVED_NAMES: Final = frozenset({"SI", "kN-m", "N-mm"})
 _creating_builtins = False  # Solo ``_builtin`` puede crear perfiles predefinidos.
@@ -97,13 +101,49 @@ def _type_error(field: str, expected: str, received: object) -> InputTypeError:
     )
 
 
+class PrecisionMode(StrEnum):
+    """Cómo se cuentan los dígitos mostrados (T-020, D7)."""
+
+    DECIMALS = "DECIMALS"
+    SIGNIFICANT = "SIGNIFICANT"
+
+
+@dataclass(frozen=True, slots=True)
+class Precision:
+    """Dígitos mostrados de una magnitud: decimales fijos (0 a ``MAX_DECIMALS``) o cifras
+    significativas (1 a ``MAX_DECIMALS``)."""
+
+    mode: PrecisionMode
+    digits: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.mode, PrecisionMode):
+            raise _type_error("Precision.mode", "PrecisionMode", self.mode)
+        if isinstance(self.digits, bool) or not isinstance(self.digits, int):
+            raise _type_error("Precision.digits", "int", self.digits)
+        lowest = 0 if self.mode is PrecisionMode.DECIMALS else 1
+        if not lowest <= self.digits <= MAX_DECIMALS:
+            raise _config_error(
+                "presentation.invalid_precision",
+                {"mode": str(self.mode), "digits": self.digits, "lowest": lowest},
+            )
+
+
+DEFAULT_PRECISION: Final = Precision(PrecisionMode.DECIMALS, 3)
+
+
 @dataclass(frozen=True, slots=True)
 class PresentationProfile:
-    """Unidad de presentación para cada ``QuantityKind``. Inmutable y completo."""
+    """Unidad y precisión de presentación para cada ``QuantityKind``. Inmutable y completo.
+
+    ``precision`` vacío (por defecto) equivale a ``DEFAULT_PRECISION`` (3 decimales) en todas
+    las magnitudes: los perfiles integrados no cambian su salida (T-020, D7-A).
+    """
 
     name: str
     units: tuple[tuple[QuantityKind, u.Unit], ...]
     builtin: bool = False
+    precision: tuple[tuple[QuantityKind, Precision], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str):
@@ -134,21 +174,47 @@ class PresentationProfile:
                 )
         ordered = tuple((kind, defined[kind]) for kind in QuantityKind)
         object.__setattr__(self, "units", ordered)
+        given = dict(self.precision)
+        if len(given) != len(self.precision):
+            raise _config_error("presentation.duplicate_kind", {"profile": self.name})
+        for kind, value in given.items():
+            if not isinstance(kind, QuantityKind):
+                raise _type_error("magnitud", "QuantityKind", kind)
+            if not isinstance(value, Precision):
+                raise _type_error(f"precisión de {kind}", "Precision", value)
+        object.__setattr__(
+            self,
+            "precision",
+            tuple((kind, given.get(kind, DEFAULT_PRECISION)) for kind in QuantityKind),
+        )
 
     def unit_for(self, kind: QuantityKind) -> u.Unit:
         """Unidad de presentación de ``kind``."""
         return dict(self.units)[kind]
 
+    def precision_for(self, kind: QuantityKind) -> Precision:
+        """Precisión de presentación de ``kind``."""
+        return dict(self.precision)[kind]
+
     def derive(
-        self, name: str, changes: Mapping[QuantityKind, "str | u.Unit"]
+        self,
+        name: str,
+        changes: Mapping[QuantityKind, "str | u.Unit"],
+        precision: Mapping[QuantityKind, Precision] | None = None,
     ) -> "PresentationProfile":
-        """Nuevo perfil de usuario basado en este, con las unidades indicadas cambiadas."""
+        """Nuevo perfil de usuario basado en este, con las unidades y precisiones indicadas
+        cambiadas (T-020, D7: ``precision`` es opcional)."""
         mapping = dict(self.units)
         for kind, unit in changes.items():
             if not isinstance(kind, QuantityKind):
                 raise _type_error("magnitud", "QuantityKind", kind)
             mapping[kind] = u.get_unit(unit)
-        return PresentationProfile(name, tuple(mapping.items()))
+        digits = dict(self.precision)
+        for kind, value in (precision or {}).items():
+            if not isinstance(kind, QuantityKind):
+                raise _type_error("magnitud", "QuantityKind", kind)
+            digits[kind] = value
+        return PresentationProfile(name, tuple(mapping.items()), precision=tuple(digits.items()))
 
 
 def _builtin(name: str, symbols: Mapping[QuantityKind, str]) -> PresentationProfile:
@@ -254,13 +320,15 @@ def format_quantity(
     quantity: u.Quantity,
     kind: QuantityKind,
     profile: PresentationProfile = PROFILE_SI,
-    decimals: int = 3,
+    decimals: int | None = None,
 ) -> str:
     """Texto ``"<valor> <unidad>"`` en la unidad del perfil para ``kind``.
 
-    Usa ``decimals`` decimales fijos. Un valor no nulo que se redondearía a cero se
-    muestra en notación científica con ``decimals`` decimales: nunca se presenta un cero
-    que no existe (ADR-001 §5). El cero negativo se muestra como cero.
+    Con ``decimals`` explícito usa esos decimales fijos; sin él, la precisión del perfil
+    para ``kind`` (3 decimales en los perfiles integrados). Un valor no nulo que se
+    redondearía a cero se muestra en notación científica: nunca se presenta un cero que no
+    existe (ADR-001 §5). Con cifras significativas un valor no nulo conserva siempre sus
+    cifras. El cero negativo se muestra como cero.
     """
     if not isinstance(quantity, u.Quantity):
         raise _type_error("magnitud", "Quantity", quantity)
@@ -268,17 +336,38 @@ def format_quantity(
         raise _type_error("tipo de magnitud", "QuantityKind", kind)
     if not isinstance(profile, PresentationProfile):
         raise _type_error("perfil", "PresentationProfile", profile)
-    if isinstance(decimals, bool) or not isinstance(decimals, int):
-        raise _type_error("decimales", "int", decimals)
-    if not 0 <= decimals <= MAX_DECIMALS:
-        raise _config_error("presentation.invalid_decimals", {"decimals": decimals})
+    if decimals is None:
+        precision = profile.precision_for(kind)
+    else:
+        if isinstance(decimals, bool) or not isinstance(decimals, int):
+            raise _type_error("decimales", "int", decimals)
+        if not 0 <= decimals <= MAX_DECIMALS:
+            raise _config_error("presentation.invalid_decimals", {"decimals": decimals})
+        precision = Precision(PrecisionMode.DECIMALS, decimals)
     quantity.require(kind.dimension)
     unit = profile.unit_for(kind)
     value = quantity.to(unit)
+    if precision.mode is PrecisionMode.SIGNIFICANT:
+        return f"{_significant_text(value, precision.digits)} {unit.symbol}"
+    places = precision.digits
     if value == 0.0:
-        text = f"{0.0:.{decimals}f}"
+        text = f"{0.0:.{places}f}"
     else:
-        text = f"{value:.{decimals}f}"
+        text = f"{value:.{places}f}"
         if not any(char in "123456789" for char in text):
-            text = f"{value:.{decimals}e}"
+            text = f"{value:.{places}e}"
     return f"{text} {unit.symbol}"
+
+
+def _significant_text(value: float, digits: int) -> str:
+    """``value`` con ``digits`` cifras significativas: decimales fijos desde 10⁻³ y
+    científica por debajo. Cero (también −0) como ``0.00…`` y no finito tal cual."""
+    if value == 0.0:
+        return f"{0.0:.{digits - 1}f}"
+    if not math.isfinite(value):
+        return f"{value}"
+    scientific = f"{value:.{digits - 1}e}"
+    exponent = int(scientific.split("e")[1])
+    if exponent < _SIGNIFICANT_FIXED_MIN_EXPONENT:
+        return scientific
+    return f"{float(scientific):.{max(digits - 1 - exponent, 0)}f}"

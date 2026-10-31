@@ -24,16 +24,20 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   origen y traza de ``model_revision``, código 0 (plan T-006). No son resultados de
   análisis y se dice expresamente.
 - ``veritas analyze demo [--caso viga|mecanismo|portico|tres-materiales|biempotrada]
-  [--timeout S] [--profile P] [--bruto]``: análisis plano XZ con OpenSeesPy en un proceso
-  aislado (plan T-007). ``tres-materiales`` compara uniones rígidas y un extremo liberado
-  (T-010); ``biempotrada`` se rechaza sin GDL libres (código 2, T-009 D3).
+  [--timeout S] [--profile P] [--bruto] [--cifras M=N,…]``: análisis plano XZ con OpenSeesPy
+  en un proceso aislado (plan T-007). ``tres-materiales`` compara uniones rígidas y un
+  extremo liberado (T-010); ``biempotrada`` se rechaza sin GDL libres (código 2, T-009 D3).
   Imprime estado, procedencia, diagnósticos y, solo si la corrida es SUCCEEDED, tablas
   normalizadas a ADR-001 (plan T-008): desplazamientos, reacciones y fuerzas/esfuerzos de
   extremo; ``--bruto`` añade la tabla BRUTA del solver. Código 0 si SUCCEEDED; 3 si FAILED
   o si la normalización no supera sus postcondiciones (sin resultados).
-- ``veritas analyze uniones [--timeout S] [--profile P]``: el mismo modelo con un extremo
-  rígido, liberado y con resorte, y un mecanismo diagnosticado (T-010, D7). Código 0 si las
-  tres variantes calculan y el mecanismo se rechaza; si no, 3.
+- ``veritas analyze uniones [--timeout S] [--profile P] [--cifras M=N,…]``: el mismo modelo
+  con un extremo rígido, liberado y con resorte, y un mecanismo diagnosticado (T-010, D7).
+  Código 0 si las tres variantes calculan y el mecanismo se rechaza; si no, 3.
+- ``--cifras MAGNITUD=N[,MAGNITUD=N…]`` (solo ``analyze demo`` y ``analyze uniones``,
+  T-020): N cifras significativas (1 a 15) para esas magnitudes de presentación
+  (``DISPLACEMENT``, ``FORCE``, ``MOMENT``, ``ANGLE``…); el resto sigue con 3 decimales.
+  Una magnitud o un N no válidos: ``CÓDIGO: mensaje`` en stderr, stdout vacío, código 2.
 - ``veritas analyze referencias [--caso T-FEM-001|…|T-CON-REF-04|todos] [--timeout S]
   [--profile P]``: contraste con las referencias T-FEM-001…004 (T-009) y T-CON-REF-01…04
   (T-010):
@@ -120,6 +124,9 @@ from veritas.core.materials.material import MaterialFamily, MaterialRevision
 from veritas.core.messages_es import MESSAGES_ES, render_message, render_text
 from veritas.core.presentation import (
     BUILTIN_PROFILES,
+    MAX_DECIMALS,
+    Precision,
+    PrecisionMode,
     PresentationProfile,
     QuantityKind,
     format_quantity,
@@ -344,6 +351,12 @@ def _add_analyze_parser(
     analyze_demo.add_argument(
         "--bruto", action="store_true", help="Añade la tabla BRUTA en la base del solver."
     )
+    analyze_demo.add_argument(
+        "--cifras",
+        default=None,
+        metavar="MAGNITUD=N[,…]",
+        help="Cifras significativas por magnitud (p. ej. DISPLACEMENT=4,ANGLE=5; T-020).",
+    )
     unions = analyze_sub.add_parser(
         "uniones", help="Compara extremo rígido, liberado y con resorte, y un mecanismo (T-010)."
     )
@@ -352,6 +365,12 @@ def _add_analyze_parser(
     )
     unions.add_argument(
         "--profile", default="SI", choices=profile_names, help="Perfil de unidades."
+    )
+    unions.add_argument(
+        "--cifras",
+        default=None,
+        metavar="MAGNITUD=N[,…]",
+        help="Cifras significativas por magnitud (p. ej. DISPLACEMENT=4,ANGLE=5; T-020).",
     )
     references = analyze_sub.add_parser(
         "referencias",
@@ -614,6 +633,38 @@ def format_member_axes(
 
 def _profile(name: str) -> PresentationProfile:
     return next(profile for profile in BUILTIN_PROFILES if profile.name == name)
+
+
+def _profile_with_digits(name: str, digits: str | None) -> PresentationProfile:
+    """Perfil integrado ``name`` y, con ``--cifras MAGNITUD=N[,…]``, un perfil derivado en
+    memoria con N cifras significativas por magnitud (T-020, D8-A; sin persistencia)."""
+    profile = _profile(name)
+    if digits is None:
+        return profile
+    kinds = ", ".join(kind.value for kind in QuantityKind)
+    precision: dict[QuantityKind, Precision] = {}
+    for item in digits.split(","):
+        key, separator, count = item.partition("=")
+        number = count.strip()
+        valid = (
+            separator == "="
+            and key.strip().upper() in QuantityKind.__members__
+            and number.isascii()
+            and number.isdigit()
+            and 1 <= int(number) <= MAX_DECIMALS
+        )
+        if not valid:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+                    "presentation.invalid_digits_option",
+                    {"item": item, "kinds": kinds},
+                )
+            )
+        precision[QuantityKind(key.strip().upper())] = Precision(
+            PrecisionMode.SIGNIFICANT, int(number)
+        )
+    return profile.derive(f"{name} con cifras", {}, precision)
 
 
 _PROPERTY_ROWS: Final = (
@@ -1666,11 +1717,16 @@ def _reference_line(profile: PresentationProfile) -> str:
 
 
 def run_analyze_demo(
-    case: str, timeout_text: str, profile_name: str = "SI", *, raw: bool = False
+    case: str,
+    timeout_text: str,
+    profile_name: str = "SI",
+    *,
+    raw: bool = False,
+    digits: str | None = None,
 ) -> tuple[str, int]:
     """Demo de ``veritas analyze``: (texto, código de salida 0 o 3)."""
     timeout = _parse_number(timeout_text)
-    profile = _profile(profile_name)
+    profile = _profile_with_digits(profile_name, digits)
     model, case_id, labels, description = _analyze_demo_model(case)
     run = analyze_planar_xz(model, AnalysisConfiguration(case_id, timeout_s=timeout))
     lines = [description, "", *_run_lines(run, labels)]
@@ -2052,10 +2108,12 @@ def _spring_lines(contrast: UnionsContrast) -> list[str]:
     ]
 
 
-def run_analyze_unions(timeout_text: str, profile_name: str = "SI") -> tuple[str, int]:
+def run_analyze_unions(
+    timeout_text: str, profile_name: str = "SI", digits: str | None = None
+) -> tuple[str, int]:
     """``veritas analyze uniones``: tres uniones y un mecanismo (puerta F1C; T-010, D7)."""
     timeout = _parse_number(timeout_text)
-    profile = _profile(profile_name)
+    profile = _profile_with_digits(profile_name, digits)
     ei = ANALYZE_DEMO_E * 1e6 * 0.2 * 0.4**3 / 12
     k = UNIONS_SPRING_RATIO * ei / UNIONS_L
     spring = EndConnection.semi_rigid(Dof.RY, u.Quantity(k, Dof.RY.stiffness_dimension))
@@ -2170,10 +2228,12 @@ def _three_materials_variant(name: str, release: bool) -> _Variant:
     return _Variant(name, model, case.id, _labels(model))
 
 
-def run_three_materials(timeout_text: str, profile_name: str = "SI") -> tuple[str, int]:
+def run_three_materials(
+    timeout_text: str, profile_name: str = "SI", digits: str | None = None
+) -> tuple[str, int]:
     """«Primera demostración solicitada» del ROADMAP (P1 de T-009; T-010, D5-A y D7)."""
     timeout = _parse_number(timeout_text)
-    profile = _profile(profile_name)
+    profile = _profile_with_digits(profile_name, digits)
     variants = [
         _three_materials_variant("Rígidas", release=False),
         _three_materials_variant("J de B2 liberado", release=True),
@@ -2893,11 +2953,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             elif args.analyze_command == "peso-propio":
                 text, code = run_analyze_self_weight(args.timeout, args.profile)
             elif args.analyze_command == "uniones":
-                text, code = run_analyze_unions(args.timeout, args.profile)
+                text, code = run_analyze_unions(args.timeout, args.profile, args.cifras)
             elif args.caso == "tres-materiales":
-                text, code = run_three_materials(args.timeout, args.profile)
+                text, code = run_three_materials(args.timeout, args.profile, args.cifras)
             else:
-                text, code = run_analyze_demo(args.caso, args.timeout, args.profile, raw=args.bruto)
+                text, code = run_analyze_demo(
+                    args.caso, args.timeout, args.profile, raw=args.bruto, digits=args.cifras
+                )
             print(text)
             return code
         output = _run(args, parser)

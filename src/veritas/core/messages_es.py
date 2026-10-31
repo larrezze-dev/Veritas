@@ -30,6 +30,13 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "presentation.invalid_name": "Nombre de perfil no válido: «{profile}».",
     "presentation.duplicate_kind": "El perfil «{profile}» define dos veces la misma magnitud.",
     "presentation.invalid_decimals": "Número de decimales no válido: {decimals}.",
+    "presentation.invalid_precision": (
+        "Precisión no válida ({mode}, {digits} dígitos): el mínimo es {lowest}."
+    ),
+    "presentation.invalid_digits_option": (
+        "Opción --cifras no válida: «{item}». Use MAGNITUD=N[,MAGNITUD=N…] con N de 1 a 15 y "
+        "una magnitud de: {kinds}."
+    ),
     "geometry.same_node": "La barra no puede unir el nudo {node} consigo mismo.",
     "geometry.zero_length": (
         "Longitud de barra {length} m inferior al mínimo {minimum} m "
