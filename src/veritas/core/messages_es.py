@@ -63,6 +63,34 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "model.revision_conflict": (
         "Conflicto de revisión en {kind} {entity_id}, revisión {revision}: {reason}."
     ),
+    "project.invalid_json": "El archivo de proyecto no es JSON válido: {reason}.",
+    "project.duplicate_key": "Clave repetida en el archivo de proyecto: {key}.",
+    "project.nonfinite_literal": "El archivo de proyecto contiene un valor no finito: {value}.",
+    "project.too_large": "El archivo de proyecto ocupa {size} bytes y el máximo es {limit}.",
+    "project.too_deep": "El archivo de proyecto supera la profundidad máxima de {limit} niveles.",
+    "project.unreadable": "No se puede leer el archivo de proyecto: {reason}.",
+    "project.write_failed": (
+        "No se pudo guardar el proyecto ({reason}); el archivo anterior no se ha modificado."
+    ),
+    "project.bad_format": "No es un archivo de proyecto Veritas (formato «{found}»).",
+    "project.invalid_field": "Campo {path}: se esperaba {expected}.",
+    "project.unknown_fields": "Campos desconocidos en {path}: {fields}.",
+    "project.missing_fields": "Faltan campos en {path}: {fields}.",
+    "project.invalid_value": "Valor no válido en {path}: {reason}.",
+    "project.nonfinite": "Valor no finito en {path}.",
+    "project.integrity": (
+        "El archivo está alterado o incompleto: resumen guardado {expected}, calculado {actual}."
+    ),
+    "project.unsupported_version": (
+        "La versión de esquema {found} es posterior a la soportada ({supported}); "
+        "abra el archivo con una versión más reciente de la aplicación."
+    ),
+    "project.unsupported_canon": (
+        "La codificación canónica «{found}» no está soportada (soportada: «{supported}»); "
+        "el hash del modelo no se puede verificar."
+    ),
+    "project.invalid_version": "Versión de esquema no válida: {found}.",
+    "project.migration_gap": "No hay migración registrada de la versión {step} a la {next}.",
     "model.family_change": (
         "Una revisión no puede cambiar la familia de {kind} ({current} -> {requested}); "
         "cree una entidad nueva."

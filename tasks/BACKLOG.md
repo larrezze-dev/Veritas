@@ -63,7 +63,7 @@ Cada línea requiere plan y aprobación propios antes de implementarse; ninguna 
 | ID | SRS backlog | Fase | Título | Requisitos SRS (aporte previsto) | Estado |
 |---|---|---|---|---|---|
 | T-011 | S3D-010 | F4 | Viewport mínimo PyVista | GEO-008 (parcial) | ABIERTO — orden 9; dependencias nuevas (PySide6, PyVista) a aprobar en su plan |
-| T-012 | S3D-011 | F4 | Persistencia de proyecto versionado, round-trip y codificación canónica del hash | DAT-001, DAT-004, NFR-007 | ABIERTO — orden 7 (tras las entidades nuevas de T-015, T-016 y T-019) |
+| T-012 | S3D-011 | F4 | Persistencia de proyecto versionado, round-trip y codificación canónica del hash | DAT-001, DAT-004, NFR-007 | PLAN APROBADO 2026-10-31 ([plan](../plans/T-012.md), D1–D12 = A) — orden 7; E1 ACEPTADA 2026-10-31 (ADR-006 ACCEPTED); E2 pendiente de orden de inicio |
 | T-013 | S3D-012 | F8 | Informe básico | RPT-002, RPT-004, RPT-005 | APLAZADO — necesita combinaciones, comprobaciones y versiones de catálogo (F2, F5A, F7A) |
 | T-014 | — | F7A | Editor manual de configuración de normativas (crear, editar, copiar, borrar) | Requisito de `CLAUDE.md`, sin ID SRS | ABIERTO — orden 8; solo capa de datos (configuraciones protegidas y de usuario), el contenido normativo lo fija F7A |
 | T-015 | — | F5A (antes de los paneles) | Cargas de barra ampliadas: puntuales, parciales, trapezoidales y momentos distribuidos | LD-002 (completar el aporte parcial de T-006) | ACEPTADO (2026-10-31) — plan aprobado 2026-10-30 (D1–D12 = A; [plan](../plans/T-015.md)); ADR-005 ACCEPTED; E1, E2.0, E2.1 (adaptador plano) y E2.2 (espacial) aceptadas 2026-10-30; E2.3 (batería T-CB y CLI) aceptada 2026-10-31; E2.4 (cierre) aceptada 2026-10-31 — orden 3 |
@@ -127,3 +127,7 @@ Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se 
 - 2026-10-31: T-020 E2.1 aceptada por el usuario. Siguiente: E2.2 (espacial completo), a la espera de orden de inicio.
 - 2026-10-31: T-020 E2.2 (salto de extremo del adaptador espacial, nota en ADR-001 y cierre documental) entregada; suite 2688 passed. Pendiente de aceptación del usuario, que cierra T-020.
 - 2026-10-31: T-020 E2.2 aceptada por el usuario: **T-020 ACEPTADO**. Siguiente según el orden: T-012 (persistencia), con autorización del usuario («Seguir con T-012») para planificarlo.
+- 2026-10-31: el usuario autoriza planificar T-012 («Seguir con T-012», solo planificar). Plan en `plans/T-012.md`, PROPUESTO, pendiente de aprobación de D1–D12; no se toca código.
+- 2026-10-31: plan T-012 aprobado por el usuario («Todo aprobado»): D1–D12 = A. Siguiente: E1 (formato, round-trip e integridad), a la espera de orden de inicio.
+- 2026-10-31: orden de inicio de T-012 E1 («Adelante»). E1 implementada (`persistence/`, `StructuralModel.snapshot()/restore()`, `veritas project demo/open/verify`, ADR-006 PROPUESTO); suite 2795 passed (107 nuevas), ruff y mypy limpios. Pendiente de aceptación del usuario y de aprobación de ADR-006.
+- 2026-10-31: T-012 E1 aceptada por el usuario («Acepto E1 y apruebo ADR-006»), con los cambios 1–6 del plan; ADR-006 ACCEPTED. Siguiente: E2 (ejecuciones históricas y vigencia), a la espera de orden de inicio.

@@ -26,7 +26,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from enum import Enum, auto
 from types import MappingProxyType
-from typing import Final, Literal
+from typing import Final, Literal, Protocol
 from uuid import UUID
 
 from veritas.core.connections.end import EndConnection, MemberEnd
@@ -44,6 +44,7 @@ from veritas.core.geometry.local_axes import (
     recompute_local_axes,
     validate_alpha,
 )
+from veritas.core.geometry.snapshot import ModelSnapshot
 from veritas.core.geometry.vector import Vec3
 from veritas.core.loads.load_case import LoadCase, LoadCategory
 from veritas.core.loads.loads import (
@@ -119,6 +120,36 @@ def _not_found(kind: _Kind, entity_id: object) -> InputValueError:
     )
 
 
+class _Identified(Protocol):
+    @property
+    def id(self) -> UUID: ...
+
+    @property
+    def revision(self) -> int: ...
+
+
+def _conflict(kind: _Kind, entity: _Identified, reason: str) -> InputValueError:
+    return InputValueError(
+        Diagnostic.create(
+            DiagnosticCode.REVISION_CONFLICT,
+            "model.revision_conflict",
+            {
+                "kind": kind,
+                "entity_id": str(entity.id),
+                "revision": entity.revision,
+                "reason": reason,
+            },
+            location=Location(entity_id=entity.id, revision=entity.revision),
+        )
+    )
+
+
+def _put_unique[T: _Identified](store: dict[UUID, T], entity: T, kind: _Kind) -> None:
+    if entity.id in store:
+        raise _conflict(kind, entity, "identificador duplicado")
+    store[entity.id] = entity
+
+
 def _alpha_rad(alpha: Quantity | None, location: Location) -> float:
     if alpha is None:
         return 0.0
@@ -153,6 +184,127 @@ class StructuralModel:
     def model_revision(self) -> int:
         """Contador de transacciones válidas que cambian el modelo analítico."""
         return self._model_revision
+
+    # --- Persistencia: vista de lectura y restauración (plan T-012, D3-A) ---------------
+
+    def snapshot(self) -> ModelSnapshot:
+        """Contenido completo del modelo con sus identidades y revisiones (solo lectura)."""
+        return ModelSnapshot(
+            nodes=tuple(self._nodes.values()),
+            members=tuple(self._members.values()),
+            materials=self._materials.all_revisions(),
+            sections=self._sections.all_revisions(),
+            supports=tuple(self._supports.values()),
+            load_cases=tuple(self._load_cases.values()),
+            loads=tuple(self._loads.values()),
+            model_revision=self._model_revision,
+        )
+
+    @classmethod
+    def restore(cls, snapshot: ModelSnapshot) -> "StructuralModel":
+        """Modelo nuevo con exactamente el contenido de ``snapshot`` (todo o nada).
+
+        Conserva UUID, revisiones y ``model_revision``; no recalcula las propiedades de
+        sección guardadas. Rechaza con diagnóstico, sin devolver un modelo parcial:
+        identificadores duplicados o con huecos de revisión (``REVISION_CONFLICT``),
+        referencias huérfanas (``REFERENCE_NOT_FOUND``), bases locales degeneradas, apoyos
+        repetidos por nudo, peso propio incoherente y asientos sobre GDL no ``FIXED``.
+        """
+        if not isinstance(snapshot, ModelSnapshot):
+            raise _invalid_type("snapshot", "ModelSnapshot", snapshot)
+        revision = snapshot.model_revision
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
+            raise _invalid_type("model_revision", "entero >= 0", revision)
+        model = cls()
+        model._restore_entities(snapshot)
+        model._restore_loads(snapshot)
+        model._model_revision = revision
+        return model
+
+    def _restore_entities(self, snapshot: ModelSnapshot) -> None:
+        for node in snapshot.nodes:
+            _put_unique(self._nodes, node, "nudo")
+        for material in snapshot.materials:
+            self._materials.register(material)
+        for section in snapshot.sections:
+            self._sections.register(section)
+        for member in snapshot.members:
+            _put_unique(self._members, member, "barra")
+            for node_id in (member.node_i, member.node_j):
+                self.node(node_id)
+            self._materials.get(member.material, Location(entity_id=member.id))
+            self._sections.get(member.section, Location(entity_id=member.id))
+        for member in self._members.values():
+            self.axes(member.id)  # Base local válida con la orientación guardada.
+        for support in snapshot.supports:
+            _put_unique(self._supports, support, "apoyo")
+            self.node(support.node_id)
+            if support.node_id in self._support_by_node:
+                raise _conflict("apoyo", support, "más de un apoyo en el mismo nudo")
+            self._support_by_node[support.node_id] = support.id
+        for case in snapshot.load_cases:
+            _put_unique(self._load_cases, case, "caso de carga")
+
+    def _restore_loads(self, snapshot: ModelSnapshot) -> None:
+        for load in snapshot.loads:
+            _put_unique(self._loads, load, "carga")
+            self.load_case(load.case_id)
+            if isinstance(load, SelfWeight):
+                self._restore_self_weight(load)
+            elif isinstance(load, NodalLoad):
+                self.node(load.node_id)
+            elif isinstance(load, SupportSettlement):
+                self._restore_settlement(load)
+            else:
+                self.member(load.member_id)
+
+    def _restore_self_weight(self, load: SelfWeight) -> None:
+        if self._self_weight_id is not None:
+            raise _conflict("carga", load, "más de un peso propio en el modelo")
+        case = self.load_case(load.case_id)
+        if case.category is not LoadCategory.PERMANENT:
+            raise _self_weight_category(case)
+        for member_id in sorted(load.excluded_members, key=str):
+            self.member(member_id)
+        if self._members and set(self._members) <= load.excluded_members:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "load.self_weight_all_excluded",
+                    {"count": len(self._members)},
+                    location=Location(entity_id=load.id, revision=load.revision, field="excluded"),
+                )
+            )
+        self._self_weight_id = load.id
+
+    def _restore_settlement(self, load: SupportSettlement) -> None:
+        support = self._supports.get(load.support_id)
+        if support is None:
+            raise _not_found("apoyo", load.support_id)
+        location = Location(entity_id=load.id, revision=load.revision)
+        values = (*load.translation.components(), *load.rotation.components())
+        for dof, value in zip(SupportDof, values, strict=True):
+            state = support.restraint(dof).kind
+            if value != 0.0 and state is not RestraintKind.FIXED:
+                raise InputValueError(
+                    Diagnostic.create(
+                        DiagnosticCode.INPUT_OUT_OF_RANGE,
+                        "load.settlement_dof_not_fixed",
+                        {"dof": dof.label, "state": str(state)},
+                        location=location,
+                    )
+                )
+        if any(
+            s.case_id == load.case_id and s.id != load.id for s in self._settlements_of(support.id)
+        ):
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "load.settlement_duplicate",
+                    {"case": self.load_case(load.case_id).name},
+                    location=location,
+                )
+            )
 
     @property
     def nodes(self) -> MappingProxyType[UUID, Node]:

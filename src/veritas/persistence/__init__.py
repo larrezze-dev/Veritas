@@ -1,4 +1,6 @@
 """Proyecto versionado, migraciones y resultados históricos.
 
-Estado: PENDIENTE (sin implementar en T-001).
+Estado: T-012 E1 implementada (ADR-006, ACCEPTED): ``project`` (guardar/abrir con integridad),
+``schema``, ``canonical`` (hash del modelo), ``migrations`` y ``errors``. Ejecuciones históricas:
+E2 (pendiente).
 """

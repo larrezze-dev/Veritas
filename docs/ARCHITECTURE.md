@@ -16,7 +16,7 @@ Python tipado; dominio independiente; Pydantic para datos/validación de fronter
 6. **design_codes:** CTE por paquetes DB y edición; no depende de GUI; EN/SIA adicionales. Incluye editor manual de configuración de normativas (crear, editar, copiar, borrar) para casos no planificados.
 7. **gui:** comandos sobre dominio y vista 3D, inspector/tabla sincronizados.
 8. **reports:** consume snapshots, no ejecuta solver.
-9. **persistence:** proyecto versionado, catálogos independientes, migraciones y resultados históricos.
+9. **persistence:** proyecto versionado, catálogos independientes, migraciones y resultados históricos. Desde T-012 E1 (ADR-006, ACCEPTED): `canonical.py` (codificación `veritas-canon/1` y hash), `schema.py` (JSON estricto de las entidades), `project.py` (guardar atómico con `.bak`, abrir todo o nada, integridad), `migrations.py` y `errors.py`; importa `core`, nunca `fem` ni la CLI; `core` no la importa (`StructuralModel.snapshot()/restore()` son la única frontera). La CLI `veritas project` vive en `cli_project.py`.
 
 ## Contratos obligatorios
 

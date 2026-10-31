@@ -110,6 +110,10 @@ class RevisionRegistry[T: VersionedEntity]:
         self.latest(entity_id)
         return tuple(self._revisions[entity_id])
 
+    def all_revisions(self) -> tuple[T, ...]:
+        """Todas las revisiones de todas las entidades (por entidad, de la 1 a la última)."""
+        return tuple(item for history in self._revisions.values() for item in history)
+
     def register(self, revision: T) -> T:
         """Alta de una revisión; devuelve la guardada (la existente si es idéntica)."""
         history = self._revisions.get(revision.id, [])
