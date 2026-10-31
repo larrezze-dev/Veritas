@@ -64,6 +64,7 @@ from veritas.core.supports.support import BasisKind, RestraintKind, Support, Sup
 from veritas.fem.results.normalized import (
     Component,
     ComponentStatus,
+    EndJump,
     MemberEndForces,
     NodeDisplacement,
     ReactionSource,
@@ -74,6 +75,7 @@ from veritas.fem.results.normalized import (
 )
 from veritas.fem.results.run import PivotSummary, RunStatus
 from veritas.fem.spatial.config import SpatialAnalysisConfiguration
+from veritas.fem.spatial.jumps import end_jumps
 from veritas.fem.spatial.postconditions import member_fixed_end_forces, rounding_bounds
 from veritas.fem.spatial.protocol import AXES, Six, SpatialRequest
 from veritas.fem.spatial.translator import translate_spatial
@@ -135,6 +137,16 @@ class RawSpatialGroundReaction:
 
 
 @dataclass(frozen=True, slots=True)
+class RawSpatialEndAux:
+    """Desplazamiento global del nudo auxiliar de un extremo de barra (T-020, E2.2: el
+    salto de extremo lo necesita). Es el movimiento del extremo de la barra."""
+
+    member_id: UUID
+    end: str
+    displacement: Six
+
+
+@dataclass(frozen=True, slots=True)
 class RawSpatialMemberForces:
     """``eleResponse(tag, 'localForce')`` = [pI, pJ] en la base local de ADR-001 (hecho 2)."""
 
@@ -144,13 +156,14 @@ class RawSpatialMemberForces:
 
 @dataclass(frozen=True, slots=True)
 class RawSpatialResults:
-    """Salida bruta del solver espacial. Sin los nudos auxiliares (tierras, C, R y aux de
-    extremo)."""
+    """Salida bruta del solver espacial. Sin los nudos auxiliares de tierras, C y R; los aux
+    de extremo solo con su desplazamiento (``end_aux``, T-020)."""
 
     basis: str
     nodes: tuple[RawSpatialNodeResult, ...]
     grounds: tuple[RawSpatialGroundReaction, ...]
     members: tuple[RawSpatialMemberForces, ...]
+    end_aux: tuple[RawSpatialEndAux, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +208,7 @@ class SpatialResults:
     reactions: tuple[SupportReaction, ...]
     members: tuple[MemberEndForces, ...]
     hypotheses: tuple[str, ...]
+    end_jumps: tuple[EndJump, ...] = ()
 
 
 # --- Errores ---------------------------------------------------------------------------
@@ -310,6 +324,7 @@ class _Normalizer:
         # Coordenadas del dominio, ya comprobadas al comparar la petición.
         self.position = {UUID(n.entity_id): Vec3(n.x, n.y, n.z) for n in request.nodes}
         self.ends: dict[UUID, tuple[_End, _End]] = {}
+        self.published: dict[UUID, tuple[float, ...]] = {}  # pI y pJ locales publicados
         self.reaction_force: dict[UUID, tuple[Vec3, Vec3]] = {}  # por nudo
         # p0_c local de las cargas de barra de Veritas por barra (T-015, D10-A).
         fixed_end = member_fixed_end_forces(request)
@@ -393,6 +408,7 @@ class _Normalizer:
                 _End(q.to_global(Vec3(*p[:AXES])), q.to_global(Vec3(*p[AXES:]))) for p in (p_i, p_j)
             )
             self.ends[raw.member_id] = (end_i, end_j)
+            self.published[raw.member_id] = local_force
             result.append(
                 MemberEndForces(
                     raw.member_id,
@@ -405,6 +421,10 @@ class _Normalizer:
                 )
             )
         return tuple(result)
+
+    def end_jumps(self) -> tuple[EndJump, ...]:
+        """Salto de los extremos no rígidos (T-020, E2.2), con las fuerzas publicadas."""
+        return end_jumps(self.model, self.request, self.raw, self.published)
 
     # Postcondición de equilibrio con vectores 3D completos.
     def check_equilibrium(self) -> None:
@@ -623,6 +643,7 @@ def normalize_spatial(run: SpatialAnalysisRun, model: StructuralModel) -> Spatia
     nodes = normalizer.nodes()
     reactions = normalizer.reactions()
     members = normalizer.members()
+    jumps = normalizer.end_jumps()
     normalizer.check_equilibrium()
     return SpatialResults(
         run.run_id,
@@ -633,4 +654,5 @@ def normalize_spatial(run: SpatialAnalysisRun, model: StructuralModel) -> Spatia
         reactions,
         members,
         (*run.hypotheses, HYPOTHESIS_SPATIAL_NORMALIZED),
+        jumps,
     )

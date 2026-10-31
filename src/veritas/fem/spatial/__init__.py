@@ -59,6 +59,7 @@ from veritas.fem.spatial.results import (
     RAW_SPATIAL_BASIS,
     SPATIAL_ADAPTER_ID,
     SPATIAL_ADAPTER_VERSION,
+    RawSpatialEndAux,
     RawSpatialGroundReaction,
     RawSpatialMemberForces,
     RawSpatialNodeResult,
@@ -369,7 +370,13 @@ def _raw_results(request: SpatialRequest, response: SpatialWorkerResponse) -> Ra
         RawSpatialMemberForces(UUID(beam.entity_id), by_beam[beam.tag])  # type: ignore[arg-type]
         for beam in request.beams
     )
-    return RawSpatialResults(RAW_SPATIAL_BASIS, nodes, ground_reactions, members)
+    aux_displacement = {tag: disp for tag, disp, _reaction in response.aux_results}
+    beam_ids = {beam.tag: UUID(beam.entity_id) for beam in request.beams}
+    end_aux = tuple(
+        RawSpatialEndAux(beam_ids[aux.beam], aux.end, aux_displacement[aux.tag])
+        for aux in request.aux_nodes
+    )
+    return RawSpatialResults(RAW_SPATIAL_BASIS, nodes, ground_reactions, members, end_aux)
 
 
 # Controles cuyo texto nombra un sujeto (nudo o barra) en lugar de un nudo.

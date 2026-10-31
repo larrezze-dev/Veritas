@@ -630,16 +630,7 @@ class _Builder:
                         )
 
     def _local_vectors(self, load: MemberLoad) -> tuple[list[Vec3], list[Vec3]]:
-        """(fuerzas, pares o momentos) de la carga en la base local de ADR-001."""
-        axes = self.model.axes(load.member_id)
-
-        def local(vector: Vec3) -> Vec3:
-            return axes.to_local(vector) if load.basis is LoadBasis.GLOBAL else vector
-
-        if isinstance(load, MemberPointLoad):
-            return [local(load.force)], [local(load.moment)]
-        ends = [local(load.intensity_start), local(load.intensity_end)]
-        return (ends, []) if isinstance(load, MemberDistributedLoad) else ([], ends)
+        return member_load_local_vectors(self.model, load)
 
     def member_end_loads(self, request: SpatialRequest) -> list[SpatialMemberEndLoad]:
         """−Tᵀ·p0_c por barra en los nudos del elemento (T-015, D6-A): p0 local de
@@ -841,6 +832,27 @@ def _end_penalties(request: SpatialRequest) -> tuple[SpatialEndPenalty, ...]:
         )
         for s in penalized
     )
+
+
+def member_load_local_vectors(
+    model: StructuralModel, load: MemberLoad
+) -> tuple[list[Vec3], list[Vec3]]:
+    """(fuerzas, pares o momentos) de la carga en la base local de ADR-001."""
+    axes = model.axes(load.member_id)
+
+    def local(vector: Vec3) -> Vec3:
+        return axes.to_local(vector) if load.basis is LoadBasis.GLOBAL else vector
+
+    if isinstance(load, MemberPointLoad):
+        return [local(load.force)], [local(load.moment)]
+    ends = [local(load.intensity_start), local(load.intensity_end)]
+    return (ends, []) if isinstance(load, MemberDistributedLoad) else ([], ends)
+
+
+def member_load_p0(model: StructuralModel, load: MemberLoad, length: float) -> list[float]:
+    """p0 local 12 SIN condensar de una carga de barra de Veritas (T-020, E2.2: el salto de
+    un Ry/Rz liberado lo necesita; la petición solo lleva el p0 condensado)."""
+    return _fixed_end_forces(load, member_load_local_vectors(model, load), length)
 
 
 def _fixed_end_forces(

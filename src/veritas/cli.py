@@ -2108,31 +2108,40 @@ def _spring_lines(contrast: UnionsContrast) -> list[str]:
     ]
 
 
-def _unions_jump_lines(
-    solved: Sequence[_Solved], ei: float, k: float, q: Callable[[float, QuantityKind], str]
+def _unions_jump_lines(  # noqa: PLR0913 (familia: GDL, signo y tolerancia del resorte)
+    solved: Sequence[_Solved],
+    ei: float,
+    k: float,
+    q: Callable[[float, QuantityKind], str],
+    *,
+    dof: Dof = Dof.RY,
+    sign: float = 1.0,
+    spring_tolerance: float = benchmarks.TOL_EXACT,
 ) -> tuple[list[str], bool]:
-    """Salto de giro del extremo J de B2 (T-020, E2.1): extremo de la barra − nudo N2, en Ry
-    local. Liberada: −P·L²/(32·EI), por cuerpo libre (viga empotrada-articulada con carga
-    central; N2 empotrado, giro de nudo nulo). Resorte: el momento de extremo publicado es
-    M = −k·salto. Rígida: sin salto. Un contraste no superado nunca sale como «coincide»."""
+    """Salto de giro del extremo J de B2 (T-020, E2.1 y E2.2): extremo de la barra − nudo N2,
+    en el giro local ``dof``. Liberada: −P·L²/(32·EI) (·``sign`` en la familia Rz), por cuerpo
+    libre (viga empotrada-articulada con carga central; N2 empotrado, giro de nudo nulo).
+    Resorte: el momento de extremo publicado es M = −k·salto. Rígida: sin salto. Un contraste
+    no superado nunca sale como «coincide»."""
     length, load = UNIONS_L, UNIONS_P
-    reference = -load * length**2 / (32 * ei)
+    reference = sign * -load * length**2 / (32 * ei)
     scale = load * length / 8
     tolerance = benchmarks.TOL_EXACT
+    index = dof.position
     angle = QuantityKind.ANGLE
     lines = [
-        "Salto de extremo J de B2 (extremo de la barra − nudo N2, Ry local; T-020):",
+        f"Salto de extremo J de B2 (extremo de la barra − nudo N2, {dof} local; T-020):",
     ]
     ok = True
     for item in solved:
         name = item.variant.name
-        if not isinstance(item.results, PlanarResults):
+        if not isinstance(item.results, PlanarResults | SpatialResults):
             lines.append(f"  {name}: {REFERENCE_NO_RESULTS}")
             ok = False
             continue
         member_id = _id(item.variant, "B2")
         jumps = [j for j in item.results.end_jumps if j.member_id == member_id and j.end == "J"]
-        rotation = jumps[0].value.components[4] if len(jumps) == 1 else None
+        rotation = jumps[0].value.components[index] if len(jumps) == 1 else None
         if name == "Rígida":
             matches = not jumps
             note = (
@@ -2147,23 +2156,27 @@ def _unions_jump_lines(
             jump = rotation.value
             if name == "Liberada":
                 error = abs(jump - reference) / abs(reference)
-                detail = (
-                    f"referencia −P·L²/(32·EI) = {q(reference, angle)}; error relativo {error:.1e}"
-                )
+                formula = "−P·L²/(32·EI)" if sign > 0 else "+P·L²/(32·EI)"
+                detail = f"referencia {formula} = {q(reference, angle)}; error relativo {error:.1e}"
             else:
                 moment_j = next(m for m in item.results.members if m.member_id == member_id).p_j
-                published = moment_j.components[4].value
+                published = moment_j.components[index].value
                 error = math.inf if published is None else abs(published + k * jump) / scale
                 published = math.nan if published is None else published
                 detail = (
                     f"M publicado = {q(published, QuantityKind.MOMENT)} frente a −k·salto = "
                     f"{q(-k * jump, QuantityKind.MOMENT)}; diferencia relativa a P·L/8 {error:.1e}"
                 )
-            matches = error <= tolerance
+            matches = error <= (tolerance if name == "Liberada" else spring_tolerance)
             lines.append(f"  {name}: {q(jump, angle)} ({detail})")
         ok = ok and matches
     verdict = REFERENCE_MATCH if ok else REFERENCE_MISMATCH
-    lines.append(f"Contraste del salto (tolerancia {tolerance:g}): {verdict}.")
+    shown = (
+        f"{tolerance:g}"
+        if spring_tolerance == tolerance
+        else f"{tolerance:g}, resorte {spring_tolerance:g}"
+    )
+    lines.append(f"Contraste del salto (tolerancia {shown}): {verdict}.")
     return lines, ok
 
 
@@ -2882,6 +2895,15 @@ def _unions_family_lines(
     stiffness = format_quantity(
         u.Quantity(k, family.dof.stiffness_dimension), QuantityKind.ROTATIONAL_STIFFNESS, profile
     )
+    jump_lines, jump_ok = _unions_jump_lines(
+        solved,
+        ANALYZE_DEMO_E * 1e6 * family.inertia,
+        k,
+        q,
+        dof=family.dof,
+        sign=family.sign,
+        spring_tolerance=benchmarks.TOL_PENALTY,
+    )
     name = str(family.dof)
     lines = [
         f"Familia {name}: P = {UNIONS_P / 1000:g} kN según −e{_LOCAL_NAMES[family.force]} "
@@ -2895,8 +2917,10 @@ def _unions_family_lines(
         _comparison(solved, rows, profile, references, ("Coincide", "Err. rel. máx.")),
         *_spring_lines(contrast),
         "",
+        *jump_lines,
+        "",
     ]
-    ok = all(item.results is not None for item in solved) and contrast.matches
+    ok = all(item.results is not None for item in solved) and contrast.matches and jump_ok
     return lines, ok
 
 

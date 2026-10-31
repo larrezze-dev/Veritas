@@ -196,6 +196,18 @@ def unions_output() -> tuple[str, int]:
     return cli.run_analyze_spatial("uniones", "60")
 
 
+def test_unions_show_the_end_jump_of_both_families(unions_output: tuple[str, int]) -> None:
+    """T-020, E2.2: salto del extremo J de B2 en las dos familias, en ejes locales."""
+    out, code = unions_output
+    assert code == cli.EXIT_OK
+    assert "Salto de extremo J de B2 (extremo de la barra − nudo N2, Ry local; T-020):" in out
+    assert "Salto de extremo J de B2 (extremo de la barra − nudo N2, Rz local; T-020):" in out
+    assert out.count("Rígida: — (extremo rígido, sin salto)") == 2
+    assert "referencia −P·L²/(32·EI) = -2.232e-05 rad" in out  # familia Ry
+    assert "referencia +P·L²/(32·EI) = 8.929e-05 rad" in out  # familia Rz (signo del giro)
+    assert out.count("Contraste del salto (tolerancia 1e-09, resorte 1e-06): coincide.") == 2
+
+
 def test_unions_match_and_exit_0(unions_output: tuple[str, int]) -> None:
     """E2.6-c: un caso con el mecanismo incluido, como ``analyze uniones``; sale con 0."""
     out, code = unions_output
