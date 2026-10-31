@@ -110,6 +110,20 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "El peso propio solo puede estar en un caso permanente; el caso «{case}» sería {category}."
     ),
     "load.self_weight_missing": "El modelo no tiene peso propio definido.",
+    "load.self_weight_mode_gravity": (
+        "En el modo {mode} el peso propio no usa la gravedad g: no se debe indicar."
+    ),
+    "load.self_weight_all_excluded": (
+        "El peso propio excluye las {count} barras del modelo; una definición sin barras no "
+        "se admite."
+    ),
+    "load.self_weight_member_excluded": (
+        "La barra {member} está excluida del peso propio; no se deriva su peso."
+    ),
+    "material.specific_weight_missing": (
+        "El material «{material}» de la barra {member} no tiene peso específico γ y el peso "
+        "propio está en modo de peso específico."
+    ),
     "load.settlement_dof_not_fixed": (
         "El asiento exige el GDL {dof} del apoyo FIXED, pero está en estado {state}."
     ),
@@ -213,6 +227,10 @@ MESSAGES_ES: Final[dict[str, str]] = {
     ),
     "fem.load_type_unsupported": (
         "Carga de tipo {type} que el análisis plano no admite; no se ignora."
+    ),
+    "fem.self_weight_option_pending": (
+        "El peso propio con peso específico γ o con barras excluidas aún no se traduce en el "
+        "análisis plano (plan T-019, E2); no se aplica como peso propio de todas las barras."
     ),
     "fem.empty_case": "El caso «{case}» no tiene cargas.",
     "fem.too_many_dofs": (
@@ -353,6 +371,10 @@ MESSAGES_ES: Final[dict[str, str]] = {
     ),
     "fem3d.load_type_unsupported": (
         "Carga de tipo {type} que el análisis espacial no admite; no se ignora."
+    ),
+    "fem3d.self_weight_option_pending": (
+        "El peso propio con peso específico γ o con barras excluidas aún no se traduce en el "
+        "análisis espacial (plan T-019, E2); no se aplica como peso propio de todas las barras."
     ),
     "fem3d.hypothesis_spatial": (
         "Análisis estático lineal espacial: seis GDL por nudo (Ux, Uy, Uz, Rx, Ry, Rz) en la "
@@ -739,6 +761,7 @@ QUANTITY_KIND_LABELS_ES: Final[dict[str, str]] = {
     "STRESS": "Tensión / módulo",
     "MOMENT": "Momento",
     "MOMENT_PER_LENGTH": "Momento por longitud",
+    "SPECIFIC_WEIGHT": "Peso específico",
     "ANGLE": "Ángulo",
     "ROTATIONAL_STIFFNESS": "Rigidez rotacional",
     "DIMENSIONLESS": "Adimensional",

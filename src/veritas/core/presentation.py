@@ -30,6 +30,7 @@ class QuantityKind(StrEnum):
     WARPING_CONSTANT = "WARPING_CONSTANT"
     MASS = "MASS"
     DENSITY = "DENSITY"
+    SPECIFIC_WEIGHT = "SPECIFIC_WEIGHT"
     LINEAR_MASS = "LINEAR_MASS"
     ACCELERATION = "ACCELERATION"
     FORCE = "FORCE"
@@ -60,6 +61,7 @@ _KIND_DIMENSIONS: Final[dict[QuantityKind, u.Dimension]] = {
     QuantityKind.WARPING_CONSTANT: u.WARPING_CONSTANT,
     QuantityKind.MASS: u.MASS,
     QuantityKind.DENSITY: u.DENSITY,
+    QuantityKind.SPECIFIC_WEIGHT: u.SPECIFIC_WEIGHT,
     QuantityKind.LINEAR_MASS: u.LINEAR_MASS,
     QuantityKind.ACCELERATION: u.ACCELERATION,
     QuantityKind.FORCE: u.FORCE,
@@ -173,6 +175,7 @@ PROFILE_SI: Final = _builtin(
         QuantityKind.WARPING_CONSTANT: "m⁶",
         QuantityKind.MASS: "kg",
         QuantityKind.DENSITY: "kg/m³",
+        QuantityKind.SPECIFIC_WEIGHT: "N/m³",
         QuantityKind.LINEAR_MASS: "kg/m",
         QuantityKind.ACCELERATION: "m/s²",
         QuantityKind.FORCE: "N",
@@ -198,6 +201,7 @@ PROFILE_KN_M: Final = _builtin(
         QuantityKind.WARPING_CONSTANT: "cm⁶",
         QuantityKind.MASS: "kg",
         QuantityKind.DENSITY: "kg/m³",
+        QuantityKind.SPECIFIC_WEIGHT: "kN/m³",
         QuantityKind.LINEAR_MASS: "kg/m",
         QuantityKind.ACCELERATION: "m/s²",
         QuantityKind.FORCE: "kN",
@@ -223,6 +227,7 @@ PROFILE_N_MM: Final = _builtin(
         QuantityKind.WARPING_CONSTANT: "mm⁶",
         QuantityKind.MASS: "kg",
         QuantityKind.DENSITY: "kg/m³",
+        QuantityKind.SPECIFIC_WEIGHT: "kN/m³",
         QuantityKind.LINEAR_MASS: "kg/m",
         QuantityKind.ACCELERATION: "m/s²",
         QuantityKind.FORCE: "N",

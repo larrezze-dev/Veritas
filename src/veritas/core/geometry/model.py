@@ -22,7 +22,7 @@ nombre o la descripción de un caso, no. Retirar un caso retira sus cargas (una 
 +1). Contenido idéntico: sin cambio. El peso propio de cada barra se deriva bajo demanda.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from enum import Enum, auto
 from types import MappingProxyType
@@ -58,16 +58,18 @@ from veritas.core.loads.loads import (
     MemberUniformLoad,
     NodalLoad,
     SelfWeight,
+    SelfWeightMode,
     SupportSettlement,
     linear_contribution,
     linear_moment_contribution,
     point_contribution,
     self_weight_intensity,
+    specific_weight_intensity,
     uniform_contribution,
 )
 from veritas.core.materials.material import MaterialFamily, MaterialRevision, build_material
 from veritas.core.references import RevisionRef, RevisionRegistry, require_ref
-from veritas.core.sections.mass import linear_mass
+from veritas.core.sections.mass import linear_mass, section_area
 from veritas.core.sections.section import SectionRevision, build_rectangular_section
 from veritas.core.supports.support import (
     RestraintKind,
@@ -85,6 +87,7 @@ from veritas.core.units import (
     FORCE_PER_LENGTH,
     LENGTH,
     MOMENT,
+    SPECIFIC_WEIGHT,
     STRESS,
     Dimension,
     Quantity,
@@ -365,6 +368,7 @@ class StructuralModel:
         density: Quantity,
         poisson_ratio: Quantity | float | None = None,
         standard_edition: str | None = None,
+        specific_weight: Quantity | None = None,
     ) -> MaterialRevision:
         """Crea un material (revisión 1). No altera ``model_revision``."""
         return self._materials.register(
@@ -379,6 +383,7 @@ class StructuralModel:
                 density=density,
                 poisson_ratio=poisson_ratio,
                 standard_edition=standard_edition,
+                specific_weight=specific_weight,
             )
         )
 
@@ -394,13 +399,14 @@ class StructuralModel:
         density: Quantity | None = None,
         poisson_ratio: Quantity | float | Keep | None = KEEP,
         standard_edition: str | Keep | None = KEEP,
+        specific_weight: Quantity | Keep | None = KEEP,
     ) -> MaterialRevision:
         """Nueva revisión (max+1); los campos omitidos se copian de la última.
 
-        ``poisson_ratio`` y ``standard_edition`` son opcionales en el material: ``None`` los
-        borra y ``KEEP`` (por defecto) los conserva. Las barras conservan su referencia
-        anterior. Contenido idéntico a la última revisión: sin cambio. Cambiar la familia:
-        ``INPUT_OUT_OF_RANGE``.
+        ``poisson_ratio``, ``standard_edition`` y ``specific_weight`` son opcionales en el
+        material: ``None`` los borra y ``KEEP`` (por defecto) los conserva. Las barras
+        conservan su referencia anterior. Contenido idéntico a la última revisión: sin
+        cambio. Cambiar la familia: ``INPUT_OUT_OF_RANGE``.
         """
         latest = self._materials.latest(material_id)
         revised = build_material(
@@ -421,6 +427,15 @@ class StructuralModel:
             poisson_ratio=latest.poisson_ratio if poisson_ratio is KEEP else poisson_ratio,
             standard_edition=(
                 latest.standard_edition if standard_edition is KEEP else standard_edition
+            ),
+            specific_weight=(
+                (
+                    None
+                    if latest.specific_weight is None
+                    else Quantity(latest.specific_weight, SPECIFIC_WEIGHT)
+                )
+                if specific_weight is KEEP
+                else specific_weight
             ),
         )
         if replace(revised, revision=latest.revision) == latest:
@@ -895,11 +910,22 @@ class StructuralModel:
         current = self.self_weight
         return None if current is None else current.case_id
 
-    def set_self_weight(self, case_id: UUID, *, gravity: Quantity = STANDARD_GRAVITY) -> SelfWeight:
+    def set_self_weight(
+        self,
+        case_id: UUID,
+        *,
+        gravity: Quantity | None = None,
+        mode: SelfWeightMode = SelfWeightMode.MASS_DENSITY,
+        excluded_members: Iterable[UUID] = (),
+    ) -> SelfWeight:
         """Define o revisa el peso propio (uno por modelo, en un caso permanente); +1.
 
-        Sin peso propio: revisión 1 con id nuevo. En el mismo caso: revisión n+1; contenido
-        idéntico: sin cambio. En otro caso: ``INPUT_OUT_OF_RANGE``.
+        ``MASS_DENSITY`` (por defecto): q = ρ·A·g; ``gravity`` omitida = gravedad normal.
+        ``SPECIFIC_WEIGHT``: q = γ·A y ``gravity`` debe omitirse. ``excluded_members``: barras
+        sin peso propio (plan T-019, D3-A): una barra inexistente da ``REFERENCE_NOT_FOUND`` y
+        excluirlas todas, ``INPUT_OUT_OF_RANGE``. Sin peso propio: revisión 1 con id nuevo.
+        En el mismo caso: revisión n+1; contenido idéntico: sin cambio. En otro caso:
+        ``INPUT_OUT_OF_RANGE``.
         """
         case = self.load_case(case_id)
         current = self.self_weight
@@ -908,9 +934,13 @@ class StructuralModel:
         else:
             load_id, revision = current.id, current.revision + 1
         location = Location(entity_id=load_id, revision=revision, field="gravity")
-        if not isinstance(gravity, Quantity):
+        g: float | None
+        if gravity is None:
+            g = STANDARD_GRAVITY.si_value if mode is SelfWeightMode.MASS_DENSITY else None
+        elif not isinstance(gravity, Quantity):
             raise _invalid_type("gravity", "Quantity", gravity, location)
-        g = gravity.require(ACCELERATION).si_value
+        else:
+            g = gravity.require(ACCELERATION).si_value
         if current is not None and current.case_id != case_id:
             raise InputValueError(
                 Diagnostic.create(
@@ -922,7 +952,18 @@ class StructuralModel:
             )
         if case.category is not LoadCategory.PERMANENT:
             raise _self_weight_category(case)
-        candidate = SelfWeight(load_id, revision, case_id, g)
+        candidate = SelfWeight(load_id, revision, case_id, g, mode, frozenset(excluded_members))
+        for member_id in sorted(candidate.excluded_members, key=str):
+            self.member(member_id)
+        if self._members and set(self._members) <= candidate.excluded_members:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "load.self_weight_all_excluded",
+                    {"count": len(self._members)},
+                    location=Location(entity_id=load_id, revision=revision, field="excluded"),
+                )
+            )
         if current is not None and replace(candidate, revision=current.revision) == current:
             return current
         self._loads[load_id] = candidate
@@ -931,23 +972,72 @@ class StructuralModel:
         return candidate
 
     def self_weight_load(self, member_id: UUID) -> tuple[Quantity, Quantity, Quantity]:
-        """Peso propio de la barra en base global (N/m): (+0, +0, -ρ·A·g)."""
+        """Peso propio de la barra en base global (N/m): (+0, +0, -q).
+
+        q = ρ·A·g (``MASS_DENSITY``) o γ·A (``SPECIFIC_WEIGHT``). Una barra excluida no se
+        deriva y da ``INPUT_OUT_OF_RANGE``; nunca devuelve ceros por omisión.
+        """
         member = self.member(member_id)
         current = self.self_weight
+        location = Location(entity_id=member.id, revision=member.revision)
         if current is None:
             raise InputValueError(
                 Diagnostic.create(
                     DiagnosticCode.REFERENCE_NOT_FOUND,
                     "load.self_weight_missing",
                     {},
-                    location=Location(entity_id=member.id, revision=member.revision),
+                    location=location,
                 )
             )
-        q = self_weight_intensity(
-            self.linear_mass(member_id), Quantity(current.gravity, ACCELERATION)
-        )
+        if member_id in current.excluded_members:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "load.self_weight_member_excluded",
+                    {"member": member.label},
+                    location=location,
+                )
+            )
+        if current.mode is SelfWeightMode.MASS_DENSITY and current.gravity is not None:
+            q = self_weight_intensity(
+                self.linear_mass(member_id), Quantity(current.gravity, ACCELERATION)
+            )
+        else:
+            material = self.material(member.material)
+            if material.specific_weight is None:
+                raise InputValueError(
+                    Diagnostic.create(
+                        DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+                        "material.specific_weight_missing",
+                        {"material": material.name, "member": member.label},
+                        location=location,
+                    )
+                )
+            q = specific_weight_intensity(
+                Quantity(material.specific_weight, SPECIFIC_WEIGHT),
+                section_area(self.section(member.section), location),
+            )
         zero = Quantity(0.0, FORCE_PER_LENGTH)
         return (zero, zero, -q)
+
+    def self_weight_loads(self) -> dict[UUID, tuple[Quantity, Quantity, Quantity]]:
+        """Peso propio de las barras incluidas (fuente única, plan T-019, D4-A).
+
+        Orden de inserción del modelo; cada consumidor conserva su propio orden de
+        iteración. Sin peso propio definido: ``REFERENCE_NOT_FOUND``.
+        """
+        current = self.self_weight
+        if current is None:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.REFERENCE_NOT_FOUND, "load.self_weight_missing", {}
+                )
+            )
+        return {
+            member_id: self.self_weight_load(member_id)
+            for member_id in self._members
+            if member_id not in current.excluded_members
+        }
 
     def remove_load(self, load_id: UUID) -> Load:
         """Retira una carga (nodal, de barra, peso propio o asiento); ``model_revision`` +1."""
@@ -1019,10 +1109,8 @@ class StructuralModel:
                 parts = []  # Sin fuerza prescrita: cuenta en load_count, no en ΣF ni ΣM.
             elif isinstance(load, SelfWeight):
                 parts = [
-                    self._uniform_part(
-                        member_id, Vec3(0.0, 0.0, self.self_weight_load(member_id)[2].si_value)
-                    )
-                    for member_id in self._members
+                    self._uniform_part(member_id, Vec3(0.0, 0.0, q[2].si_value))
+                    for member_id, q in self.self_weight_loads().items()
                 ]
             else:  # pragma: no cover (unión Load cerrada)
                 raise TypeError(f"tipo de carga no contemplado: {type(load).__name__}")

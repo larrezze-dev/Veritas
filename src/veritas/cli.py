@@ -108,6 +108,7 @@ from veritas.core.loads.loads import (
     SelfWeight,
     SupportSettlement,
     self_weight_intensity,
+    specific_weight_intensity,
     vector_quantities,
 )
 from veritas.core.materials.material import MaterialFamily, MaterialRevision
@@ -410,7 +411,14 @@ def _add_load_parser(
     selfweight.add_argument("--b", required=True, help="Ancho b, según y local.")
     selfweight.add_argument("--h", required=True, help="Canto h, según z local.")
     selfweight.add_argument("--unit", default="m", help="Unidad de b y h (m, cm, mm).")
-    selfweight.add_argument("--rho", required=True, help='Densidad con unidad: "7850 kg/m3".')
+    selfweight.add_argument(
+        "--rho", default=None, help='Densidad con unidad: "7850 kg/m3" (q = rho·A·g).'
+    )
+    selfweight.add_argument(
+        "--gamma",
+        default=None,
+        help='Peso específico con unidad: "25 kN/m3" (q = gamma·A; excluye --rho y --g).',
+    )
     selfweight.add_argument("--length", required=True, help='Longitud real: "2 m".')
     selfweight.add_argument(
         "--g", default=None, help='Gravedad con unidad (por defecto 9.80665 m/s2): "10 m/s2".'
@@ -1004,6 +1012,13 @@ def _check_connection_usage(args: argparse.Namespace, parser: argparse.ArgumentP
         )
 
 
+def _check_selfweight_usage(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if (args.rho is None) == (args.gamma is None):
+        parser.error("indique --rho (con --g opcional) o --gamma, pero no ambos")
+    if args.gamma is not None and args.g is not None:
+        parser.error("--gamma no se combina con --g: el peso específico no usa la gravedad")
+
+
 _DEMO_ROLLER_ANGLE: Final = math.radians(30.0)
 
 
@@ -1115,19 +1130,30 @@ def _fq3(
 
 
 def format_load_selfweight(  # noqa: PLR0913, PLR0917 (datos del prisma)
-    b: str, h: str, unit: str, rho: str, length: str, gravity: str | None, profile_name: str
+    b: str,
+    h: str,
+    unit: str,
+    rho: str | None,
+    length: str,
+    gravity: str | None,
+    profile_name: str,
+    gamma: str | None = None,
 ) -> str:
-    """Peso propio de una barra prismática rectangular: q = ρ·A·g y resultante q·L."""
+    """Peso propio de una barra prismática rectangular: q = ρ·A·g o γ·A y resultante q·L."""
     profile = _profile(profile_name)
     length_unit = u.get_unit(unit)
     section = StructuralModel().add_rectangular_section(
         b=u.Quantity.of(_parse_number(b), length_unit),
         h=u.Quantity.of(_parse_number(h), length_unit),
     )
-    density = _parse_quantity(rho, "--rho")
-    positive_si(density, u.DENSITY, "--rho")
     span = _parse_quantity(length, "--length")
     positive_si(span, u.LENGTH, "--length")
+    if gamma is not None:
+        return _format_selfweight_gamma(section, gamma, span, profile)
+    if rho is None:  # pragma: no cover (lo impide la comprobación de uso)
+        raise TypeError("falta --rho")
+    density = _parse_quantity(rho, "--rho")
+    positive_si(density, u.DENSITY, "--rho")
     g = STANDARD_GRAVITY if gravity is None else _parse_quantity(gravity, "--g")
     area = section.properties.area.quantity
     if area is None:  # pragma: no cover (el rectángulo siempre tiene A)
@@ -1144,6 +1170,33 @@ def format_load_selfweight(  # noqa: PLR0913, PLR0917 (datos del prisma)
             + (" (por defecto: gravedad normal convencional)" if gravity is None else ""),
             f"  L = {_fq(span, QuantityKind.LENGTH, profile)}",
             f"  q = rho·A·g = {_fq(q, QuantityKind.FORCE_PER_LENGTH, profile)}"
+            f"  ->  qz = {_fq(-q, QuantityKind.FORCE_PER_LENGTH, profile)}",
+            f"  Resultante Fz = -q·L = {_fq(-total, QuantityKind.FORCE, profile)}",
+            "",
+            "Acción prescrita, no resultado de análisis.",
+        ]
+    )
+
+
+def _format_selfweight_gamma(
+    section: SectionRevision, gamma: str, span: u.Quantity, profile: PresentationProfile
+) -> str:
+    """Salida de ``load selfweight --gamma``: q = γ·A (plan T-019, D7-A)."""
+    weight = _parse_quantity(gamma, "--gamma")
+    positive_si(weight, u.SPECIFIC_WEIGHT, "--gamma")
+    area = section.properties.area.quantity
+    if area is None:  # pragma: no cover (el rectángulo siempre tiene A)
+        raise TypeError("sección rectangular sin área")
+    q = specific_weight_intensity(weight, area)
+    total = q * span
+    return "\n".join(
+        [
+            "Peso propio de una barra prismática rectangular (dirección -Z global, por metro "
+            "de longitud real de la barra; ADR-001 §1, ampliación T-019):",
+            f"  A = {_fq(area, QuantityKind.AREA, profile)}",
+            f"  gamma = {_fq(weight, QuantityKind.SPECIFIC_WEIGHT, profile)}",
+            f"  L = {_fq(span, QuantityKind.LENGTH, profile)}",
+            f"  q = gamma·A = {_fq(q, QuantityKind.FORCE_PER_LENGTH, profile)}"
             f"  ->  qz = {_fq(-q, QuantityKind.FORCE_PER_LENGTH, profile)}",
             f"  Resultante Fz = -q·L = {_fq(-total, QuantityKind.FORCE, profile)}",
             "",
@@ -1232,15 +1285,16 @@ def _load_rows(
                 )
             )
         elif isinstance(load, SelfWeight):
-            g = u.Quantity(load.gravity, u.ACCELERATION)
-            rows.append(
-                (
-                    "peso propio",
-                    "todas las barras",
-                    "GLOBAL (-Z)",
-                    f"g = {_fq(g, QuantityKind.ACCELERATION, profile)}",
-                )
-            )
+            if load.gravity is None:
+                detail = "q = γ·A (peso específico del material)"
+            else:
+                g = u.Quantity(load.gravity, u.ACCELERATION)
+                detail = f"g = {_fq(g, QuantityKind.ACCELERATION, profile)}"
+            scope = "todas las barras"
+            if load.excluded_members:
+                excluded = ", ".join(sorted(names.get(m, str(m)) for m in load.excluded_members))
+                scope += f" salvo {excluded}"
+            rows.append(("peso propio", scope, "GLOBAL (-Z)", detail))
         else:  # pragma: no cover (unión Load cerrada)
             raise TypeError(f"tipo de carga no contemplado: {type(load).__name__}")
     return rows
@@ -2771,8 +2825,16 @@ def _run(  # noqa: PLR0911 (un retorno por subcomando)
         return format_connection_dofs(args)
     if args.command == "load":
         if args.load_command == "selfweight":
+            _check_selfweight_usage(args, parser)
             return format_load_selfweight(
-                args.b, args.h, args.unit, args.rho, args.length, args.g, args.profile
+                args.b,
+                args.h,
+                args.unit,
+                args.rho,
+                args.length,
+                args.g,
+                args.profile,
+                args.gamma,
             )
         return format_load_demo(args.profile)
     parser.print_help(sys.stdout)

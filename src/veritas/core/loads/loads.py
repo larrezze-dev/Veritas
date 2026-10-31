@@ -11,9 +11,11 @@ Convenciones (ADR-001 §1-§2, ampliación aprobada en el plan T-006):
   ξ = x/L con 0 < ξ < 1; fuerza distribuida (N/m) y momento distribuido (N·m/m) lineales
   entre ξa y ξb (0 ≤ ξa < ξb ≤ 1), nulos fuera del tramo. Base GLOBAL o LOCAL como la carga
   uniforme; intensidades por metro de longitud real.
-- Peso propio: q = ρ·A·g por metro de longitud real, dirección -Z global, derivado bajo
-  demanda de la revisión actual de material y sección de cada barra. g se declara en la
-  definición; por defecto la gravedad normal convencional 9,80665 m/s² (CGPM 1901).
+- Peso propio: por metro de longitud real, dirección -Z global, derivado bajo demanda de la
+  revisión actual de material y sección de cada barra. Modo MASS_DENSITY: q = ρ·A·g, con g
+  declarada en la definición (por defecto la gravedad normal convencional 9,80665 m/s²,
+  CGPM 1901). Modo SPECIFIC_WEIGHT (plan T-019, D2-A): q = γ·A, sin g. Todas las barras
+  salvo las de ``excluded_members`` (D3-A).
 - Asiento de apoyo (plan T-016): desplazamiento (m) y giro (rad) impuestos en la BASE DEL
   APOYO (global o inclinada, ADR-001 §1): traslación positiva según +x', +y', +z' y giro
   positivo por la regla de la mano derecha (un descenso en base global es Uz < 0). Es una
@@ -40,10 +42,12 @@ from veritas.core.geometry.vector import Vec3
 from veritas.core.loads.load_case import check_entity_identity
 from veritas.core.units import (
     ACCELERATION,
+    AREA,
     FORCE,
     FORCE_PER_LENGTH,
     LINEAR_MASS,
     MOMENT,
+    SPECIFIC_WEIGHT,
     Dimension,
     Quantity,
 )
@@ -137,20 +141,58 @@ class MemberUniformLoad:
         check_load_vector({"intensity": self.intensity}, location)
 
 
+class SelfWeightMode(StrEnum):
+    """Método de cálculo del peso propio (plan T-019, D2-A)."""
+
+    MASS_DENSITY = "MASS_DENSITY"
+    SPECIFIC_WEIGHT = "SPECIFIC_WEIGHT"
+
+
 @dataclass(frozen=True, slots=True)
 class SelfWeight:
-    """Peso propio de todas las barras con gravedad ``gravity`` (m/s², SI) hacia -Z."""
+    """Peso propio hacia -Z de las barras del modelo, salvo ``excluded_members``.
+
+    ``MASS_DENSITY``: q = ρ·A·g con ``gravity`` (m/s², SI) obligatoria y > 0.
+    ``SPECIFIC_WEIGHT``: q = γ·A y ``gravity`` debe ser ``None`` (no hay una g ignorada).
+    ``excluded_members``: ids de barra sin peso propio (por id, no por revisión).
+    """
 
     id: UUID
     revision: int
     case_id: UUID
-    gravity: float
+    gravity: float | None
+    mode: SelfWeightMode = SelfWeightMode.MASS_DENSITY
+    excluded_members: frozenset[UUID] = frozenset()
 
     def __post_init__(self) -> None:
         check_entity_identity(self.id, self.revision, "SelfWeight")
         _check_refs(self.id, self.revision, {"case_id": self.case_id})
         location = Location(entity_id=self.id, revision=self.revision, field="gravity")
-        object.__setattr__(self, "gravity", positive_float(self.gravity, "gravity", location))
+        if not isinstance(self.mode, SelfWeightMode):
+            raise invalid_type("mode", "SelfWeightMode", self.mode, location)
+        if self.mode is SelfWeightMode.MASS_DENSITY:
+            object.__setattr__(self, "gravity", positive_float(self.gravity, "gravity", location))
+        elif self.gravity is not None:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "load.self_weight_mode_gravity",
+                    {"mode": str(self.mode)},
+                    location=location,
+                )
+            )
+        excluded_location = Location(entity_id=self.id, revision=self.revision, field="excluded")
+        if isinstance(self.excluded_members, str | bytes) or not hasattr(
+            self.excluded_members, "__iter__"
+        ):
+            raise invalid_type(
+                "excluded_members", "conjunto de UUID", self.excluded_members, excluded_location
+            )
+        members = frozenset(self.excluded_members)
+        for member_id in members:
+            if not isinstance(member_id, UUID):
+                raise invalid_type("excluded_members", "UUID", member_id, excluded_location)
+        object.__setattr__(self, "excluded_members", members)
 
 
 @dataclass(frozen=True, slots=True)
@@ -328,6 +370,15 @@ def self_weight_intensity(linear_mass: Quantity, gravity: Quantity) -> Quantity:
     mass = linear_mass.require(LINEAR_MASS)
     positive_float(gravity.require(ACCELERATION).si_value, "gravity")
     return (mass * gravity).require(FORCE_PER_LENGTH)
+
+
+def specific_weight_intensity(specific_weight: Quantity, area: Quantity) -> Quantity:
+    """Módulo γ·A (N/m), estrictamente positivo; la dirección (-Z) la aplica el modelo."""
+    if not isinstance(specific_weight, Quantity):
+        raise invalid_type("specific_weight", "Quantity", specific_weight)
+    if not isinstance(area, Quantity):
+        raise invalid_type("area", "Quantity", area)
+    return (specific_weight.require(SPECIFIC_WEIGHT) * area.require(AREA)).require(FORCE_PER_LENGTH)
 
 
 def vector_quantities(vector: Vec3, dimension: Dimension) -> tuple[Quantity, Quantity, Quantity]:

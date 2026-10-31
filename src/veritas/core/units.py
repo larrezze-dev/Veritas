@@ -174,6 +174,8 @@ LINEAR_MASS: Final = MASS / LENGTH
 ACCELERATION: Final = LENGTH / TIME**2
 FORCE: Final = MASS * ACCELERATION
 FORCE_PER_LENGTH: Final = FORCE / LENGTH
+# Peso específico γ (plan T-019, D5-A): fuerza por volumen, distinta de la densidad.
+SPECIFIC_WEIGHT: Final = FORCE / LENGTH**3
 STRESS: Final = FORCE / AREA
 MOMENT: Final = FORCE * LENGTH
 ROTATIONAL_STIFFNESS: Final = MOMENT / ANGLE
@@ -227,6 +229,8 @@ UNITS: Final[tuple[Unit, ...]] = (
     Unit("kg", MASS, 1.0),
     Unit("t", MASS, 1e3),
     Unit("kg/m³", DENSITY, 1.0),
+    Unit("N/m³", SPECIFIC_WEIGHT, 1.0),
+    Unit("kN/m³", SPECIFIC_WEIGHT, 1e3),
     Unit("kg/m", LINEAR_MASS, 1.0),
     Unit("m/s²", ACCELERATION, 1.0),
     Unit("N", FORCE, 1.0),
