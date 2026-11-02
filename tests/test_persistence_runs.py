@@ -296,6 +296,7 @@ def test_schema_v1_file_opens_through_the_migration(tmp_path: Path) -> None:
     def downgrade(data: dict[str, Any]) -> None:
         data["schema_version"] = 1
         del data["content"]["runs"]
+        del data["content"]["norms"]
 
     opened = open_project(edit(path, downgrade))
     assert opened.schema_version == 1  # versión del archivo
@@ -314,7 +315,7 @@ def test_schema_v1_file_with_runs_is_rejected(saved_with_run: Path) -> None:
 
 def test_newer_schema_is_still_rejected(saved_with_run: Path) -> None:
     def bump(data: dict[str, Any]) -> None:
-        data["schema_version"] = 3
+        data["schema_version"] = 4
 
     expect(edit(saved_with_run, bump), DiagnosticCode.UNSUPPORTED_CONFIGURATION)
 

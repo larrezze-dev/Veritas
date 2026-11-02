@@ -6,7 +6,7 @@
 
 **Relación con otros ADR.**
 - [ADR-001](ADR-001-convenciones-dominio.md): reutiliza `RevisionRef` (id, revisión exactos), `core.units` y los diagnósticos con la tabla de códigos de §5 (sin códigos nuevos).
-- [ADR-006](ADR-006-proyecto-persistido-hash-canonico.md): el formato persistido (esquema v3) y la selección de normativa del proyecto llegan en E2; una nota breve en ADR-006 se escribe al cierre de E2. En E1 no se toca la persistencia.
+- [ADR-006](ADR-006-proyecto-persistido-hash-canonico.md): el formato persistido (esquema v3) y la selección de normativa del proyecto se implementan en E2; ADR-006 lleva una nota breve de esa ampliación.
 
 ## Contexto
 
@@ -27,7 +27,9 @@
 6. **Cobertura.** `coverage(config, family)` devuelve siempre `Coverage.NO_COMPROBADO` mientras no exista un plugin de comprobación registrado para (sistema, edición, familia); hoy no hay ninguno. La cobertura **no es un campo** de la configuración, no se guarda y no es editable: un archivo editado a mano no puede declarar «aprobado», y el aluminio queda `NO_COMPROBADO` por construcción.
 7. **Independencia del análisis.** Las configuraciones no forman parte del modelo analítico: no entran en `analytic_form` ni en el hash `veritas-canon/1`, y su cambio no caduca ejecuciones (se comprueba en E2 con la persistencia).
 8. **Diagnósticos.** Códigos existentes con claves `norm.*` en `messages_es`: `norm.protected`, `norm.in_use`, `norm.duplicate_parameter`, `norm.duplicate_document`, `norm.invalid_key`, `norm.self_derived`; `units.incompatible` y `model.reference_not_found` se reutilizan.
-9. **Pendiente (E2, plan T-014 D6–D8).** Esquema de proyecto v3 (`content.norms = {user, selected}`) con migración 2 → 3, selección opcional (id, revisión), y grupo `veritas norm` (list, show, new, copy, set, delete `--confirmar`, use). Fuera de alcance: interfaz gráfica, plugins y comprobaciones (F7A/F7B), biblioteca global, importación/exportación.
+9. **Persistencia (E2, implementada).** Esquema de proyecto v3: `content.norms = {user, selected}`. `user` guarda TODAS las revisiones de las configuraciones de usuario (nunca las protegidas, que viven en el código); `selected` es la revisión exacta elegida (`RevisionRef`) o `null`. Migración `2 → 3` con `norms` vacío (un contenido v2 que ya traiga `norms` se rechaza). Al abrir y al guardar se valida todo o nada con `NormRegistry.restore`: una protegida o un id reservado en `user`, una revisión repetida, con hueco o que no empiece en 1 (`REVISION_CONFLICT`), una selección de un id desconocido (`UNSUPPORTED_CONFIGURATION`: puede ser una protegida de otra versión; indistinguible de una huérfana) o de una revisión inexistente (`REFERENCE_NOT_FOUND`). `derived_from` es solo informativo y no se valida. `persistence/canonical.py` no cambia: las normativas y la selección no entran en el hash del modelo ni caducan ejecuciones.
+10. **Selección y borrado.** `NormRegistry.select(ref | None)`; borrar la configuración seleccionada es `norm.in_use`. Cambiar la selección no modifica el modelo analítico.
+11. **Editor por línea de comandos (E2, implementado).** Grupo `veritas norm`: `list [ARCHIVO]`, `show ARCHIVO ID [--revision N]`, `new`, `copy`, `set` (`--param CLAVE=VALOR UNIDAD --fuente TEXTO`, `--quitar-param`), `delete --confirmar` y `use`. El `ID` es el UUID completo o un prefijo único de 4 o más caracteres. Salidas: 0; 2 diagnóstico de dominio; 3 sin integridad. `delete` sin `--confirmar` no borra. Fuera de alcance: interfaz gráfica (F4, TK-016), plugins y comprobaciones (F7A/F7B), biblioteca global, importación/exportación.
 
 ## Alternativas descartadas
 
@@ -37,11 +39,13 @@ Diccionario libre clave-valor (D2-B: sin unidades ni fuente); catálogo cerrado 
 
 - Hasta F7A las configuraciones son datos: nada las consume; los parámetros que el usuario añada son responsabilidad suya, con la fuente que declare.
 - La protegida no trae edición fijada ni coeficientes; copiarla es el punto de partida del usuario.
-- `NormRegistry` guarda las revisiones en memoria; sin persistencia no sobreviven a la sesión (E2).
-- Borrar es irreversible dentro del registro; la copia `.bak` del guardado de proyecto (E2) es la única red.
+- Un archivo v3 no lo abre una versión anterior de la aplicación (esquema mayor, `UNSUPPORTED_CONFIGURATION`); un v2 se migra al abrir y se guarda como v3.
+- Una protegida desconocida (de otra versión) como selección impide abrir el proyecto en lugar de ignorarse.
+- Borrar es irreversible; la copia `.bak` del último guardado del proyecto es la única red.
 - Aplicación experimental; no válida para justificar obras reales sin validación independiente.
 
 ## Historial
 
 - 2026-11-02: redactado con E1 de T-014 (PROPUESTO).
 - 2026-11-02: aprobado por el usuario (ACCEPTED) en la puerta de E1.
+- 2026-11-02: E2 implementada (esquema v3 y migración 2 → 3, selección, `veritas norm`); aceptada por el usuario (cierra T-014).

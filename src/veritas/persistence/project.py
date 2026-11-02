@@ -29,6 +29,7 @@ from veritas.persistence.errors import (
     value_error,
 )
 from veritas.persistence.migrations import CURRENT_SCHEMA_VERSION, migrate
+from veritas.persistence.norms import NO_NORMS, NormsState, decode_norms, encode_norms
 from veritas.persistence.runs import RunRecord, decode_record, encode_record
 from veritas.persistence.schema import (
     Json,
@@ -52,12 +53,13 @@ _ENVELOPE: Final = (
     "model_hash",
     "integrity",
 )
-_CONTENT: Final = ("model", "settings", "runs")
+_CONTENT: Final = ("model", "settings", "runs", "norms")
 _SETTINGS: Final = ("user_profiles",)
 _INTEGRITY: Final = ("algorithm", "digest")
 _ALGORITHM_FIELD: Final = "algorithm"
 _MODEL_PATH: Final = "content" + ".model"
 _RUNS_PATH: Final = "content" + ".runs"
+_NORMS_PATH: Final = "content" + ".norms"
 _PROFILES_PATH: Final = "content" + ".settings" + ".user_profiles"
 
 
@@ -73,12 +75,14 @@ class Project:
     model_hash: str
     integrity: str
     runs: tuple[RunRecord, ...] = ()
+    norms: NormsState = NO_NORMS
 
 
 def _body(
     model: StructuralModel,
     profiles: tuple[PresentationProfile, ...],
     runs: tuple[RunRecord, ...],
+    norms: NormsState,
     app: str,
 ) -> Json:
     snapshot = model.snapshot()
@@ -91,22 +95,25 @@ def _body(
             "model": encode_snapshot(snapshot),
             "settings": {"user_profiles": [encode_profile(p) for p in profiles]},
             "runs": [encode_record(r) for r in runs],
+            "norms": encode_norms(norms),
         },
         "model_hash": model_hash(snapshot),
     }
 
 
-def save_project(
+def save_project(  # noqa: PLR0913 (ejecuciones y normativas, por nombre)
     path: str | Path,
     model: StructuralModel,
     user_profiles: Iterable[PresentationProfile] = (),
     *,
     runs: Iterable[RunRecord] = (),
+    norms: NormsState = NO_NORMS,
     app_version: str = __version__,
 ) -> Project:
     """Guarda el proyecto de forma atómica; los perfiles integrados no se guardan.
 
     ``runs`` son las ejecuciones históricas (inmutables, solo se añaden; ``append_runs``).
+    ``norms`` son las normativas de usuario y la seleccionada (T-014; no afectan al hash).
     """
     records = tuple(runs)
     _check_unique_runs(records)
@@ -118,7 +125,7 @@ def save_project(
             "project.invalid_value",
             {"path": _PROFILES_PATH, "reason": "nombres de perfil repetidos"},
         )
-    body = _body(model, profiles, records, app_version)
+    body = _body(model, profiles, records, norms, app_version)
     digest = sha256_hex(canonical_bytes(body))
     envelope = {**body, "integrity": {"algorithm": INTEGRITY_ALGORITHM, "digest": digest}}
     text = json.dumps(envelope, sort_keys=True, indent=1, ensure_ascii=False, allow_nan=False)
@@ -139,6 +146,7 @@ def save_project(
         str(body["model_hash"]),
         digest,
         records,
+        norms,
     )
 
 
@@ -182,7 +190,14 @@ def append_runs(path: str | Path, new: Iterable[RunRecord]) -> Project:
         current.model,
         current.user_profiles,
         runs=(*current.runs, *new),
+        norms=current.norms,
     )
+
+
+def update_norms(path: str | Path, norms: NormsState) -> Project:
+    """Guarda las normativas en un proyecto existente sin tocar modelo, ajustes ni ejecuciones."""
+    current = open_project(path)
+    return save_project(path, current.model, current.user_profiles, runs=current.runs, norms=norms)
 
 
 # --- Apertura ----------------------------------------------------------------------------
@@ -299,6 +314,7 @@ def open_project(path: str | Path) -> Project:
         decode_record(item, f"{_RUNS_PATH}[{i}]") for i, item in enumerate(body.items("runs"))
     )
     _check_unique_runs(records)
+    norms = decode_norms(body.raw("norms"), _NORMS_PATH)
     canon = envelope.text("canon_version")
     computed = model_hash(model.snapshot())
     stored_hash = envelope.text("model_hash")
@@ -311,5 +327,13 @@ def open_project(path: str | Path) -> Project:
     if stored_hash != computed:
         raise integrity_error(stored_hash, computed)
     return Project(
-        model, profiles, version, envelope.text("app_version"), canon, stored_hash, digest, records
+        model,
+        profiles,
+        version,
+        envelope.text("app_version"),
+        canon,
+        stored_hash,
+        digest,
+        records,
+        norms,
     )

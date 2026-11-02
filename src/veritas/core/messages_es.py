@@ -816,6 +816,27 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "norm.invalid_key": (
         "Clave de parámetro no válida: «{key}» (se admiten minúsculas ASCII, dígitos, «_» y «.»)."
     ),
+    "norm.protected_in_project": (
+        "La configuración «{name}» es protegida y no puede guardarse como de usuario."
+    ),
+    "norm.reserved_id": "El identificador {entity_id} («{name}») está reservado a una protegida.",
+    "norm.revision_sequence": (
+        "Revisiones de normativa no consecutivas en {entity_id}: revisión {revision}, "
+        "se esperaba la {expected}."
+    ),
+    "norm.selected_unknown": (
+        "La normativa seleccionada {entity_id} no existe en el proyecto ni entre las "
+        "protegidas de esta versión."
+    ),
+    "norm.cli_param_format": "Parámetro no válido «{spec}»: se espera CLAVE=VALOR (número).",
+    "norm.cli_param_source": (
+        "Cada --param exige su --fuente (cláusula o documento): {params} parámetro(s) y "
+        "{sources} fuente(s)."
+    ),
+    "norm.cli_param_missing": "No existe el parámetro «{key}» que se quiere quitar.",
+    "norm.cli_confirm_required": (
+        "Borrar «{name}» no se puede deshacer: repita el comando con --confirmar."
+    ),
     "norm.self_derived": "La configuración {entity_id} no puede derivar de sí misma.",
 }
 

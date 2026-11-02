@@ -241,7 +241,9 @@ def _move_node(args: argparse.Namespace, project: Project) -> str:
         )
     x, y, z = (u.Quantity.of(float(v), "m") for v in args.a)
     model.move_node(matches[0].id, x, y, z)
-    saved = save_project(args.file, model, project.user_profiles, runs=project.runs)
+    saved = save_project(
+        args.file, model, project.user_profiles, runs=project.runs, norms=project.norms
+    )
     states = [validity(r, model) for r in saved.runs]
     return "\n".join(
         [

@@ -33,7 +33,7 @@ def test_round_trip_is_identical_by_repr(model: StructuralModel, tmp_path: Path)
     assert repr(opened.model.snapshot()) == repr(model.snapshot())
     assert opened.model.model_revision == model.model_revision
     assert opened.model_hash == saved.model_hash
-    assert opened.schema_version == 2
+    assert opened.schema_version == 3
 
 
 def test_negative_zero_is_preserved_in_the_file(model: StructuralModel, tmp_path: Path) -> None:

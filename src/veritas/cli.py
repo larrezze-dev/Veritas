@@ -26,6 +26,10 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
 - ``veritas project demo|open|verify``: archivo de proyecto versionado con integridad SHA-256
   y hash canónico del modelo (plan T-012, ``cli_project.py``). Código 0; 2 si el archivo es
   inválido; 3 si no supera la integridad (mensaje en stderr).
+- ``veritas norm list|show|new|copy|set|delete|use``: editor manual de configuraciones de
+  normativas guardadas en el proyecto (plan T-014, ``cli_norm.py``; ADR-007). Código 0; 2
+  diagnóstico de dominio (protegida, no encontrada, inválida); 3 sin integridad. La cobertura
+  de verificación es siempre NO_COMPROBADO.
 - ``veritas analyze demo [--caso viga|mecanismo|portico|tres-materiales|biempotrada]
   [--timeout S] [--profile P] [--bruto] [--cifras M=N,…]``: análisis plano XZ con OpenSeesPy
   en un proceso aislado (plan T-007). ``tres-materiales`` compara uniones rígidas y un
@@ -94,6 +98,7 @@ from typing import Final
 from uuid import UUID
 
 from veritas import PRODUCT_NAME, __version__
+from veritas.cli_norm import add_norm_parser, run_norm
 from veritas.cli_project import add_project_parser, run_project
 from veritas.core import units as u
 from veritas.core.connections.end import Dof, DofState, EndConnection, MemberEnd
@@ -215,7 +220,7 @@ MODULE_STATUS: Final[tuple[tuple[str, str], ...]] = (
 )
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915 (un registro por grupo de comandos)
     """Construye el parser de la CLI."""
     parser = argparse.ArgumentParser(
         prog="veritas",
@@ -304,6 +309,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_connection_parser(subparsers, profile_names)
     _add_load_parser(subparsers, profile_names)
     add_project_parser(subparsers)
+    add_norm_parser(subparsers)
     _add_analyze_parser(subparsers, profile_names)
     return parser
 
@@ -3035,6 +3041,13 @@ def _run_project(args: argparse.Namespace) -> int:
     return code
 
 
+def _run_norm(args: argparse.Namespace) -> int:
+    """``veritas norm``: el fallo de integridad (3) escribe su mensaje en stderr."""
+    text, code = run_norm(args)
+    print(text, file=sys.stderr if code == EXIT_ANALYSIS_FAILED else sys.stdout)
+    return code
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Punto de entrada. Devuelve el código de salida del proceso."""
     _tolerant_streams()
@@ -3062,8 +3075,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             print(text)
             return code
-        if args.command == "project":
-            return _run_project(args)
+        group = {"project": _run_project, "norm": _run_norm}.get(args.command)
+        if group is not None:
+            return group(args)
         output = _run(args, parser)
     except DiagnosticError as error:
         print(f"{error.code}: {render_message(error.diagnostic)}", file=sys.stderr)
