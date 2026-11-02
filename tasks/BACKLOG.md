@@ -62,7 +62,7 @@ Cada línea requiere plan y aprobación propios antes de implementarse; ninguna 
 
 | ID | SRS backlog | Fase | Título | Requisitos SRS (aporte previsto) | Estado |
 |---|---|---|---|---|---|
-| T-011 | S3D-010 | F4 | Viewport mínimo PyVista | GEO-008 (parcial) | ABIERTO — orden 9; dependencias nuevas (PySide6, PyVista) a aprobar en su plan |
+| T-011 | S3D-010 | F4 | Viewport mínimo PyVista | GEO-008 (parcial) | EN CURSO — plan aprobado 2026-11-02 (D1–D8 = A; extra opcional `gui`); E1 (escena derivada) ACEPTADA 2026-11-02; E2 sin iniciar |
 | T-012 | S3D-011 | F4 | Persistencia de proyecto versionado, round-trip y codificación canónica del hash | DAT-001, DAT-004, NFR-007 | PLAN APROBADO 2026-10-31 ([plan](../plans/T-012.md), D1–D12 = A) — orden 7; E1 ACEPTADA 2026-10-31 (ADR-006 ACCEPTED); E2 ACEPTADA 2026-11-02 — T-012 ACEPTADO |
 | T-013 | S3D-012 | F8 | Informe básico | RPT-002, RPT-004, RPT-005 | APLAZADO — necesita combinaciones, comprobaciones y versiones de catálogo (F2, F5A, F7A) |
 | T-014 | — | F7A | Editor manual de configuración de normativas (crear, editar, copiar, borrar) | Requisito de `CLAUDE.md`, sin ID SRS | ACEPTADO 2026-11-02 ([plan](../plans/T-014.md), D1–D10 = A) — orden 8; E1 ACEPTADA 2026-11-02 (ADR-007 ACCEPTED); E2 ACEPTADA 2026-11-02 — T-014 ACEPTADO; solo capa de datos (configuraciones protegidas y de usuario), el contenido normativo lo fija F7A |
@@ -139,3 +139,4 @@ Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se 
 - 2026-11-02: T-014 E1 aceptada por el usuario y ADR-007 aprobado (ACCEPTED). Siguiente: E2 (esquema v3, selección y `veritas norm`), a la espera de orden de inicio.
 - 2026-11-02: orden expresa de inicio de T-014 E2. Implementada: `persistence/norms.py`, esquema v3 con migración 2 → 3, `NormRegistry.select/restore/user_revisions`, `update_norms`, grupo `veritas norm` (`cli_norm.py`), notas en ADR-006 y ADR-007, 59 pruebas nuevas (suite 2986). Pendiente de aceptación del usuario; su aceptación cierra T-014.
 - 2026-11-02: T-014 E2 aceptada por el usuario: **T-014 ACEPTADO**. Siguiente según el orden: T-011 (viewport PyVista, dependencias nuevas a aprobar en su plan).
+- 2026-11-02: plan T-011 aprobado por el usuario («aprobado D1–D8, D2 confirmado y grupo opcional gui con esas tres versiones»). E1 implementada: `gui/scene.py`, 13 pruebas, extra `gui` (PySide6 6.12.0, PyVista 0.49.2, pyvistaqt 0.13.2) y `uv.lock`, ADR-008 PROPUESTO. Aceptada por el usuario el mismo día con ADR-008 ACCEPTED. E2 (ventana, visor, tabla, `veritas gui`) pendiente de orden expresa.
