@@ -33,6 +33,8 @@ El Product Owner puede probar cada fase y detener el desarrollo sin invalidar lo
 
 **T-012 (persistencia de proyecto y hash canónico, F4 adelantado; [plan](../plans/T-012.md), [ADR-006](adr/ADR-006-proyecto-persistido-hash-canonico.md)):** plan aprobado el 2026-10-31 (D1–D12 = A). E1 (formato, round-trip, integridad, hash y `veritas project`) implementada y aceptada por el usuario el 2026-10-31; ADR-006 ACCEPTED. E2 (ejecuciones históricas y vigencia CURRENT/STALE, retirada de la excepción de ADR-002/003) implementada y aceptada por el usuario el 2026-11-02: **T-012 ACEPTADO**.
 
+**T-014 (editor manual de normativas, F7A adelantado solo en su capa de datos; [plan](../plans/T-014.md), [ADR-007](adr/ADR-007-configuracion-normativas.md)):** plan aprobado el 2026-11-02 (D1–D10 = A). E1 (dominio: configuración versionada, protegida CTE sin valores, registro crear/editar/copiar/borrar, cobertura derivada, mensajes `norm.*`) implementada y aceptada por el usuario el 2026-11-02; ADR-007 ACCEPTED. E2 (esquema v3, selección y `veritas norm`) pendiente de E1.
+
 **T-020 (salto de extremo y cifras significativas, F6 adelantado; [plan](../plans/T-020.md), sin ADR nuevo):** plan aprobado el 2026-10-31 (D1–D9 = A). E1 (cifras significativas por magnitud y `--cifras`) aceptada el 2026-10-31; E2 (salto de extremo) en dos puertas por un cambio de alcance aprobado el 2026-10-31: E2.1 (plano) aceptada el 2026-10-31; E2.2 (espacial completo) aceptada el 2026-10-31: **T-020 ACEPTADO**. No altera la puerta de F6 ni el estado de F1–F1C.
 
 Estados admitidos: `NO INICIADA`, `EN CURSO`, `EN VALIDACIÓN` (entregada, esperando aceptación del usuario), `ACEPTADA` (con fecha y referencia a la aceptación expresa) y `RECHAZADA` (en corrección dentro de la misma fase).

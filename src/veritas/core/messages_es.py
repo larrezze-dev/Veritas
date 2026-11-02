@@ -803,6 +803,20 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "La propiedad {property} no es representable como valor positivo en doble precisión "
         "(resultado {value})."
     ),
+    "norm.protected": (
+        "La configuración de normativa «{name}» es protegida: no se edita ni se borra; "
+        "cópiela para modificarla."
+    ),
+    "norm.in_use": (
+        "La configuración de normativa «{name}» es la seleccionada del proyecto: "
+        "seleccione otra antes de borrarla."
+    ),
+    "norm.duplicate_parameter": "Parámetro de normativa repetido: {key}.",
+    "norm.duplicate_document": "Documento de normativa repetido: {document}.",
+    "norm.invalid_key": (
+        "Clave de parámetro no válida: «{key}» (se admiten minúsculas ASCII, dígitos, «_» y «.»)."
+    ),
+    "norm.self_derived": "La configuración {entity_id} no puede derivar de sí misma.",
 }
 
 
