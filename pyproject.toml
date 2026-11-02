@@ -45,6 +45,7 @@ pythonpath = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 markers = [
     "solver: ejecuta OpenSeesPy en un proceso aislado (gate G1-G7 y extremo a extremo, plan T-007)",
+    "gui: requiere el extra opcional gui (PySide6, PyVista); se omite si falta (plan T-011)",
 ]
 
 [tool.ruff]
@@ -67,3 +68,14 @@ python_version = "3.12"
 strict = true
 files = ["src", "tests"]
 mypy_path = ["tests"]
+
+# Extra opcional gui (ADR-008): sin él no están instalados Qt/VTK. Se tratan como Any en todos
+# los entornos para que el tipado sea idéntico con y sin el extra.
+[[tool.mypy.overrides]]
+module = ["PySide6.*", "shiboken6.*", "pyvista.*", "pyvistaqt.*", "vtk.*", "vtkmodules.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["veritas.gui.viewport", "veritas.gui.main_window", "veritas.gui.app"]
+disallow_subclassing_any = false

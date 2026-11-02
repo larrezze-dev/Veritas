@@ -30,6 +30,10 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   normativas guardadas en el proyecto (plan T-014, ``cli_norm.py``; ADR-007). Código 0; 2
   diagnóstico de dominio (protegida, no encontrada, inválida); 3 sin integridad. La cobertura
   de verificación es siempre NO_COMPROBADO.
+- ``veritas gui [ARCHIVO]``: ventana de solo lectura con visor 3D y tablas de barras y nudos
+  (plan T-011, ``cli_gui.py``; ADR-008). Requiere el extra opcional ``gui``; sin él, mensaje en
+  stderr y código 2 sin afectar al resto de la CLI. Código 3 si el proyecto no supera la
+  integridad.
 - ``veritas analyze demo [--caso viga|mecanismo|portico|tres-materiales|biempotrada]
   [--timeout S] [--profile P] [--bruto] [--cifras M=N,…]``: análisis plano XZ con OpenSeesPy
   en un proceso aislado (plan T-007). ``tres-materiales`` compara uniones rígidas y un
@@ -98,6 +102,7 @@ from typing import Final
 from uuid import UUID
 
 from veritas import PRODUCT_NAME, __version__
+from veritas.cli_gui import add_gui_parser, run_gui_command
 from veritas.cli_norm import add_norm_parser, run_norm
 from veritas.cli_project import add_project_parser, run_project
 from veritas.core import units as u
@@ -310,6 +315,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915 (un registro por
     _add_load_parser(subparsers, profile_names)
     add_project_parser(subparsers)
     add_norm_parser(subparsers)
+    add_gui_parser(subparsers)
     _add_analyze_parser(subparsers, profile_names)
     return parser
 
@@ -3075,7 +3081,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             print(text)
             return code
-        group = {"project": _run_project, "norm": _run_norm}.get(args.command)
+        group = {"project": _run_project, "norm": _run_norm, "gui": run_gui_command}.get(
+            args.command
+        )
         if group is not None:
             return group(args)
         output = _run(args, parser)

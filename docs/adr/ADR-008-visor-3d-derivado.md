@@ -29,3 +29,4 @@ SRS S3D-010 pide un viewport mínimo; DEC-001 fija PySide6 + PyVista/VTK. La pro
 
 - 2026-11-02: redactado con E1 de T-011 (PROPUESTO).
 - 2026-11-02: aprobado por el usuario (ACCEPTED) en la puerta de E1.
+- 2026-11-02: E2 implementada (ventana, visor, tablas y `veritas gui`); sin cambios en la decisión. Concreción: la selección por clic se resuelve por proximidad en pantalla (`gui/picking.py`, sin Qt) y no con el picker de VTK; con Qt offscreen VTK no proyecta píxeles, así que la prueba de clic se ejecuta solo en local (ver plan T-011, E2-b y E2-f).
