@@ -72,7 +72,7 @@ mypy_path = ["tests"]
 # Extra opcional gui (ADR-008): sin él no están instalados Qt/VTK. Se tratan como Any en todos
 # los entornos para que el tipado sea idéntico con y sin el extra.
 [[tool.mypy.overrides]]
-module = ["PySide6.*", "shiboken6.*", "pyvista.*", "pyvistaqt.*", "vtk.*", "vtkmodules.*"]
+module = ["numpy.*", "PySide6.*", "shiboken6.*", "pyvista.*", "pyvistaqt.*", "vtk.*", "vtkmodules.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
