@@ -2,22 +2,30 @@
 
 Cada migración transforma el CONTENIDO (``content``) de la versión N a la N+1 en memoria,
 después de verificar la integridad del archivo tal como se guardó y antes de validarlo. El
-esquema inicial es la v1: no existen migraciones reales. El registro es un argumento para
-poder probar la cadena con migraciones sintéticas.
+esquema inicial fue la v1; la v2 (T-012 E2) añade las ejecuciones guardadas. El registro es un
+argumento para poder probar la cadena con migraciones sintéticas.
 """
 
 from collections.abc import Callable, Mapping
 from typing import Final
 
 from veritas.core.diagnostics import DiagnosticCode
-from veritas.persistence.errors import value_error
+from veritas.persistence.errors import format_error, value_error
 
-CURRENT_SCHEMA_VERSION: Final = 1
+CURRENT_SCHEMA_VERSION: Final = 2
 
 type Migration = Callable[[dict[str, object]], dict[str, object]]
 
-MIGRATIONS: Final[dict[int, Migration]] = {}
-"""Migraciones reales registradas, ``N -> N+1``. Vacío en la v1."""
+
+def _v1_to_v2(content: dict[str, object]) -> dict[str, object]:
+    """v2 (T-012 E2) añade ``runs``: un proyecto de la v1 no tiene ejecuciones guardadas."""
+    if "runs" in content:  # Un contenido v1 no puede traerlo: no se pisa en silencio.
+        raise format_error("project.unknown_fields", {"fields": "runs"}, path="content")
+    return {**content, "runs": []}
+
+
+MIGRATIONS: Final[dict[int, Migration]] = {1: _v1_to_v2}
+"""Migraciones reales registradas, ``N -> N+1``."""
 
 
 def migrate(

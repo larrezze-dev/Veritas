@@ -190,6 +190,7 @@ class SpatialAnalysisRun:
     worker_stdout: str
     worker_stderr: str
     raw: RawSpatialResults | None
+    model_hash: str | None = None  # Lo fija la persistencia (T-012 E2, ADR-006).
 
     def __post_init__(self) -> None:
         if (self.status is RunStatus.SUCCEEDED) != (self.raw is not None):

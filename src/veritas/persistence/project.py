@@ -29,6 +29,7 @@ from veritas.persistence.errors import (
     value_error,
 )
 from veritas.persistence.migrations import CURRENT_SCHEMA_VERSION, migrate
+from veritas.persistence.runs import RunRecord, decode_record, encode_record
 from veritas.persistence.schema import (
     Json,
     Reader,
@@ -51,11 +52,12 @@ _ENVELOPE: Final = (
     "model_hash",
     "integrity",
 )
-_CONTENT: Final = ("model", "settings")
+_CONTENT: Final = ("model", "settings", "runs")
 _SETTINGS: Final = ("user_profiles",)
 _INTEGRITY: Final = ("algorithm", "digest")
 _ALGORITHM_FIELD: Final = "algorithm"
 _MODEL_PATH: Final = "content" + ".model"
+_RUNS_PATH: Final = "content" + ".runs"
 _PROFILES_PATH: Final = "content" + ".settings" + ".user_profiles"
 
 
@@ -70,9 +72,15 @@ class Project:
     canon_version: str
     model_hash: str
     integrity: str
+    runs: tuple[RunRecord, ...] = ()
 
 
-def _body(model: StructuralModel, profiles: tuple[PresentationProfile, ...], app: str) -> Json:
+def _body(
+    model: StructuralModel,
+    profiles: tuple[PresentationProfile, ...],
+    runs: tuple[RunRecord, ...],
+    app: str,
+) -> Json:
     snapshot = model.snapshot()
     return {
         "format": FORMAT,
@@ -82,6 +90,7 @@ def _body(model: StructuralModel, profiles: tuple[PresentationProfile, ...], app
         "content": {
             "model": encode_snapshot(snapshot),
             "settings": {"user_profiles": [encode_profile(p) for p in profiles]},
+            "runs": [encode_record(r) for r in runs],
         },
         "model_hash": model_hash(snapshot),
     }
@@ -92,9 +101,15 @@ def save_project(
     model: StructuralModel,
     user_profiles: Iterable[PresentationProfile] = (),
     *,
+    runs: Iterable[RunRecord] = (),
     app_version: str = __version__,
 ) -> Project:
-    """Guarda el proyecto de forma atómica; los perfiles integrados no se guardan."""
+    """Guarda el proyecto de forma atómica; los perfiles integrados no se guardan.
+
+    ``runs`` son las ejecuciones históricas (inmutables, solo se añaden; ``append_runs``).
+    """
+    records = tuple(runs)
+    _check_unique_runs(records)
     profiles = tuple(p for p in user_profiles if not p.builtin)
     names = [p.name for p in profiles]
     if len(set(names)) != len(names):
@@ -103,7 +118,7 @@ def save_project(
             "project.invalid_value",
             {"path": _PROFILES_PATH, "reason": "nombres de perfil repetidos"},
         )
-    body = _body(model, profiles, app_version)
+    body = _body(model, profiles, records, app_version)
     digest = sha256_hex(canonical_bytes(body))
     envelope = {**body, "integrity": {"algorithm": INTEGRITY_ALGORITHM, "digest": digest}}
     text = json.dumps(envelope, sort_keys=True, indent=1, ensure_ascii=False, allow_nan=False)
@@ -123,6 +138,7 @@ def save_project(
         CANON_VERSION,
         str(body["model_hash"]),
         digest,
+        records,
     )
 
 
@@ -142,6 +158,31 @@ def _write_atomic(target: Path, data: bytes) -> None:
     except BaseException:
         temp.unlink(missing_ok=True)
         raise
+
+
+def _check_unique_runs(records: tuple[RunRecord, ...]) -> None:
+    ids = [r.run_id for r in records]
+    if len(set(ids)) != len(ids):
+        raise value_error(
+            DiagnosticCode.REVISION_CONFLICT,
+            "project.duplicate_run",
+            {"run_id": next(str(i) for i in ids if ids.count(i) > 1)},
+        )
+
+
+def append_runs(path: str | Path, new: Iterable[RunRecord]) -> Project:
+    """Añade ejecuciones a un proyecto existente sin modificar las anteriores (DAT-004).
+
+    Abre el archivo (con toda su validación), rechaza un ``run_id`` repetido y lo guarda de
+    nuevo con las corridas previas intactas y las nuevas al final.
+    """
+    current = open_project(path)
+    return save_project(
+        path,
+        current.model,
+        current.user_profiles,
+        runs=(*current.runs, *new),
+    )
 
 
 # --- Apertura ----------------------------------------------------------------------------
@@ -254,6 +295,10 @@ def open_project(path: str | Path) -> Project:
             {"reason": "nombres de perfil repetidos"},
             path=_PROFILES_PATH,
         )
+    records = tuple(
+        decode_record(item, f"{_RUNS_PATH}[{i}]") for i, item in enumerate(body.items("runs"))
+    )
+    _check_unique_runs(records)
     canon = envelope.text("canon_version")
     computed = model_hash(model.snapshot())
     stored_hash = envelope.text("model_hash")
@@ -266,5 +311,5 @@ def open_project(path: str | Path) -> Project:
     if stored_hash != computed:
         raise integrity_error(stored_hash, computed)
     return Project(
-        model, profiles, version, envelope.text("app_version"), canon, stored_hash, digest
+        model, profiles, version, envelope.text("app_version"), canon, stored_hash, digest, records
     )

@@ -3030,7 +3030,8 @@ def _run(  # noqa: PLR0911 (un retorno por subcomando)
 def _run_project(args: argparse.Namespace) -> int:
     """``veritas project``: el fallo de integridad (3) escribe su mensaje en stderr."""
     text, code = run_project(args)
-    print(text, file=sys.stderr if code == EXIT_ANALYSIS_FAILED else sys.stdout)
+    to_stderr = code == EXIT_ANALYSIS_FAILED and args.project_command != "analyze"
+    print(text, file=sys.stderr if to_stderr else sys.stdout)
     return code
 
 

@@ -126,7 +126,9 @@ class AnalysisRun:
     """Registro de una corrida (FEM-005/FEM-010), solo en memoria.
 
     ``model_revision`` es el contador existente del dominio, leído y no generado
-    (ADR-002 §6). Sin hash canónico ni vigencia CURRENT/STALE.
+    (ADR-002 §6). ``model_hash`` (hash canónico del modelo, ADR-006) es ``None`` hasta que la
+    capa de persistencia lo fija con ``dataclasses.replace``; los adaptadores no lo calculan.
+    La vigencia CURRENT/STALE se calcula al comparar hashes y no se guarda.
     """
 
     run_id: UUID
@@ -145,6 +147,7 @@ class AnalysisRun:
     worker_stdout: str
     worker_stderr: str
     raw: RawPlanarResults | None
+    model_hash: str | None = None  # Lo fija la persistencia (T-012 E2, ADR-006); ver ``stamp``.
 
     def __post_init__(self) -> None:
         if (self.status is RunStatus.SUCCEEDED) != (self.raw is not None):

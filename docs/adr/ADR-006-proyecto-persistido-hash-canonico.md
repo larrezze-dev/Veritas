@@ -24,7 +24,7 @@ Hasta T-020 el modelo vive solo en memoria. DAT-001 (P0) exige guardar y abrir u
 8. **Escritura segura.** Temporal en el mismo directorio, `fsync`, copia del archivo previo a `<archivo>.bak` y `os.replace`. Un fallo deja intacto el archivo anterior y no deja temporales.
 9. **Migraciones (DAT-002).** `schema_version` entero; cadena `N → N+1` sobre `content`, aplicada tras verificar la integridad del archivo tal como se guardó y antes de validar. Versión mayor que la soportada: `UNSUPPORTED_CONFIGURATION`. El esquema inicial es la v1; no hay migraciones reales.
 10. **Frontera CLI.** `veritas project demo|open|verify`: 0 correcto; 2 archivo inválido; 3 integridad no superada (mensaje en stderr). No cambia ninguna salida aceptada.
-11. **Ejecuciones históricas (E2, no incluidas en E1).** Registros inmutables con procedencia completa y `model_hash`, vigencia CURRENT/STALE calculada al abrir (no guardada) y `AnalysisRun.model_hash` opcional; retirada de la excepción de procedencia de ADR-002 y ADR-003.
+11. **Ejecuciones históricas (E2, implementada).** Esquema v2: `content.runs`, lista de registros (`persistence/runs.py`) con `kind` (plana o espacial), `model_hash`, `canon_version`, la corrida completa (procedencia, `request_json`, salida bruta, diagnósticos) y su resultado normalizado (`results`, nulo si no hay). Se serializan con un codec genérico estricto (`persistence/codec.py`, sin ejecutar nada). Solo se añaden (`append_runs`); un `run_id` repetido se rechaza. Una corrida FAILED se guarda como FAILED sin resultados y nunca como válida; los resultados de otra corrida o sobre una corrida no SUCCEEDED se rechazan. La vigencia (`validity`) es CURRENT si el hash guardado coincide con el del modelo actual y STALE si no (o si la `canon_version` no es la soportada); no se guarda. `AnalysisRun.model_hash` y `SpatialAnalysisRun.model_hash` son opcionales (`None` por defecto) y los fija la persistencia; adaptadores, protocolos y workers no cambian. Un archivo v1 se migra a v2 con `runs` vacío (migración `1 → 2`); un contenido v1 que ya traiga `runs` se rechaza. Se retira la excepción de procedencia de ADR-002 §6 y ADR-003 (hecho 7).
 
 ## Alternativas descartadas
 
@@ -44,3 +44,4 @@ ZIP con partes (D1-B) y SQLite (D1-C); hash incluyendo etiquetas o todas las rev
 
 - 2026-10-31: redactado con E1 de T-012 (PROPUESTO).
 - 2026-10-31: aprobado por el usuario (ACCEPTED).
+- 2026-11-02: E2 implementada (esquema v2, ejecuciones históricas y vigencia, `model_hash` en las corridas); notas en ADR-001, ADR-002 y ADR-003.

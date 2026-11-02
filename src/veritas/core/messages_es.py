@@ -89,6 +89,12 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "La codificación canónica «{found}» no está soportada (soportada: «{supported}»); "
         "el hash del modelo no se puede verificar."
     ),
+    "project.duplicate_run": "La ejecución {run_id} ya está guardada en el proyecto.",
+    "project.run_model_changed": (
+        "El modelo cambió desde la corrida (revisión {run_revision} frente a {model_revision}): "
+        "no se puede ligar a su hash."
+    ),
+    "project.case_required": "Indique el caso de carga con --carga. Casos del proyecto: {cases}.",
     "project.invalid_version": "Versión de esquema no válida: {found}.",
     "project.migration_gap": "No hay migración registrada de la versión {step} a la {next}.",
     "model.family_change": (
