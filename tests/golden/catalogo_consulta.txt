@@ -1,0 +1,253 @@
+$ veritas catalog search --db c.sqlite --limite 5
+--- stdout
+Búsqueda en c.sqlite: 103 coincidencia(s) de 103 perfil(es) examinados (última revisión de cada uno)
+Catálogo   Serie        Designación      Familia  Rev  A [m²]    Iy [m⁴]      Iz [m⁴]      J [m⁴]  m [kg/m]
+---------  -----------  ---------------  -------  ---  --------  -----------  -----------  ------  --------
+Nativo     N            A-1              I        2    0.0031    2e-06        3e-06        -       23.55
+Nativo     N            A-2              SHS      1    0.004     5e-06        5e-06        -       -
+Nativo     N            A-3              I        1    0.0035    4e-06        3e-06        -       27.475
+Sintetico  SINTETICO-I  SINT-100x50-4-6  I        1    0.000952  1.55436e-06  1.25469e-07  -       7.4732
+Sintetico  SINTETICO-I  SINT-100x55-5-6  I        1    0.0011    1.74387e-06  1.67292e-07  -       8.635
+Se muestran los 5 primeros de 103 (--limite).
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog search --db c.sqlite --area 9..11 cm2 --orden area:desc
+--- stdout
+Búsqueda en c.sqlite: 2 coincidencia(s) de 103 perfil(es) examinados (última revisión de cada uno)
+Catálogo   Serie        Designación      Familia  Rev  A [m²]    Iy [m⁴]      Iz [m⁴]      J [m⁴]  m [kg/m]
+---------  -----------  ---------------  -------  ---  --------  -----------  -----------  ------  --------
+Sintetico  SINTETICO-I  SINT-100x55-5-6  I        1    0.0011    1.74387e-06  1.67292e-07  -       8.635
+Sintetico  SINTETICO-I  SINT-100x50-4-6  I        1    0.000952  1.55436e-06  1.25469e-07  -       7.4732
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog search --db c.sqlite --serie sintet --iy >=500 cm4 --masa ..12 kg/m --dim h 100..200 mm --limite 4
+--- stdout
+Búsqueda en c.sqlite: 3 coincidencia(s) de 103 perfil(es) examinados (última revisión de cada uno)
+Catálogo   Serie        Designación      Familia  Rev  A [m²]    Iy [m⁴]      Iz [m⁴]      J [m⁴]  m [kg/m]  h [m]
+---------  -----------  ---------------  -------  ---  --------  -----------  -----------  ------  --------  -----
+Sintetico  SINTETICO-I  SINT-160x55-5-6  I        1    0.0014    5.26587e-06  1.67917e-07  -       10.99     0.16
+Sintetico  SINTETICO-I  SINT-160x65-4-6  I        1    0.001372  5.70756e-06  2.75414e-07  -       10.7702   0.16
+Sintetico  SINTETICO-I  SINT-180x60-4-7  I        1    0.001504  7.81328e-06  2.52885e-07  -       11.8064   0.18
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog search --db c.sqlite --catalogo Nativo --orden masa:desc
+--- stdout
+Búsqueda en c.sqlite: 3 coincidencia(s) de 3 perfil(es) examinados (última revisión de cada uno)
+Catálogo  Serie  Designación  Familia  Rev  A [m²]  Iy [m⁴]  Iz [m⁴]  J [m⁴]  m [kg/m]
+--------  -----  -----------  -------  ---  ------  -------  -------  ------  --------
+Nativo    N      A-3          I        1    0.0035  4e-06    3e-06    -       27.475
+Nativo    N      A-1          I        2    0.0031  2e-06    3e-06    -       23.55
+Nativo    N      A-2          SHS      1    0.004   5e-06    5e-06    -       -
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog search --db c.sqlite --catalogo Nativo --masa ..30 kg/m --dim h 0.2..0.3 m
+--- stdout
+Búsqueda en c.sqlite: 2 coincidencia(s) de 3 perfil(es) examinados (última revisión de cada uno)
+Catálogo  Serie  Designación  Familia  Rev  A [m²]  Iy [m⁴]  Iz [m⁴]  J [m⁴]  m [kg/m]  h [m]
+--------  -----  -----------  -------  ---  ------  -------  -------  ------  --------  -----
+Nativo    N      A-1          I        2    0.0031  2e-06    3e-06    -       23.55     0.2
+Nativo    N      A-3          I        1    0.0035  4e-06    3e-06    -       27.475    0.25
+Excluidos por falta de dato: 1 perfil(es) cumplen lo comprobable pero no tienen la propiedad filtrada (h: 1, m: 1); ausente no es 0.
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog search --db c.sqlite --j >=0 cm4
+--- stdout
+Búsqueda en c.sqlite: 0 coincidencia(s) de 103 perfil(es) examinados (última revisión de cada uno)
+Excluidos por falta de dato: 103 perfil(es) cumplen lo comprobable pero no tienen la propiedad filtrada (J: 103); ausente no es 0.
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog search --db c.sqlite --familia SHS --orden area:desc
+--- stdout
+Búsqueda en c.sqlite: 1 coincidencia(s) de 103 perfil(es) examinados (última revisión de cada uno)
+Catálogo  Serie  Designación  Familia  Rev  A [m²]  Iy [m⁴]  Iz [m⁴]  J [m⁴]  m [kg/m]
+--------  -----  -----------  -------  ---  ------  -------  -------  ------  --------
+Nativo    N      A-2          SHS      1    0.004   5e-06    5e-06    -       -
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog search --db c.sqlite --designacion zzz
+--- stdout
+Búsqueda en c.sqlite: 0 coincidencia(s) de 103 perfil(es) examinados (última revisión de cada uno)
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog ficha --db c.sqlite Sintetico/SINTETICO-I/SINT-100x50-4-6
+--- stdout
+Perfil SINTETICO-I / SINT-100x50-4-6 — revisión 1 de 1
+  id: <uuid>
+  catálogo: «Sintetico» (editable)
+  familia: I
+  dimensiones: b = 0.05 m, h = 0.1 m, tf = 0.006 m, tw = 0.004 m
+  propiedades (SI):
+    A = 0.000952 m² · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «A (cm²)» (cm²) y convertido a SI
+    Iy = 1.554357e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «Iy (cm⁴)» (cm⁴) y convertido a SI
+    Iz = 1.25469e-07 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «Iz (cm⁴)» (cm⁴) y convertido a SI
+    J = no disponible · NO_DISPONIBLE · origen: SINTETICO · método: No aportado en la fuente
+    m = 7.4732 kg/m · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «m (kg/m)» (kg/m) y convertido a SI
+  procedencia: fuente SINTETICO · licencia Sin valor comercial · edición 2026
+  método de importación: Fixture sintético por fórmula cerrada (tests/data/make_catalog_fixture.py)
+  avisos: ninguno
+  lote que creó la revisión: <uuid> (lote105.csv, <utc>)
+  hash SHA-256 de la revisión: <sha256>
+  historial de revisiones:
+    rev 1 · <sha12> · <utc>
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog ficha --db c.sqlite Nativo/N/A-1
+--- stdout
+Perfil N / A-1 — revisión 2 de 2
+  id: <uuid>
+  catálogo: «Nativo» (editable)
+  familia: I
+  dimensiones: h = 0.2 m
+  propiedades (SI):
+    A = 0.0031 m² · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «area» (m²) y convertido a SI
+    Iy = 2e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «iy» (m⁴) y convertido a SI
+    Iz = 3e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «iz» (m⁴) y convertido a SI
+    J = no disponible · NO_DISPONIBLE · origen: SINTETICO · método: No aportado en la fuente
+    m = 23.55 kg/m · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «linear_mass» (kg/m) y convertido a SI
+  procedencia: fuente SINTETICO · licencia Sin valor comercial · edición 2026
+  método de importación: Importación de archivo en formato nativo (columnas por nombre de campo, SI)
+  avisos: Aviso: Iy < Iz en un perfil I (posible intercambio de ejes).
+  lote que creó la revisión: <uuid> (q2.json, <utc>)
+  hash SHA-256 de la revisión: <sha256>
+  historial de revisiones:
+    rev 1 · <sha12> · <utc>
+    rev 2 · <sha12> · <utc>
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog ficha --db c.sqlite Nativo/N/A-1@1
+--- stdout
+Perfil N / A-1 — revisión 1 de 2
+  id: <uuid>
+  catálogo: «Nativo» (editable)
+  familia: I
+  dimensiones: h = 0.2 m
+  propiedades (SI):
+    A = 0.003 m² · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «area» (m²) y convertido a SI
+    Iy = 2e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «iy» (m⁴) y convertido a SI
+    Iz = 3e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «iz» (m⁴) y convertido a SI
+    J = no disponible · NO_DISPONIBLE · origen: SINTETICO · método: No aportado en la fuente
+    m = 23.55 kg/m · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «linear_mass» (kg/m) y convertido a SI
+  procedencia: fuente SINTETICO · licencia Sin valor comercial · edición 2026
+  método de importación: Importación de archivo en formato nativo (columnas por nombre de campo, SI)
+  avisos: Aviso: Iy < Iz en un perfil I (posible intercambio de ejes).
+  lote que creó la revisión: <uuid> (q1.json, <utc>)
+  hash SHA-256 de la revisión: <sha256>
+  historial de revisiones:
+    rev 1 · <sha12> · <utc>
+    rev 2 · <sha12> · <utc>
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog comparar --db c.sqlite Sintetico/SINTETICO-I/SINT-100x50-4-6 Sintetico/SINTETICO-I/SINT-260x95-6-8
+--- stdout
+Comparación de 2 perfiles (valores en SI)
+  P1 = Sintetico/SINTETICO-I/SINT-100x50-4-6 rev 1 · I
+  P2 = Sintetico/SINTETICO-I/SINT-260x95-6-8 rev 1 · I
+Magnitud  Unidad  P1           P2           P2/P1
+--------  ------  -----------  -----------  -----
+A         m²      0.000952     0.002984     3.134
+Iy        m⁴      1.55436e-06  3.1403e-05   20.2
+Iz        m⁴      1.25469e-07  1.14756e-06  9.146
+J         m⁴      -            -            -
+m         kg/m    7.4732       23.4244      3.134
+b         m       0.05         0.095        1.9
+h         m       0.1          0.26         2.6
+tf        m       0.006        0.008        1.333
+tw        m       0.004        0.006        1.5
+«-»: dato no disponible; el cociente no se calcula con datos ausentes.
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog comparar --db c.sqlite Nativo/N/A-1@1 Nativo/N/A-1 Nativo/N/A-2 Sintetico/SINTETICO-I/SINT-100x50-4-6
+--- stdout
+Comparación de 4 perfiles (valores en SI)
+  P1 = Nativo/N/A-1 rev 1 · I
+  P2 = Nativo/N/A-1 rev 2 · I
+  P3 = Nativo/N/A-2 rev 1 · SHS
+  P4 = Sintetico/SINTETICO-I/SINT-100x50-4-6 rev 1 · I
+Magnitud  Unidad  P1     P2      P2/P1  P3     P3/P1  P4           P4/P1
+--------  ------  -----  ------  -----  -----  -----  -----------  -------
+A         m²      0.003  0.0031  1.033  0.004  1.333  0.000952     0.3173
+Iy        m⁴      2e-06  2e-06   1      5e-06  2.5    1.55436e-06  0.7772
+Iz        m⁴      3e-06  3e-06   1      5e-06  1.667  1.25469e-07  0.04182
+J         m⁴      -      -       -      -      -      -            -
+m         kg/m    23.55  23.55   1      -      -      7.4732       0.3173
+b         m       -      -       -      -      -      0.05         -
+h         m       0.2    0.2     1      -      -      0.1          0.5
+tf        m       -      -       -      -      -      0.006        -
+tw        m       -      -       -      -      -      0.004        -
+«-»: dato no disponible; el cociente no se calcula con datos ausentes.
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog search --db c.sqlite --area 20 cm2
+--- stdout
+--- stderr
+INPUT_OUT_OF_RANGE: Rango no válido en --area: «20 cm2» (use A..B UNIDAD, A.. UNIDAD, ..B UNIDAD, >=A UNIDAD o <=B UNIDAD).
+--- exit 2
+
+$ veritas catalog search --db c.sqlite --iy 1..2 mm
+--- stdout
+--- stderr
+UNITS_INCOMPATIBLE: Rango no válido en --iy: «1..2 mm» (dimensión incompatible; se exige L^4).
+--- exit 2
+
+$ veritas catalog search --db c.sqlite --orden peso
+--- stdout
+--- stderr
+INPUT_OUT_OF_RANGE: Orden no válido: «peso» (area, iy, iz, j, masa, serie, designacion, dim_<nombre>; sentido :asc o :desc).
+--- exit 2
+
+$ veritas catalog search --db c.sqlite --limite 0
+--- stdout
+--- stderr
+INPUT_OUT_OF_RANGE: Opción --limite no válida: «0» (entero mayor o igual que 1).
+--- exit 2
+
+$ veritas catalog ficha --db c.sqlite Sintetico
+--- stdout
+--- stderr
+INPUT_OUT_OF_RANGE: Referencia de perfil no válida: «Sintetico» (se espera CATÁLOGO/SERIE/DESIGNACIÓN, con @REVISIÓN opcional).
+--- exit 2
+
+$ veritas catalog ficha --db c.sqlite Sintetico/SINTETICO-I/NO-EXISTE
+--- stdout
+--- stderr
+REFERENCE_NOT_FOUND: No existe el perfil «SINTETICO-I / NO-EXISTE».
+--- exit 2
+
+$ veritas catalog comparar --db c.sqlite Sintetico/SINTETICO-I/SINT-100x50-4-6
+--- stdout
+--- stderr
+INPUT_OUT_OF_RANGE: Se comparan de 2 a 8 perfiles; se recibieron 1.
+--- exit 2
+
+$ veritas catalog comparar --db c.sqlite Sintetico/SINTETICO-I/SINT-100x50-4-6 Sintetico/SINTETICO-I/SINT-100x50-4-6
+--- stdout
+--- stderr
+INPUT_OUT_OF_RANGE: El perfil «Sintetico/SINTETICO-I/SINT-100x50-4-6@1» aparece más de una vez en la comparación.
+--- exit 2
+

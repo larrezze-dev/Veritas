@@ -1,4 +1,4 @@
-"""Grupo de comandos ``veritas catalog`` (plan T-022, E2; ADR-009).
+"""Grupo de comandos ``veritas catalog`` (planes T-022 E2 y T-023 E1; ADR-009).
 
 Catálogo de perfiles en un archivo SQLite independiente del proyecto. Todos los comandos llevan
 ``--db RUTA`` (sin estado oculto ni carpeta de usuario, D10).
@@ -14,6 +14,16 @@ Catálogo de perfiles en un archivo SQLite independiente del proyecto. Todos los
 - ``catalog list --db RUTA [--catalogo N [--lotes]]``: catálogos, o los perfiles (última
   revisión) o los lotes de uno.
 - ``catalog show --db RUTA --catalogo N SERIE DESIGNACIÓN [--revision R]``: un perfil completo.
+- ``catalog search --db RUTA [--catalogo N] [--serie S] [--designacion D] [--familia F]
+  [--area R] [--iy R] [--iz R] [--j R] [--masa R] [--dim NOMBRE R] [--orden CAMPO[:desc]]
+  [--limite N]``: busca y ordena perfiles (última revisión) en uno o todos los catálogos. Un
+  rango ``R`` es ``A..B UNIDAD``, ``A.. UNIDAD``, ``..B UNIDAD``, ``>=A UNIDAD`` o
+  ``<=B UNIDAD`` (límites inclusivos). Un perfil sin la propiedad filtrada no se muestra y se
+  cuenta aparte: ausente no es 0.
+- ``catalog ficha --db RUTA CATÁLOGO/SERIE/DESIGNACIÓN[@REV]``: ficha completa de un perfil con
+  el historial de sus revisiones.
+- ``catalog comparar --db RUTA REF REF [REF ...]``: compara de 2 a 8 perfiles (SI), con el
+  cociente de cada uno respecto al primero.
 - ``catalog verify --db RUTA``: integridad del archivo, de cada revisión y de cada lote. Abrir un
   catálogo de una versión anterior lo migra (ADR-009, enmienda E2-A).
 
@@ -50,8 +60,29 @@ from veritas.catalogs.model import (
     CatalogProfile,
     ImportBatch,
     ProfileData,
+    ProfileFamily,
     profile_sha256,
     same_content,
+)
+from veritas.catalogs.query import (
+    FILTER_FIELDS,
+    MAX_COMPARED,
+    PROPERTY_LABELS,
+    Comparison,
+    Criteria,
+    Entry,
+    ProfileRef,
+    Range,
+    SearchResult,
+    compare,
+    dimension_field,
+    order_fields,
+    parse_order,
+    parse_range,
+    parse_reference,
+    search,
+    sort_entries,
+    value_of,
 )
 from veritas.catalogs.store import SCHEMA_VERSION, CatalogStore, PutStatus
 from veritas.core.diagnostics import DiagnosticCode
@@ -65,13 +96,7 @@ _WARNING: Final = (
     "Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR "
     "y no son datos verificados."
 )
-_PROPERTY_LABELS: Final = (
-    ("area", "A", "m²"),
-    ("iy", "Iy", "m⁴"),
-    ("iz", "Iz", "m⁴"),
-    ("torsion_constant", "J", "m⁴"),
-    ("linear_mass", "m", "kg/m"),
-)
+_PROPERTY_LABELS: Final = PROPERTY_LABELS
 
 
 def add_catalog_parser(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -128,8 +153,54 @@ def add_catalog_parser(subparsers: "argparse._SubParsersAction[argparse.Argument
     show.add_argument("designation", metavar="DESIGNACIÓN")
     show.add_argument("--revision", type=int, metavar="R", help="Revisión (la última).")
 
+    _add_query_parsers(sub)
+
     verify = sub.add_parser("verify", help="Verifica la integridad del archivo.")
     _db(verify)
+
+
+def _add_query_parsers(
+    sub: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    """Acciones de consulta: search, ficha y comparar (T-023 E1)."""
+    searching = sub.add_parser(
+        "search", help="Busca y ordena perfiles por texto, familia, dimensiones y propiedades."
+    )
+    _db(searching)
+    searching.add_argument("--catalogo", metavar="NOMBRE", help="Un catálogo (por defecto, todos).")
+    searching.add_argument("--serie", metavar="TEXTO", help="Subcadena de la serie.")
+    searching.add_argument("--designacion", metavar="TEXTO", help="Subcadena de la designación.")
+    searching.add_argument("--familia", choices=[f.value for f in ProfileFamily])
+    for option, label in (
+        ("area", "área"),
+        ("iy", "Iy"),
+        ("iz", "Iz"),
+        ("j", "J"),
+        ("masa", "masa lineal"),
+    ):
+        searching.add_argument(
+            f"--{option}", metavar="RANGO", help=f"Rango de {label}, p. ej. «20..40 cm2»."
+        )
+    searching.add_argument(
+        "--dim",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("NOMBRE", "RANGO"),
+        help="Rango de una dimensión, p. ej. --dim h «200..300 mm».",
+    )
+    searching.add_argument("--orden", metavar="CAMPO[:desc]", help=f"Campos: {order_fields()}.")
+    searching.add_argument("--limite", type=int, metavar="N", help="Muestra solo las N primeras.")
+
+    ficha = sub.add_parser("ficha", help="Ficha de un perfil con el historial de sus revisiones.")
+    _db(ficha)
+    ficha.add_argument("reference", metavar="REF", help="CATÁLOGO/SERIE/DESIGNACIÓN[@REVISIÓN]")
+
+    comparing = sub.add_parser("comparar", help="Compara de 2 a 8 perfiles.")
+    _db(comparing)
+    comparing.add_argument(
+        "references", nargs="+", metavar="REF", help="CATÁLOGO/SERIE/DESIGNACIÓN[@REVISIÓN]"
+    )
 
 
 def _db(parser: argparse.ArgumentParser) -> None:
@@ -148,8 +219,8 @@ def run_catalog(args: argparse.Namespace) -> tuple[str, int]:
     with CatalogStore.open(Path(args.db)) as store:
         if command == "verify":
             return _verify(args, store)
-        if command == "list":
-            return _list(args, store), EXIT_OK
+        if command in _QUERIES:
+            return _QUERIES[command](args, store), EXIT_OK
         info = store.catalog_by_name(args.catalogo)
         if command == "lock":
             return _lock(store, info), EXIT_OK
@@ -297,22 +368,33 @@ def _batches(store: CatalogStore, info: CatalogInfo) -> str:
 
 def _show(args: argparse.Namespace, store: CatalogStore, info: CatalogInfo) -> str:
     history = store.history(info.id, args.series, args.designation)
-    latest = history[-1]
-    if args.revision is None:
-        profile = latest
-    else:
-        matches = [p for p in history if p.revision == args.revision]
-        if not matches:
-            raise catalog_error(
-                DiagnosticCode.REFERENCE_NOT_FOUND,
-                "catalog.profile_not_found",
-                {"profile": f"{args.series} / {args.designation} rev {args.revision}"},
-            )
-        profile = matches[0]
-    return _describe(store, info, profile, latest.revision)
+    profile = _revision(history, args.revision, args.series, args.designation)
+    return _describe(store, info, profile, history[-1].revision)
+
+
+def _revision(
+    history: Sequence[CatalogProfile], revision: int | None, series: str, designation: str
+) -> CatalogProfile:
+    """La revisión pedida de un historial (la última si ``revision`` es ``None``)."""
+    if revision is None:
+        return history[-1]
+    for profile in history:
+        if profile.revision == revision:
+            return profile
+    raise catalog_error(
+        DiagnosticCode.REFERENCE_NOT_FOUND,
+        "catalog.profile_not_found",
+        {"profile": f"{series} / {designation} rev {revision}"},
+    )
 
 
 def _describe(store: CatalogStore, info: CatalogInfo, profile: CatalogProfile, latest: int) -> str:
+    return "\n".join([*_describe_lines(store, info, profile, latest), _WARNING])
+
+
+def _describe_lines(
+    store: CatalogStore, info: CatalogInfo, profile: CatalogProfile, latest: int
+) -> list[str]:
     data = profile.data
     batch = store.revision_batch(profile.id, profile.revision)
     lines = [
@@ -337,15 +419,167 @@ def _describe(store: CatalogStore, info: CatalogInfo, profile: CatalogProfile, l
         "  avisos: " + (" | ".join(render_text(key) for key in data.warnings) or "ninguno"),
         "  lote que creó la revisión: " + _batch_text(batch),
         f"  hash SHA-256 de la revisión: {profile_sha256(profile)}",
-        _WARNING,
     ]
-    return "\n".join(lines)
+    return lines
 
 
 def _batch_text(batch: ImportBatch | None) -> str:
     if batch is None:
         return "anterior al registro de lotes"
     return f"{batch.id} ({batch.source.file_name}, {batch.imported_at})"
+
+
+# --- search / ficha / comparar ----------------------------------------------------------------
+
+
+def _option_error(option: str, value: str, allowed: str) -> Exception:
+    return catalog_error(
+        DiagnosticCode.INPUT_OUT_OF_RANGE,
+        "catalog.import_options",
+        {"option": option, "value": value, "allowed": allowed},
+    )
+
+
+def _criteria(args: argparse.Namespace) -> Criteria:
+    ranges: list[tuple[str, Range]] = []
+    for option, field in FILTER_FIELDS.items():
+        text = getattr(args, option)
+        if text is not None:
+            ranges.append((field, parse_range(text, field, f"--{option}")))
+    for name, text in args.dim:
+        field = dimension_field(name)
+        ranges.append((field, parse_range(text, field, f"--dim {name}")))
+    family = None if args.familia is None else ProfileFamily(args.familia)
+    return Criteria(args.serie, args.designacion, family, tuple(ranges))
+
+
+def _entries(store: CatalogStore, name: str | None) -> list[Entry]:
+    catalogs = store.list_catalogs() if name is None else (store.catalog_by_name(name),)
+    return [Entry(info, p) for info in catalogs for p in store.list_profiles(info.id)]
+
+
+def _search(args: argparse.Namespace, store: CatalogStore) -> str:
+    if args.limite is not None and args.limite < 1:
+        raise _option_error("--limite", str(args.limite), "entero mayor o igual que 1")
+    criteria = _criteria(args)
+    order = None if args.orden is None else parse_order(args.orden)
+    entries = _entries(store, args.catalogo)
+    result = search(entries, criteria)
+    shown = sort_entries(result.matches, order)
+    cut = shown if args.limite is None else shown[: args.limite]
+    extra = [field for field, _ in criteria.ranges if field.startswith("dim_")]
+    if order is not None and order.field.startswith("dim_") and order.field not in extra:
+        extra.append(order.field)
+    lines = [
+        f"Búsqueda en {args.db}: {len(shown)} coincidencia(s) de {result.examined} "
+        "perfil(es) examinados (última revisión de cada uno)"
+    ]
+    if cut:
+        lines.append(_search_table(cut, extra))
+    if len(cut) < len(shown):
+        lines.append(f"Se muestran los {len(cut)} primeros de {len(shown)} (--limite).")
+    lines += _missing_lines(result)
+    lines.append(_WARNING)
+    return "\n".join(lines)
+
+
+def _search_table(entries: Sequence[Entry], extra: Sequence[str]) -> str:
+    header = (
+        "Catálogo",
+        "Serie",
+        "Designación",
+        "Familia",
+        "Rev",
+        *(f"{label} [{unit}]" for _, label, unit in _PROPERTY_LABELS),
+        *(f"{field[4:]} [m]" for field in extra),
+    )
+    rows = [
+        (
+            e.catalog.name,
+            e.profile.series,
+            e.profile.designation,
+            e.profile.family.value,
+            str(e.profile.revision),
+            *(_g(value_of(e.profile, field)) for field, _, _ in _PROPERTY_LABELS),
+            *(_g(value_of(e.profile, field)) for field in extra),
+        )
+        for e in entries
+    ]
+    return _table(header, rows)
+
+
+def _missing_lines(result: SearchResult) -> list[str]:
+    if not result.excluded_missing:
+        return []
+    names = {field: label for field, label, _ in _PROPERTY_LABELS}
+    detail = ", ".join(f"{names.get(field, field[4:])}: {count}" for field, count in result.missing)
+    return [
+        f"Excluidos por falta de dato: {result.excluded_missing} perfil(es) cumplen lo "
+        f"comprobable pero no tienen la propiedad filtrada ({detail}); ausente no es 0."
+    ]
+
+
+def _find(store: CatalogStore, ref: ProfileRef) -> tuple[CatalogInfo, CatalogProfile, int]:
+    """(catálogo, revisión pedida, última revisión) de una referencia."""
+    info = store.catalog_by_name(ref.catalog)
+    history = store.history(info.id, ref.series, ref.designation)
+    profile = _revision(history, ref.revision, ref.series, ref.designation)
+    return info, profile, history[-1].revision
+
+
+def _ficha(args: argparse.Namespace, store: CatalogStore) -> str:
+    ref = parse_reference(args.reference)
+    info, profile, latest = _find(store, ref)
+    lines = _describe_lines(store, info, profile, latest)
+    lines.append("  historial de revisiones:")
+    for past in store.history(info.id, ref.series, ref.designation):
+        batch = store.revision_batch(past.id, past.revision)
+        lines.append(
+            f"    rev {past.revision} · {profile_sha256(past)[:12]} · "
+            + ("anterior al registro de lotes" if batch is None else batch.imported_at)
+        )
+    lines.append(_WARNING)
+    return "\n".join(lines)
+
+
+def _compare(args: argparse.Namespace, store: CatalogStore) -> str:
+    refs = [parse_reference(text) for text in args.references]
+    if len(refs) > MAX_COMPARED:  # el límite se comprueba antes de leer nada
+        compare([])  # lanza catalog.compare_count
+    entries = [Entry(info, profile) for info, profile, _ in (_find(store, r) for r in refs)]
+    return _compare_text(compare(entries))
+
+
+def _compare_text(comparison: Comparison) -> str:
+    tags = [f"P{i}" for i in range(1, len(comparison.entries) + 1)]
+    lines = [f"Comparación de {len(tags)} perfiles (valores en SI)"]
+    for tag, entry in zip(tags, comparison.entries, strict=True):
+        profile = entry.profile
+        lines.append(
+            f"  {tag} = {entry.catalog.name}/{profile.series}/{profile.designation} "
+            f"rev {profile.revision} · {profile.family.value}"
+        )
+    header = ["Magnitud", "Unidad", tags[0]]
+    for tag in tags[1:]:
+        header += [tag, f"{tag}/{tags[0]}"]
+    rows = []
+    for row in comparison.rows:
+        cells = [row.label, row.unit, _g(row.values[0])]
+        for value, ratio in zip(row.values[1:], row.ratios[1:], strict=True):
+            cells += [_g(value), "-" if ratio is None else f"{ratio:.4g}"]
+        rows.append(cells)
+    lines.append(_table(header, rows))
+    lines.append("«-»: dato no disponible; el cociente no se calcula con datos ausentes.")
+    lines.append(_WARNING)
+    return "\n".join(lines)
+
+
+_QUERIES: Final = {
+    "list": _list,
+    "search": _search,
+    "ficha": _ficha,
+    "comparar": _compare,
+}
 
 
 # --- verify -----------------------------------------------------------------------------------

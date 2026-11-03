@@ -948,6 +948,16 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "catalog.cli_option": "La opción {option} exige {requires}.",
     "catalog.invalid_batch": "Lote de importación no válido o incoherente ({field}).",
     "catalog.verify_batch": "El lote de importación {batch} es incoherente ({field}).",
+    "catalog.search_range": "Rango no válido en {option}: «{value}» ({reason}).",
+    "catalog.search_order": "Orden no válido: «{value}» ({allowed}).",
+    "catalog.reference_invalid": (
+        "Referencia de perfil no válida: «{value}» "
+        "(se espera CATÁLOGO/SERIE/DESIGNACIÓN, con @REVISIÓN opcional)."
+    ),
+    "catalog.compare_count": (
+        "Se comparan de {minimum} a {maximum} perfiles; se recibieron {count}."
+    ),
+    "catalog.compare_repeated": "El perfil «{profile}» aparece más de una vez en la comparación.",
 }
 
 

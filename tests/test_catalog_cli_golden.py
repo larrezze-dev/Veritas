@@ -52,3 +52,47 @@ def test_the_session_renders_each_key_with_its_real_parameters(
     assert key in MESSAGES_ES
     assert fragment in MESSAGES_ES[key]  # el fragmento pertenece de verdad a esa plantilla
     assert fragment in session_text
+
+
+# --- Sesión de consulta (T-023 E1) -------------------------------------------------------------
+
+
+@pytest.fixture
+def query_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    monkeypatch.chdir(tmp_path)
+    return golden.query_session()
+
+
+def test_the_query_session_matches_the_accepted_output(query_text: str) -> None:
+    assert query_text == golden.QUERY_GOLDEN_FILE.read_text(encoding="utf-8")
+
+
+def test_the_query_session_covers_success_and_failure_with_no_unfilled_template(
+    query_text: str,
+) -> None:
+    exits = re.findall(r"^--- exit (\d+)$", query_text, flags=re.MULTILINE)
+    assert set(exits) == {"0", "2"}
+    assert "{" not in query_text
+    assert "<uuid>" in query_text
+    assert query_text.count("ficha") >= 3
+
+
+QUERY_FRAGMENTS = {
+    # clave: (fragmento fijo de la plantilla, texto que aparece ya con sus parámetros)
+    "catalog.search_range": ("Rango no válido en", "Rango no válido en --area"),
+    "catalog.search_order": ("Orden no válido", "Orden no válido: «peso»"),
+    "catalog.reference_invalid": ("Referencia de perfil no válida", "no válida: «Sintetico»"),
+    "catalog.compare_count": ("Se comparan de", "Se comparan de 2 a 8 perfiles; se recibieron 1."),
+    "catalog.compare_repeated": ("aparece más de una vez", "El perfil «Sintetico/SINTETICO-I/"),
+    "catalog.profile_not_found": ("No existe el perfil", "No existe el perfil «SINTETICO-I / NO-"),
+    "catalog.import_options": ("no válida: «", "Opción --limite no válida: «0»"),
+}
+
+
+@pytest.mark.parametrize(("key", "texts"), sorted(QUERY_FRAGMENTS.items()))
+def test_the_query_session_renders_each_key_with_its_real_parameters(
+    query_text: str, key: str, texts: tuple[str, str]
+) -> None:
+    template_fragment, rendered = texts
+    assert template_fragment in MESSAGES_ES[key]  # el fragmento pertenece a esa plantilla
+    assert rendered in query_text

@@ -9,7 +9,11 @@ enmascara también los números, y aquí los recuentos son parte de lo que se ac
 
 Regenerar solo con una salida aceptada (ver ``tests/golden/README.md``):
 
-    uv run python tests/catalog_cli_golden.py
+    uv run python tests/catalog_cli_golden.py            # ambas sesiones
+    uv run python tests/catalog_cli_golden.py consulta   # solo la de consulta (T-023)
+
+La sesión de consulta (``search``, ``ficha`` y ``comparar``; T-023 E1) vive en su propio
+archivo para no tocar la salida ya aceptada de T-022.
 """
 
 import contextlib
@@ -19,7 +23,9 @@ import os
 import re
 import shutil
 import sqlite3
+import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
@@ -27,6 +33,7 @@ from veritas import cli
 
 DATA_DIR: Final = Path(__file__).parent / "data"
 GOLDEN_FILE: Final = Path(__file__).parent / "golden" / "catalogo_cli.txt"
+QUERY_GOLDEN_FILE: Final = Path(__file__).parent / "golden" / "catalogo_consulta.txt"
 
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 _SHA = re.compile(r"\b[0-9a-f]{64}\b")
@@ -50,6 +57,15 @@ NATIVE_JSON: Final = [
     {"series": "N", "designation": "A-3", "family": "I", "area": True, "iy": 4e-6, "iz": 3e-6},
     {"series": "N", "designation": "A-2", "family": "SHS", "area": 0.004, "iy": 5e-6, "iz": 5e-6},
 ]
+
+QUERY_NATIVE: Final = [
+    {"series": "N", "designation": "A-1", "family": "I", "area": 0.003, "iy": 2e-6, "iz": 3e-6,
+     "linear_mass": 23.55, "dim_h": 0.2},
+    {"series": "N", "designation": "A-2", "family": "SHS", "area": 0.004, "iy": 5e-6, "iz": 5e-6},
+    {"series": "N", "designation": "A-3", "family": "I", "area": 0.0035, "iy": 4e-6, "iz": 3e-6,
+     "linear_mass": 27.475, "dim_h": 0.25},
+]  # fmt: skip
+"""Catálogo nativo de la sesión de consulta: con y sin masa, con y sin dimensión h."""
 
 
 def normalize(text: str) -> str:
@@ -145,16 +161,64 @@ def session() -> str:
     return "".join(log)
 
 
-def capture() -> str:
-    """Ejecuta la sesión en un directorio temporal y devuelve su salida normalizada."""
+def query_session() -> str:
+    """Sesión de consulta (T-023 E1) sobre dos catálogos sintéticos (preparación sin registrar)."""
+    work = Path.cwd()
+    _prepare(work)
+    db = ["--db", "c.sqlite"]
+    quiet = io.StringIO()
+    with contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
+        for name in ("Sintetico", "Nativo"):
+            cli.main(["catalog", "create", *db, "--nombre", name, "--fuente", "SINTETICO",
+                      "--licencia", "Sin valor comercial", "--edicion", "2026"])  # fmt: skip
+        cli.main(["catalog", "import", *db, "--catalogo", "Sintetico", "lote105.csv",
+                  *SYNTHETIC_ARGS])  # fmt: skip
+        (work / "q1.json").write_text(json.dumps(QUERY_NATIVE), encoding="utf-8")
+        revised = [dict(QUERY_NATIVE[0], area=0.0031), *QUERY_NATIVE[1:]]
+        (work / "q2.json").write_text(json.dumps(revised), encoding="utf-8")
+        cli.main(["catalog", "import", *db, "--catalogo", "Nativo", "q1.json"])
+        cli.main(["catalog", "import", *db, "--catalogo", "Nativo", "q2.json"])
+    first = "Sintetico/SINTETICO-I/SINT-100x50-4-6"
+    second = "Sintetico/SINTETICO-I/SINT-260x95-6-8"
+    steps: list[list[str]] = [
+        ["search", *db, "--limite", "5"],
+        ["search", *db, "--area", "9..11 cm2", "--orden", "area:desc"],
+        ["search", *db, "--serie", "sintet", "--iy", ">=500 cm4", "--masa", "..12 kg/m",
+         "--dim", "h", "100..200 mm", "--limite", "4"],
+        ["search", *db, "--catalogo", "Nativo", "--orden", "masa:desc"],
+        ["search", *db, "--catalogo", "Nativo", "--masa", "..30 kg/m", "--dim", "h", "0.2..0.3 m"],
+        ["search", *db, "--j", ">=0 cm4"],
+        ["search", *db, "--familia", "SHS", "--orden", "area:desc"],
+        ["search", *db, "--designacion", "zzz"],
+        ["ficha", *db, first],
+        ["ficha", *db, "Nativo/N/A-1"],
+        ["ficha", *db, "Nativo/N/A-1@1"],
+        ["comparar", *db, first, second],
+        ["comparar", *db, "Nativo/N/A-1@1", "Nativo/N/A-1", "Nativo/N/A-2", first],
+        ["search", *db, "--area", "20 cm2"],
+        ["search", *db, "--iy", "1..2 mm"],
+        ["search", *db, "--orden", "peso"],
+        ["search", *db, "--limite", "0"],
+        ["ficha", *db, "Sintetico"],
+        ["ficha", *db, "Sintetico/SINTETICO-I/NO-EXISTE"],
+        ["comparar", *db, first],
+        ["comparar", *db, first, first],
+    ]  # fmt: skip
+    return "".join(_run(step) for step in steps)
+
+
+def capture(run: Callable[[], str] | None = None) -> str:
+    """Ejecuta una sesión en un directorio temporal y devuelve su salida normalizada."""
     previous = Path.cwd()
     with tempfile.TemporaryDirectory() as directory:
         os.chdir(directory)
         try:
-            return session()
+            return (run or session)()
         finally:
             os.chdir(previous)
 
 
 if __name__ == "__main__":
-    GOLDEN_FILE.write_text(capture(), encoding="utf-8", newline="\n")
+    if sys.argv[1:] != ["consulta"]:
+        GOLDEN_FILE.write_text(capture(), encoding="utf-8", newline="\n")
+    QUERY_GOLDEN_FILE.write_text(capture(query_session), encoding="utf-8", newline="\n")
