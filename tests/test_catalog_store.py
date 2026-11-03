@@ -136,13 +136,13 @@ def test_open_rejects_a_newer_version_without_writing(tmp_path: Path) -> None:
     assert path.read_bytes() == before
 
 
-def test_version_one_opens_and_survives_reopening(tmp_path: Path) -> None:
+def test_current_version_opens_and_survives_reopening(tmp_path: Path) -> None:
     path = tmp_path / "c.sqlite"
     with CatalogStore.create(path) as store:
         catalog = make_catalog(store)
     before = path.read_bytes()
     with CatalogStore.open(path) as store:
-        assert store.version == 1
+        assert store.version == SCHEMA_VERSION
         assert store.get_catalog(catalog).name == "Mi catálogo"
     assert path.read_bytes() == before  # abrir sin migrar no escribe
 
@@ -184,7 +184,7 @@ def test_synthetic_migration_zero_to_one(tmp_path: Path) -> None:
     def zero_to_one(connection: sqlite3.Connection) -> None:
         connection.execute("INSERT INTO datos (x) VALUES (42)")
 
-    with CatalogStore.open(path, migrations={0: zero_to_one}) as store:
+    with CatalogStore.open(path, migrations={0: zero_to_one}, target_version=1) as store:
         assert store.version == 1
     assert pragma(path, "user_version") == 1
     connection = raw(path)
@@ -196,15 +196,20 @@ def test_synthetic_chain_to_a_higher_target(tmp_path: Path) -> None:
     path = tmp_path / "c.sqlite"
     CatalogStore.create(path).close()
 
-    def one_to_two(connection: sqlite3.Connection) -> None:
+    def next_step(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE catalogs ADD COLUMN nota TEXT")
 
-    with CatalogStore.open(path, migrations={1: one_to_two}, target_version=2) as store:
-        assert store.version == 2
-    assert pragma(path, "user_version") == 2
-    # Ya en la versión 2: no se vuelve a migrar.
-    with CatalogStore.open(path, migrations={1: one_to_two}, target_version=2) as store:
-        assert store.version == 2
+    target = SCHEMA_VERSION + 1
+    with CatalogStore.open(
+        path, migrations={SCHEMA_VERSION: next_step}, target_version=target
+    ) as store:
+        assert store.version == target
+    assert pragma(path, "user_version") == target
+    # Ya en la versión destino: no se vuelve a migrar.
+    with CatalogStore.open(
+        path, migrations={SCHEMA_VERSION: next_step}, target_version=target
+    ) as store:
+        assert store.version == target
 
 
 def test_incomplete_chain_is_rejected_before_writing(tmp_path: Path) -> None:
@@ -212,7 +217,7 @@ def test_incomplete_chain_is_rejected_before_writing(tmp_path: Path) -> None:
     CatalogStore.create(path).close()
     before = path.read_bytes()
     with pytest.raises(CatalogFileError) as error:
-        CatalogStore.open(path, migrations={}, target_version=3)
+        CatalogStore.open(path, migrations={}, target_version=SCHEMA_VERSION + 1)
     assert error.value.diagnostic.message_key == "catalog.migration_gap"
     assert path.read_bytes() == before
 
@@ -230,9 +235,11 @@ def test_failing_migration_leaves_the_file_identical(
         raise failure("fallo a mitad de la migración")
 
     with pytest.raises(failure):
-        CatalogStore.open(path, migrations={1: broken}, target_version=2)
+        CatalogStore.open(
+            path, migrations={SCHEMA_VERSION: broken}, target_version=SCHEMA_VERSION + 1
+        )
     assert path.read_bytes() == before
-    assert pragma(path, "user_version") == 1
+    assert pragma(path, "user_version") == SCHEMA_VERSION
     assert sorted(p.name for p in tmp_path.iterdir()) == ["c.sqlite"]
 
 

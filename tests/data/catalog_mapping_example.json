@@ -1,0 +1,55 @@
+{
+  "format": "veritas-catalog-mapping/1",
+  "columns": {
+    "Serie": {
+      "field": "series"
+    },
+    "Designación": {
+      "field": "designation"
+    },
+    "Familia": {
+      "field": "family"
+    },
+    "h (mm)": {
+      "field": "dim_h",
+      "unit": "mm"
+    },
+    "b (mm)": {
+      "field": "dim_b",
+      "unit": "mm"
+    },
+    "tw (mm)": {
+      "field": "dim_tw",
+      "unit": "mm"
+    },
+    "tf (mm)": {
+      "field": "dim_tf",
+      "unit": "mm"
+    },
+    "A (cm²)": {
+      "field": "area",
+      "unit": "cm²"
+    },
+    "Iy (cm⁴)": {
+      "field": "iy",
+      "unit": "cm⁴"
+    },
+    "Iz (cm⁴)": {
+      "field": "iz",
+      "unit": "cm⁴"
+    },
+    "J (cm⁴)": {
+      "field": "torsion_constant",
+      "unit": "cm⁴"
+    },
+    "m (kg/m)": {
+      "field": "linear_mass",
+      "unit": "kg/m"
+    }
+  },
+  "family_aliases": {
+    "doble t": "I"
+  },
+  "steel": true,
+  "method": "Fixture sintético por fórmula cerrada (tests/data/make_catalog_fixture.py)"
+}

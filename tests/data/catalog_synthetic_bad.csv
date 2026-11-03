@@ -1,0 +1,6 @@
+﻿Serie;Designación;Familia;h (mm);b (mm);tw (mm);tf (mm);A (cm²);Iy (cm⁴);Iz (cm⁴);J (cm⁴);m (kg/m);Notas
+SINTETICO-I;SINT-MALO-1;I;100;50;4;6;abc;155,4357;12,5469;;7,4732;SINTÉTICO, sin valor comercial
+SINTETICO-I;SINT-MALO-2;I;100;50;4;6;9,52;0;12,5469;;7,4732;SINTÉTICO, sin valor comercial
+SINTETICO-I;;I;100;50;4;6;9,52;155,4357;12,5469;;7,4732;SINTÉTICO, sin valor comercial
+SINTETICO-I;SINT-MALO-4;I;100;50;4;6;9,52;155,4357;inf;;7,4732;SINTÉTICO, sin valor comercial
+SINTETICO-I;SINT-MALO-5;TUBO RARO;100;50;4;6;9,52;155,4357;12,5469;;7,4732;SINTÉTICO, sin valor comercial

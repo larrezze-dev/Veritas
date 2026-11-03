@@ -1,0 +1,19 @@
+{
+  "format": "veritas-catalog-mapping/1",
+  "columns": {
+    "section": {"field": "designation"},
+    "mass_kg_m": {"field": "linear_mass", "unit": "kg/m"},
+    "h_mm": {"field": "dim_h", "unit": "mm"},
+    "b_mm": {"field": "dim_b", "unit": "mm"},
+    "tw_mm": {"field": "dim_tw", "unit": "mm"},
+    "tf_mm": {"field": "dim_tf", "unit": "mm"},
+    "r_mm": {"field": "dim_r", "unit": "mm"},
+    "area_cm2": {"field": "area", "unit": "cm²"},
+    "iy_cm4": {"field": "iy", "unit": "cm⁴"},
+    "iz_cm4": {"field": "iz", "unit": "cm⁴"}
+  },
+  "default_series": "steel-sections (I europeos)",
+  "default_family": "I",
+  "steel": true,
+  "method": "Mapeo de ejemplo para los CSV ipe, hea, heb y hem del paquete PyPI steel-sections 0.2.1. No incluye datos; la licencia de los datos NO está verificada: úsese solo en local"
+}

@@ -886,6 +886,68 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Las columnas de consulta de la revisión {revision} no coinciden con su documento: "
         "{fields}."
     ),
+    "catalog.mapping_json": (
+        "El archivo de mapeo no es un JSON válido (sin claves repetidas ni NaN/Infinity)."
+    ),
+    "catalog.mapping_structure": "Mapeo no válido en {path}: se esperaba {expected}.",
+    "catalog.mapping_format": "Formato de mapeo «{found}» no soportado; se esperaba {expected}.",
+    "catalog.mapping_field_unknown": (
+        "La columna «{column}» se asigna al campo desconocido «{field}». Campos: {known}."
+    ),
+    "catalog.mapping_field_repeated": (
+        "Dos entradas alimentan el mismo campo {field}: «{first}» y «{second}»."
+    ),
+    "catalog.mapping_unit": (
+        "Unidad no válida «{unit}» en la columna «{column}» (campo {field}): {expected}."
+    ),
+    "catalog.mapping_family": "Familia no válida «{value}» en {path}. Familias: {known}.",
+    "catalog.mapping_required": "El mapeo no asigna ninguna columna al campo obligatorio {field}.",
+    "catalog.mapping_column_unknown": (
+        "Columna «{column}» desconocida en el formato nativo (sin mapeo). Campos: {known}."
+    ),
+    "catalog.mapping_column_missing": (
+        "El archivo no tiene la columna «{column}» que el mapeo asigna a un campo."
+    ),
+    "catalog.import_duplicate_column": "El archivo repite la columna «{column}» en su cabecera.",
+    "catalog.import_options": "Opción {option} no válida: «{value}» ({allowed}).",
+    "catalog.import_format": (
+        "No se reconoce el formato de {path}: use la extensión .csv o .json, o indique --formato."
+    ),
+    "catalog.import_missing": "No existe el archivo de origen {path}.",
+    "catalog.import_unreadable": "No se puede leer el archivo de origen {path}.",
+    "catalog.import_encoding": "El archivo {path} no está codificado en UTF-8.",
+    "catalog.import_csv": "CSV mal formado en {path} (línea {line}).",
+    "catalog.import_json": ("JSON mal formado en {path} (sin claves repetidas ni NaN/Infinity)."),
+    "catalog.import_structure": "El JSON de {path} debe ser una lista de objetos.",
+    "catalog.import_empty": "El archivo {path} no tiene filas de datos.",
+    "catalog.row_width": "La fila tiene {found} celda(s) y la cabecera {expected}.",
+    "catalog.row_value_type": "Valor de tipo no admitido en {field}: se esperaba texto o número.",
+    "catalog.row_required": "Falta el valor obligatorio de {field}.",
+    "catalog.row_not_number": (
+        "{field}: «{value}» no es un número válido (sin nan/inf, guiones bajos ni separadores "
+        "de miles)."
+    ),
+    "catalog.row_not_positive": "{field}: «{value}» debe ser mayor que 0.",
+    "catalog.row_unrepresentable": "{field}: «{value}» no es representable en SI.",
+    "catalog.row_family_unknown": "Familia «{value}» desconocida. Familias: {known}.",
+    "catalog.row_duplicate_key": (
+        "Clave repetida en el archivo: serie «{series}», designación «{designation}» (primera "
+        "aparición en la línea {first_line}); se rechazan todas las filas con esa clave."
+    ),
+    "catalog.row_invalid": "Fila no válida: {detail}",
+    "catalog.warn_mass_area": (
+        "Aviso: la masa lineal difiere de A·ρ (acero, 7850 kg/m³) en más de ±2 %."
+    ),
+    "catalog.warn_area_dimensions": (
+        "Aviso: A difiere en más de ±1 % del área de la I calculada con h, b, tw y tf (y con "
+        "r si se da; sin r no cuenta los acuerdos) o las dimensiones son incoherentes."
+    ),
+    "catalog.warn_iy_less_than_iz": (
+        "Aviso: Iy < Iz en un perfil I (posible intercambio de ejes)."
+    ),
+    "catalog.cli_option": "La opción {option} exige {requires}.",
+    "catalog.invalid_batch": "Lote de importación no válido o incoherente ({field}).",
+    "catalog.verify_batch": "El lote de importación {batch} es incoherente ({field}).",
 }
 
 

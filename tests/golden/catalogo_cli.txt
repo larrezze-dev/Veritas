@@ -1,0 +1,216 @@
+$ veritas catalog create --db c.sqlite --nombre Sintetico --fuente SINTETICO --licencia Sin valor comercial --edicion 2026
+--- stdout
+Catálogo «Sintetico» creado: c.sqlite
+  id: <uuid>
+  fuente: SINTETICO · licencia: Sin valor comercial · edición: 2026
+  protegido: no · esquema v2
+Importe perfiles con «veritas catalog import».
+--- stderr
+--- exit 0
+
+$ veritas catalog import --db c.sqlite --catalogo Sintetico lote105.csv --mapeo catalog_mapping_example.json --sep ; --decimal , --simular
+--- stdout
+Importación en el catálogo «Sintetico» — SIMULACIÓN: no se escribe nada
+  archivo: lote105.csv (CSV, SHA-256 <sha256>)
+  mapeo: catalog_mapping_example.json (SHA-256 <sha256>)
+  filas leídas: 105 · aceptadas: 100 · rechazadas: 5 · con aviso: 0
+  creados: 100 · revisados: 0 · sin cambios: 0
+Filas rechazadas:
+  línea 102 [area]: INPUT_INVALID_TYPE: area: «abc» no es un número válido (sin nan/inf, guiones bajos ni separadores de miles).
+  línea 103 [iy]: INPUT_OUT_OF_RANGE: iy: «0» debe ser mayor que 0.
+  línea 104 [designation]: INPUT_OUT_OF_RANGE: Falta el valor obligatorio de designation.
+  línea 105 [iz]: INPUT_INVALID_TYPE: iz: «inf» no es un número válido (sin nan/inf, guiones bajos ni separadores de miles).
+  línea 106 [family]: INPUT_OUT_OF_RANGE: Familia «TUBO RARO» desconocida. Familias: I, U, L, T, SHS, RHS, CHS, RECT, ROUND, OTRO.
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog import --db c.sqlite --catalogo Sintetico lote105.csv --mapeo catalog_mapping_example.json --sep ; --decimal ,
+--- stdout
+Importación en el catálogo «Sintetico» — ESCRITA en el lote <uuid> (<utc>)
+  archivo: lote105.csv (CSV, SHA-256 <sha256>)
+  mapeo: catalog_mapping_example.json (SHA-256 <sha256>)
+  filas leídas: 105 · aceptadas: 100 · rechazadas: 5 · con aviso: 0
+  creados: 100 · revisados: 0 · sin cambios: 0
+Filas rechazadas:
+  línea 102 [area]: INPUT_INVALID_TYPE: area: «abc» no es un número válido (sin nan/inf, guiones bajos ni separadores de miles).
+  línea 103 [iy]: INPUT_OUT_OF_RANGE: iy: «0» debe ser mayor que 0.
+  línea 104 [designation]: INPUT_OUT_OF_RANGE: Falta el valor obligatorio de designation.
+  línea 105 [iz]: INPUT_INVALID_TYPE: iz: «inf» no es un número válido (sin nan/inf, guiones bajos ni separadores de miles).
+  línea 106 [family]: INPUT_OUT_OF_RANGE: Familia «TUBO RARO» desconocida. Familias: I, U, L, T, SHS, RHS, CHS, RECT, ROUND, OTRO.
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog import --db c.sqlite --catalogo Sintetico lote105.csv --mapeo catalog_mapping_example.json --sep ; --decimal ,
+--- stdout
+Importación en el catálogo «Sintetico» — ESCRITA en el lote <uuid> (<utc>)
+  archivo: lote105.csv (CSV, SHA-256 <sha256>)
+  mapeo: catalog_mapping_example.json (SHA-256 <sha256>)
+  filas leídas: 105 · aceptadas: 100 · rechazadas: 5 · con aviso: 0
+  creados: 0 · revisados: 0 · sin cambios: 100
+Filas rechazadas:
+  línea 102 [area]: INPUT_INVALID_TYPE: area: «abc» no es un número válido (sin nan/inf, guiones bajos ni separadores de miles).
+  línea 103 [iy]: INPUT_OUT_OF_RANGE: iy: «0» debe ser mayor que 0.
+  línea 104 [designation]: INPUT_OUT_OF_RANGE: Falta el valor obligatorio de designation.
+  línea 105 [iz]: INPUT_INVALID_TYPE: iz: «inf» no es un número válido (sin nan/inf, guiones bajos ni separadores de miles).
+  línea 106 [family]: INPUT_OUT_OF_RANGE: Familia «TUBO RARO» desconocida. Familias: I, U, L, T, SHS, RHS, CHS, RECT, ROUND, OTRO.
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog import --db c.sqlite --catalogo Sintetico lote105.csv --mapeo catalog_mapping_example.json --sep ; --decimal , --estricto
+--- stdout
+--- stderr
+Importación en el catálogo «Sintetico» — LOTE RECHAZADO ENTERO (--estricto): no se escribe nada
+  archivo: lote105.csv (CSV, SHA-256 <sha256>)
+  mapeo: catalog_mapping_example.json (SHA-256 <sha256>)
+  filas leídas: 105 · aceptadas: 100 · rechazadas: 5 · con aviso: 0
+Filas rechazadas:
+  línea 102 [area]: INPUT_INVALID_TYPE: area: «abc» no es un número válido (sin nan/inf, guiones bajos ni separadores de miles).
+  línea 103 [iy]: INPUT_OUT_OF_RANGE: iy: «0» debe ser mayor que 0.
+  línea 104 [designation]: INPUT_OUT_OF_RANGE: Falta el valor obligatorio de designation.
+  línea 105 [iz]: INPUT_INVALID_TYPE: iz: «inf» no es un número válido (sin nan/inf, guiones bajos ni separadores de miles).
+  línea 106 [family]: INPUT_OUT_OF_RANGE: Familia «TUBO RARO» desconocida. Familias: I, U, L, T, SHS, RHS, CHS, RECT, ROUND, OTRO.
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- exit 2
+
+$ veritas catalog create --db c.sqlite --nombre Nativo --fuente SINTETICO --licencia Sin valor comercial --edicion 2026
+--- stdout
+Catálogo «Nativo» añadido al archivo existente: c.sqlite
+  id: <uuid>
+  fuente: SINTETICO · licencia: Sin valor comercial · edición: 2026
+  protegido: no · esquema v2
+Importe perfiles con «veritas catalog import».
+--- stderr
+--- exit 0
+
+$ veritas catalog import --db c.sqlite --catalogo Nativo nativo.json
+--- stdout
+Importación en el catálogo «Nativo» — ESCRITA en el lote <uuid> (<utc>)
+  archivo: nativo.json (JSON, SHA-256 <sha256>)
+  mapeo: formato nativo (SI) (SHA-256 <sha256>)
+  filas leídas: 4 · aceptadas: 1 · rechazadas: 3 · con aviso: 1
+  creados: 1 · revisados: 0 · sin cambios: 0
+Filas rechazadas:
+  línea 2 [designation]: REVISION_CONFLICT: Clave repetida en el archivo: serie «N», designación «A-2» (primera aparición en la línea 2); se rechazan todas las filas con esa clave.
+  línea 3 [area]: INPUT_INVALID_TYPE: Valor de tipo no admitido en area: se esperaba texto o número.
+  línea 4 [designation]: REVISION_CONFLICT: Clave repetida en el archivo: serie «N», designación «A-2» (primera aparición en la línea 2); se rechazan todas las filas con esa clave.
+Avisos (filas aceptadas):
+  línea 1 [N / A-1]: Aviso: Iy < Iz en un perfil I (posible intercambio de ejes).
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog list --db c.sqlite
+--- stdout
+Archivo: c.sqlite
+Catálogo   Perfiles  Protegido  Edición  Fuente     Licencia
+---------  --------  ---------  -------  ---------  -------------------
+Nativo     1         no         2026     SINTETICO  Sin valor comercial
+Sintetico  100       no         2026     SINTETICO  Sin valor comercial
+--- stderr
+--- exit 0
+
+$ veritas catalog list --db c.sqlite --catalogo Nativo
+--- stdout
+Catálogo «Nativo» (editable): 1 perfil(es), última revisión de cada uno
+Serie  Designación  Familia  Rev  A [m²]  Iy [m⁴]  Iz [m⁴]  J [m⁴]  m [kg/m]  Avisos
+-----  -----------  -------  ---  ------  -------  -------  ------  --------  ------
+N      A-1          I        1    0.003   2e-06    3e-06    -       23.55     1
+--- stderr
+--- exit 0
+
+$ veritas catalog list --db c.sqlite --catalogo Sintetico --lotes
+--- stdout
+Catálogo «Sintetico»: 2 lote(s)
+Lote                                  Fecha (UTC)           Archivo      Formato  Leídas/acept./rech.  Creados/rev./igual  SHA archivo   SHA mapeo
+------------------------------------  --------------------  -----------  -------  -------------------  ------------------  ------------  ------------
+<uuid>  <utc>  lote105.csv  CSV      105/100/5            100/0/0             <sha12>  <sha12>
+<uuid>  <utc>  lote105.csv  CSV      105/100/5            0/0/100             <sha12>  <sha12>
+--- stderr
+--- exit 0
+
+$ veritas catalog show --db c.sqlite --catalogo Sintetico SINTETICO-I SINT-100x50-4-6
+--- stdout
+Perfil SINTETICO-I / SINT-100x50-4-6 — revisión 1 de 1
+  id: <uuid>
+  catálogo: «Sintetico» (editable)
+  familia: I
+  dimensiones: b = 0.05 m, h = 0.1 m, tf = 0.006 m, tw = 0.004 m
+  propiedades (SI):
+    A = 0.000952 m² · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «A (cm²)» (cm²) y convertido a SI
+    Iy = 1.554357e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «Iy (cm⁴)» (cm⁴) y convertido a SI
+    Iz = 1.25469e-07 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «Iz (cm⁴)» (cm⁴) y convertido a SI
+    J = no disponible · NO_DISPONIBLE · origen: SINTETICO · método: No aportado en la fuente
+    m = 7.4732 kg/m · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «m (kg/m)» (kg/m) y convertido a SI
+  procedencia: fuente SINTETICO · licencia Sin valor comercial · edición 2026
+  método de importación: Fixture sintético por fórmula cerrada (tests/data/make_catalog_fixture.py)
+  avisos: ninguno
+  lote que creó la revisión: <uuid> (lote105.csv, <utc>)
+  hash SHA-256 de la revisión: <sha256>
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog show --db c.sqlite --catalogo Nativo N A-1
+--- stdout
+Perfil N / A-1 — revisión 1 de 1
+  id: <uuid>
+  catálogo: «Nativo» (editable)
+  familia: I
+  dimensiones: ninguna
+  propiedades (SI):
+    A = 0.003 m² · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «area» (m²) y convertido a SI
+    Iy = 2e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «iy» (m⁴) y convertido a SI
+    Iz = 3e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «iz» (m⁴) y convertido a SI
+    J = no disponible · NO_DISPONIBLE · origen: SINTETICO · método: No aportado en la fuente
+    m = 23.55 kg/m · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «linear_mass» (kg/m) y convertido a SI
+  procedencia: fuente SINTETICO · licencia Sin valor comercial · edición 2026
+  método de importación: Importación de archivo en formato nativo (columnas por nombre de campo, SI)
+  avisos: Aviso: Iy < Iz en un perfil I (posible intercambio de ejes).
+  lote que creó la revisión: <uuid> (nativo.json, <utc>)
+  hash SHA-256 de la revisión: <sha256>
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog lock --db c.sqlite --catalogo Sintetico
+--- stdout
+Catálogo «Sintetico» protegido (irreversible): no admite importar perfiles; se edita mediante un clon (T-023).
+--- stderr
+--- exit 0
+
+$ veritas catalog import --db c.sqlite --catalogo Sintetico lote105.csv --mapeo catalog_mapping_example.json --sep ; --decimal ,
+--- stdout
+--- stderr
+UNSUPPORTED_CONFIGURATION: El catálogo «Sintetico» está protegido: no admite importar perfiles; se edita mediante un clon.
+--- exit 2
+
+$ veritas catalog import --db c.sqlite --catalogo Nativo falta.csv
+--- stdout
+--- stderr
+REFERENCE_NOT_FOUND: No existe el archivo de origen falta.csv.
+--- exit 2
+
+$ veritas catalog import --db c.sqlite --catalogo Nativo nativo.json --decimal ,
+--- stdout
+--- stderr
+INPUT_OUT_OF_RANGE: Opción decimal no válida: «,» («,» exige --sep «;»).
+--- exit 2
+
+$ veritas catalog verify --db c.sqlite
+--- stdout
+Catálogo íntegro: c.sqlite
+  esquema v2 · 101 revisión(es) comprobadas · 3 lote(s)
+--- stderr
+--- exit 0
+
+$ veritas catalog verify --db t.sqlite
+--- stdout
+--- stderr
+Catálogo CON PROBLEMAS: t.sqlite (2)
+  INPUT_OUT_OF_RANGE: El hash de contenido de la revisión 1 no coincide. [perfil <uuid>]
+  INPUT_OUT_OF_RANGE: El lote de importación <uuid> es incoherente (created+revised+unchanged).
+--- exit 3
+

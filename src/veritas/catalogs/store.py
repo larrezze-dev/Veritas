@@ -30,6 +30,7 @@ import sqlite3
 from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from functools import update_wrapper
 from pathlib import Path
@@ -45,6 +46,8 @@ from veritas.catalogs.errors import (
 from veritas.catalogs.model import (
     CatalogInfo,
     CatalogProfile,
+    ImportBatch,
+    ImportSource,
     ProfileData,
     decode_profile,
     profile_json,
@@ -55,14 +58,11 @@ from veritas.catalogs.model import (
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, Location
 from veritas.core.validation import invalid_type
 
-SCHEMA_VERSION: Final = 1
+SCHEMA_VERSION: Final = 2
 APPLICATION_ID: Final = 0x56434154  # «VCAT»
 _MAX_ID_ATTEMPTS: Final = 1000
 
 type Migration = Callable[[sqlite3.Connection], None]
-
-MIGRATIONS: Final[dict[int, Migration]] = {}
-"""Migraciones reales registradas, ``N -> N+1``. Vacío: el esquema v1 es el inicial."""
 
 _SCHEMA_V1: Final = (
     """
@@ -98,11 +98,50 @@ _SCHEMA_V1: Final = (
     "CREATE INDEX profile_revisions_by_catalog ON profile_revisions (catalog_id, series)",
 )
 
+_MIGRATION_1_TO_2: Final = (
+    """
+    CREATE TABLE import_batches (
+        id TEXT PRIMARY KEY,
+        catalog_id TEXT NOT NULL REFERENCES catalogs (id),
+        imported_at TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_format TEXT NOT NULL CHECK (file_format IN ('CSV', 'JSON')),
+        file_sha256 TEXT NOT NULL,
+        mapping_json TEXT NOT NULL,
+        mapping_sha256 TEXT NOT NULL,
+        rows_read INTEGER NOT NULL CHECK (rows_read >= 0),
+        rows_accepted INTEGER NOT NULL CHECK (rows_accepted >= 0),
+        rows_rejected INTEGER NOT NULL CHECK (rows_rejected >= 0),
+        created INTEGER NOT NULL CHECK (created >= 0),
+        revised INTEGER NOT NULL CHECK (revised >= 0),
+        unchanged INTEGER NOT NULL CHECK (unchanged >= 0)
+    )
+    """,
+    "CREATE INDEX import_batches_by_catalog ON import_batches (catalog_id, imported_at)",
+    "ALTER TABLE profile_revisions ADD COLUMN batch_id TEXT REFERENCES import_batches (id)",
+)
+"""Esquema v2 (enmienda de ADR-009, T-022 E2-A): lotes de importación y el enlace de cada
+revisión con el lote que la creó (nulo en las revisiones anteriores a la migración)."""
+
+
+def _migration_1_to_2(connection: sqlite3.Connection) -> None:
+    for statement in _MIGRATION_1_TO_2:
+        connection.execute(statement)
+
+
+MIGRATIONS: Final[dict[int, Migration]] = {1: _migration_1_to_2}
+"""Migraciones reales registradas, ``N -> N+1``. ``create`` construye v1 y aplica estas mismas
+migraciones, de modo que un archivo nuevo y uno migrado tienen el mismo esquema."""
+
 _PROFILE_COLUMNS: Final = (
     "profile_id, revision, catalog_id, series, designation, family, "
     "area, iy, iz, torsion_constant, linear_mass, content_json, content_sha256"
 )
 _SCALAR_FIELDS: Final = ("area", "iy", "iz", "torsion_constant", "linear_mass")
+_BATCH_COLUMNS: Final = (
+    "id, catalog_id, imported_at, file_name, file_format, file_sha256, mapping_json, "
+    "mapping_sha256, rows_read, rows_accepted, rows_rejected, created, revised, unchanged"
+)
 
 
 class PutStatus(StrEnum):
@@ -119,6 +158,14 @@ class PutResult:
 
     status: PutStatus
     profile: CatalogProfile
+
+
+@dataclass(frozen=True, slots=True)
+class BatchResult:
+    """Lote escrito y resultado por perfil, en el orden recibido."""
+
+    batch: ImportBatch
+    results: tuple[PutResult, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,21 +227,28 @@ class CatalogStore:
         path: Path,
         version: int,
         id_factory: Callable[[], UUID],
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._connection: sqlite3.Connection | None = connection
         self._path = path
         self._version = version
         self._id_factory = id_factory
+        self._clock = clock
 
     # --- Ciclo de vida -------------------------------------------------------------------
 
     @classmethod
     def create(
-        cls, path: str | os.PathLike[str], *, id_factory: Callable[[], UUID] = uuid4
+        cls,
+        path: str | os.PathLike[str],
+        *,
+        id_factory: Callable[[], UUID] = uuid4,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> Self:
-        """Crea un catálogo vacío (esquema v1). Rechaza un archivo existente.
+        """Crea un catálogo vacío (esquema vigente). Rechaza un archivo existente.
 
-        Se construye en un archivo temporal contiguo y se publica al terminar: un fallo no deja
+        Se construye en un archivo temporal contiguo (esquema v1 y después las migraciones
+        reales, como un archivo antiguo al abrirse) y se publica al terminar: un fallo no deja
         un archivo a medias ni toca el destino.
         """
         target = Path(path)
@@ -217,6 +271,8 @@ class CatalogStore:
                 connection.execute("BEGIN IMMEDIATE")
                 for statement in _SCHEMA_V1:
                     connection.execute(statement)
+                for step in range(1, SCHEMA_VERSION):
+                    MIGRATIONS[step](connection)
                 connection.execute(f"PRAGMA application_id = {APPLICATION_ID}")
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
                 connection.execute("COMMIT")
@@ -229,7 +285,7 @@ class CatalogStore:
         except BaseException:
             _discard(temporary)
             raise
-        return cls.open(target, id_factory=id_factory)
+        return cls.open(target, id_factory=id_factory, clock=clock)
 
     @classmethod
     def open(
@@ -237,6 +293,7 @@ class CatalogStore:
         path: str | os.PathLike[str],
         *,
         id_factory: Callable[[], UUID] = uuid4,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         migrations: dict[int, Migration] | None = None,
         target_version: int = SCHEMA_VERSION,
     ) -> Self:
@@ -263,7 +320,7 @@ class CatalogStore:
         except BaseException:
             connection.close()
             raise
-        return cls(connection, source, version, id_factory)
+        return cls(connection, source, version, id_factory, clock)
 
     @staticmethod
     def _check_header(
@@ -437,25 +494,114 @@ class CatalogStore:
         catálogo protegido y claves naturales repetidas dentro del lote.
         """
         with self._transaction() as con:
-            info = self._catalog(con, catalog_id)
-            if info.protected:
+            return self._put_all(con, catalog_id, items, None)
+
+    @_translated
+    def import_batch(
+        self, catalog_id: UUID, items: Sequence[ProfileData], source: ImportSource
+    ) -> BatchResult:
+        """``put_profiles`` más el registro del lote, en la **misma** transacción (E2-A).
+
+        El lote guarda el origen (archivo, mapeo y recuentos de lectura) y el resultado por
+        perfil; cada revisión nueva queda enlazada a él. Un fallo en cualquier punto no deja ni
+        perfiles ni lote. ``source.rows_accepted`` debe coincidir con ``len(items)``.
+        """
+        if not isinstance(source, ImportSource):
+            raise invalid_type("source", "ImportSource", source)
+        if source.rows_accepted != len(items):
+            raise catalog_error(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                "catalog.invalid_batch",
+                {"field": "rows_accepted"},
+            )
+        with self._transaction() as con:
+            self._catalog(con, catalog_id)  # catálogo inexistente antes de escribir el lote
+            batch_id = self._new_id(con, "import_batches", "id")
+            stamp = self._stamp()
+            con.execute(
+                "INSERT INTO import_batches (id, catalog_id, imported_at, file_name, file_format,"
+                " file_sha256, mapping_json, mapping_sha256, rows_read, rows_accepted,"
+                " rows_rejected, created, revised, unchanged)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0)",
+                (
+                    str(batch_id),
+                    str(catalog_id),
+                    stamp,
+                    source.file_name,
+                    source.file_format,
+                    source.file_sha256,
+                    source.mapping_json,
+                    source.mapping_sha256,
+                    source.rows_read,
+                    source.rows_accepted,
+                    source.rows_rejected,
+                ),
+            )
+            results = self._put_all(con, catalog_id, items, batch_id)
+            counts = {status: 0 for status in PutStatus}
+            for result in results:
+                counts[result.status] += 1
+            con.execute(
+                "UPDATE import_batches SET created = ?, revised = ?, unchanged = ? WHERE id = ?",
+                (
+                    counts[PutStatus.CREATED],
+                    counts[PutStatus.REVISED],
+                    counts[PutStatus.UNCHANGED],
+                    str(batch_id),
+                ),
+            )
+            batch = ImportBatch(
+                id=batch_id,
+                catalog_id=catalog_id,
+                imported_at=stamp,
+                source=source,
+                created=counts[PutStatus.CREATED],
+                revised=counts[PutStatus.REVISED],
+                unchanged=counts[PutStatus.UNCHANGED],
+            )
+            return BatchResult(batch, results)
+
+    def _stamp(self) -> str:
+        moment = self._clock()
+        if moment.tzinfo is None:
+            raise RuntimeError("El reloj del catálogo debe devolver una fecha con zona horaria")
+        return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _put_all(
+        self,
+        con: sqlite3.Connection,
+        catalog_id: UUID,
+        items: Sequence[ProfileData],
+        batch_id: UUID | None,
+    ) -> tuple[PutResult, ...]:
+        info = self._catalog(con, catalog_id)
+        if info.protected:
+            raise catalog_error(
+                DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+                "catalog.protected",
+                {"catalog": info.name},
+            )
+        seen: set[tuple[str, str]] = set()
+        for data in items:
+            if not isinstance(data, ProfileData):
+                raise invalid_type("items", "ProfileData", data)
+            if data.key in seen:
                 raise catalog_error(
-                    DiagnosticCode.UNSUPPORTED_CONFIGURATION,
-                    "catalog.protected",
-                    {"catalog": info.name},
+                    DiagnosticCode.REVISION_CONFLICT,
+                    "catalog.duplicate_key",
+                    {"series": data.series, "designation": data.designation},
                 )
-            seen: set[tuple[str, str]] = set()
-            for data in items:
-                if not isinstance(data, ProfileData):
-                    raise invalid_type("items", "ProfileData", data)
-                if data.key in seen:
-                    raise catalog_error(
-                        DiagnosticCode.REVISION_CONFLICT,
-                        "catalog.duplicate_key",
-                        {"series": data.series, "designation": data.designation},
+            seen.add(data.key)
+        results = tuple(self._put(con, catalog_id, data) for data in items)
+        if batch_id is not None:
+            for result in results:
+                if result.status is not PutStatus.UNCHANGED:
+                    con.execute(
+                        "UPDATE profile_revisions SET batch_id = ?"
+                        " WHERE profile_id = ? AND revision = ?",
+                        (str(batch_id), str(result.profile.id), result.profile.revision),
                     )
-                seen.add(data.key)
-            return tuple(self._put(con, catalog_id, data) for data in items)
+        return results
 
     def put_profile(self, catalog_id: UUID, data: ProfileData) -> PutResult:
         """``put_profiles`` de un solo perfil."""
@@ -562,6 +708,39 @@ class CatalogStore:
         ).fetchall()
         return tuple(decode_profile(row[0]) for row in rows)
 
+    # --- Lotes de importación ------------------------------------------------------------
+
+    @_translated
+    def list_batches(self, catalog_id: UUID | None = None) -> tuple[ImportBatch, ...]:
+        """Lotes por orden de escritura; los de un catálogo si se indica (que debe existir)."""
+        con = self._con()
+        if catalog_id is None:
+            rows = con.execute(f"SELECT {_BATCH_COLUMNS} FROM import_batches ORDER BY rowid")
+        else:
+            self._catalog(con, catalog_id)
+            rows = con.execute(
+                f"SELECT {_BATCH_COLUMNS} FROM import_batches WHERE catalog_id = ? ORDER BY rowid",
+                (str(catalog_id),),
+            )
+        return tuple(_batch_from_row(row) for row in rows.fetchall())
+
+    @_translated
+    def revision_batch(self, profile_id: UUID, revision: int) -> ImportBatch | None:
+        """Lote que creó la revisión, o ``None`` si es anterior a la migración a v2."""
+        con = self._con()
+        row = con.execute(
+            "SELECT batch_id FROM profile_revisions WHERE profile_id = ? AND revision = ?",
+            (str(profile_id), revision),
+        ).fetchone()
+        if row is None:
+            raise _profile_missing(f"{profile_id} rev {revision}")
+        if row[0] is None:
+            return None
+        batch = con.execute(
+            f"SELECT {_BATCH_COLUMNS} FROM import_batches WHERE id = ?", (row[0],)
+        ).fetchone()
+        return None if batch is None else _batch_from_row(batch)
+
     # --- Verificación --------------------------------------------------------------------
 
     @_translated
@@ -579,11 +758,13 @@ class CatalogStore:
                     f"SELECT {_PROFILE_COLUMNS} FROM profile_revisions"
                     " ORDER BY profile_id, revision"
                 ).fetchall()
+                batch_issues = _verify_batches(con)
             except sqlite3.DatabaseError as error:
                 issues.append(_issue("catalog.verify_integrity", {"detail": str(error)}))
                 return VerifyReport(checked, tuple(issues))
             checked = len(rows)
             issues.extend(_verify_rows(rows))
+            issues.extend(batch_issues)
         finally:
             with contextlib.suppress(sqlite3.Error):
                 con.execute("ROLLBACK")
@@ -695,6 +876,67 @@ def _verify_sqlite(con: sqlite3.Connection) -> list[Diagnostic]:
     return issues
 
 
+def _batch_from_row(row: tuple[object, ...]) -> ImportBatch:
+    """``ImportBatch`` desde una fila de ``_BATCH_COLUMNS``; valida el contenido por completo."""
+    source = ImportSource(
+        file_name=str(row[3]),
+        file_format=str(row[4]),
+        file_sha256=str(row[5]),
+        mapping_json=str(row[6]),
+        mapping_sha256=str(row[7]),
+        rows_read=_int(row[8]),
+        rows_rejected=_int(row[10]),
+    )
+    if _int(row[9]) != source.rows_accepted:
+        raise catalog_error(
+            DiagnosticCode.INPUT_OUT_OF_RANGE, "catalog.invalid_batch", {"field": "rows_accepted"}
+        )
+    return ImportBatch(
+        id=UUID(str(row[0])),
+        catalog_id=UUID(str(row[1])),
+        imported_at=str(row[2]),
+        source=source,
+        created=_int(row[11]),
+        revised=_int(row[12]),
+        unchanged=_int(row[13]),
+    )
+
+
+def _int(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise catalog_error(
+            DiagnosticCode.INPUT_INVALID_TYPE, "catalog.invalid_batch", {"field": "recuento"}
+        )
+    return value
+
+
+def _verify_batches(con: sqlite3.Connection) -> list[Diagnostic]:
+    """Cada lote es válido y las revisiones enlazadas son las que dice haber escrito."""
+    issues: list[Diagnostic] = []
+    linked: dict[str, dict[str, int]] = {}
+    for batch_id, catalog_id, count in con.execute(
+        "SELECT batch_id, catalog_id, COUNT(*) FROM profile_revisions"
+        " WHERE batch_id IS NOT NULL GROUP BY batch_id, catalog_id"
+    ).fetchall():
+        linked.setdefault(str(batch_id), {})[str(catalog_id)] = int(count)
+    for row in con.execute(f"SELECT {_BATCH_COLUMNS} FROM import_batches ORDER BY rowid"):
+        label = str(row[0])
+        try:
+            batch = _batch_from_row(row)
+        except (CatalogError, ValueError, TypeError) as error:
+            field = "contenido"
+            if isinstance(error, CatalogError):
+                field = str(error.diagnostic.params_dict().get("field", field))
+            issues.append(_issue("catalog.verify_batch", {"batch": label, "field": field}))
+            continue
+        per_catalog = linked.get(label, {})
+        if sum(per_catalog.values()) != batch.written:
+            issues.append(_issue("catalog.verify_batch", {"batch": label, "field": "enlaces"}))
+        elif set(per_catalog) - {str(batch.catalog_id)}:
+            issues.append(_issue("catalog.verify_batch", {"batch": label, "field": "catálogo"}))
+    return issues
+
+
 def _verify_rows(rows: list[tuple[object, ...]]) -> list[Diagnostic]:
     issues: list[Diagnostic] = []
     revisions: dict[str, list[int]] = {}
@@ -770,6 +1012,7 @@ __all__ = [
     "APPLICATION_ID",
     "MIGRATIONS",
     "SCHEMA_VERSION",
+    "BatchResult",
     "CatalogStore",
     "Migration",
     "PutResult",

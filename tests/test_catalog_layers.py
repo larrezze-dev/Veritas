@@ -26,7 +26,9 @@ def tops(path: Path) -> set[str]:
 def test_catalog_modules_exist() -> None:
     assert {p.name for p in CATALOGS.glob("*.py")} >= {
         "__init__.py",
+        "columns.py",
         "errors.py",
+        "importer.py",
         "model.py",
         "store.py",
     }
@@ -59,8 +61,16 @@ def test_catalogs_do_not_import_upper_layers(path: Path) -> None:
 
 
 def test_domain_modules_are_free_of_sqlite() -> None:
-    for name in ("model.py", "errors.py", "__init__.py"):
+    for name in ("model.py", "errors.py", "__init__.py", "columns.py", "importer.py"):
         assert "sqlite3" not in tops(CATALOGS / name)
+
+
+def test_the_importer_is_pure_and_does_not_reach_the_store() -> None:
+    """El importador solo lee y valida (T-022 E2): no importa el almacén ni escribe."""
+    for name in ("columns.py", "importer.py"):
+        names = imported_modules(CATALOGS / name, PACKAGE_ROOT)
+        assert "veritas.catalogs.store" not in names
+        assert not any(n.startswith("veritas.persistence") for n in names)
 
 
 def test_only_catalogs_depend_on_the_catalog_store() -> None:
@@ -69,7 +79,8 @@ def test_only_catalogs_depend_on_the_catalog_store() -> None:
         for path in PACKAGE_ROOT.rglob("*.py")
         if any(n.startswith("veritas.catalogs") for n in imported_modules(path, PACKAGE_ROOT))
     }
-    assert all(user.startswith("catalogs/") for user in users)
+    assert users
+    assert all(user.startswith("catalogs/") or user == "cli_catalog.py" for user in users)
 
 
 # --- Unidades que usará el importador (hecho 4 del plan): ya estaban registradas -------------

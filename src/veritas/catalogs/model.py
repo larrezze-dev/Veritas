@@ -30,7 +30,7 @@ from enum import StrEnum
 from typing import Final
 from uuid import UUID
 
-from veritas.catalogs.errors import catalog_error
+from veritas.catalogs.errors import CatalogError, catalog_error
 from veritas.core import units as u
 from veritas.core.diagnostics import DiagnosticCode, Location
 from veritas.core.references import check_identity
@@ -263,6 +263,95 @@ class CatalogInfo:
 def _key_text(value: object, field: str) -> str:
     text = require_text(value, field)
     return text.strip()
+
+
+# --- Lotes de importación (esquema v2, enmienda de ADR-009) ----------------------------------
+
+BATCH_FORMATS: Final = frozenset({"CSV", "JSON"})
+_SHA256: Final = re.compile(r"[0-9a-f]{64}")
+_UTC_STAMP: Final = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+
+def _count(value: object, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise invalid_type(field, "entero >= 0", value)
+    return value
+
+
+def _batch_error(field: str) -> CatalogError:
+    return catalog_error(
+        DiagnosticCode.INPUT_OUT_OF_RANGE, "catalog.invalid_batch", {"field": field}
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ImportSource:
+    """Origen de un lote: lo que aporta el importador y se guarda con él (D6-A).
+
+    El hash del archivo identifica el lote; **no** entra en la procedencia de cada perfil
+    (D8: reimportar un archivo con un valor cambiado no puede revisar los demás perfiles).
+    """
+
+    file_name: str
+    file_format: str
+    file_sha256: str
+    mapping_json: str
+    mapping_sha256: str
+    rows_read: int
+    rows_rejected: int
+
+    def __post_init__(self) -> None:
+        name = require_text(self.file_name, "file_name")
+        if "/" in name or "\\" in name:
+            raise _batch_error("file_name")
+        if self.file_format not in BATCH_FORMATS:
+            raise _batch_error("file_format")
+        for field in ("file_sha256", "mapping_sha256"):
+            value = getattr(self, field)
+            if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
+                raise _batch_error(field)
+        require_text(self.mapping_json, "mapping_json")
+        if sha256_of(self.mapping_json) != self.mapping_sha256:
+            raise _batch_error("mapping_sha256")
+        read = _count(self.rows_read, "rows_read")
+        rejected = _count(self.rows_rejected, "rows_rejected")
+        if rejected > read:
+            raise _batch_error("rows_rejected")
+
+    @property
+    def rows_accepted(self) -> int:
+        return self.rows_read - self.rows_rejected
+
+
+@dataclass(frozen=True, slots=True)
+class ImportBatch:
+    """Lote de importación ya escrito: origen, fecha UTC y resultado por perfil."""
+
+    id: UUID
+    catalog_id: UUID
+    imported_at: str
+    source: ImportSource
+    created: int
+    revised: int
+    unchanged: int
+
+    def __post_init__(self) -> None:
+        check_identity(self.id, 1, "ImportBatch")
+        check_identity(self.catalog_id, 1, "ImportBatch.catalog_id")
+        if not isinstance(self.imported_at, str) or _UTC_STAMP.fullmatch(self.imported_at) is None:
+            raise _batch_error("imported_at")
+        if not isinstance(self.source, ImportSource):
+            raise invalid_type("source", "ImportSource", self.source)
+        total = sum(
+            _count(getattr(self, name), name) for name in ("created", "revised", "unchanged")
+        )
+        if total != self.source.rows_accepted:
+            raise _batch_error("created+revised+unchanged")
+
+    @property
+    def written(self) -> int:
+        """Revisiones que este lote añadió: creadas más revisadas."""
+        return self.created + self.revised
 
 
 # --- Documento canónico y hash --------------------------------------------------------------

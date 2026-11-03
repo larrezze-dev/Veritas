@@ -30,6 +30,10 @@ Contrato de frontera (ADR-001 §5, planes T-001 y T-002):
   normativas guardadas en el proyecto (plan T-014, ``cli_norm.py``; ADR-007). Código 0; 2
   diagnóstico de dominio (protegida, no encontrada, inválida); 3 sin integridad. La cobertura
   de verificación es siempre NO_COMPROBADO.
+- ``veritas catalog create|import|lock|list|show|verify``: catálogo de perfiles en un SQLite
+  independiente, con importador CSV/JSON (plan T-022, ``cli_catalog.py``; ADR-009). Código 0; 2
+  error de archivo, mapeo, uso o datos (incluido ``--estricto`` con filas rechazadas); 3
+  ``verify`` con problemas. Las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR.
 - ``veritas gui [ARCHIVO]``: ventana de solo lectura con visor 3D y tablas de barras y nudos
   (plan T-011, ``cli_gui.py``; ADR-008). Requiere el extra opcional ``gui``; sin él, mensaje en
   stderr y código 2 sin afectar al resto de la CLI. Código 3 si el proyecto no supera la
@@ -102,6 +106,7 @@ from typing import Final
 from uuid import UUID
 
 from veritas import PRODUCT_NAME, __version__
+from veritas.cli_catalog import add_catalog_parser, run_catalog
 from veritas.cli_gui import add_gui_parser, run_gui_command
 from veritas.cli_norm import add_norm_parser, run_norm
 from veritas.cli_project import add_project_parser, run_project
@@ -315,6 +320,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915 (un registro por
     _add_load_parser(subparsers, profile_names)
     add_project_parser(subparsers)
     add_norm_parser(subparsers)
+    add_catalog_parser(subparsers)
     add_gui_parser(subparsers)
     _add_analyze_parser(subparsers, profile_names)
     return parser
@@ -3054,6 +3060,13 @@ def _run_norm(args: argparse.Namespace) -> int:
     return code
 
 
+def _run_catalog(args: argparse.Namespace) -> int:
+    """``veritas catalog``: con código 2 o 3 el texto va a stderr (ver ``cli_catalog``)."""
+    text, code = run_catalog(args)
+    print(text, file=sys.stdout if code == EXIT_OK else sys.stderr)
+    return code
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Punto de entrada. Devuelve el código de salida del proceso."""
     _tolerant_streams()
@@ -3081,9 +3094,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             print(text)
             return code
-        group = {"project": _run_project, "norm": _run_norm, "gui": run_gui_command}.get(
-            args.command
-        )
+        group = {
+            "project": _run_project,
+            "norm": _run_norm,
+            "catalog": _run_catalog,
+            "gui": run_gui_command,
+        }.get(args.command)
         if group is not None:
             return group(args)
         output = _run(args, parser)

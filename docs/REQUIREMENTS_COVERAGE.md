@@ -59,10 +59,10 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | SEC-005 | P1 | Buscar por serie, nombre, dimensiones, A, inercias, masa, fabricante y material compatible. | — | NO INICIADO |
 | SEC-006 | P1 | Ficha con croquis acotado y comparación de perfiles. | — | NO INICIADO |
 | SEC-007 | P1 | Catálogos de solo lectura, clones editables, favoritos y perfiles recientes. | — | NO INICIADO |
-| SEC-008 | P1 | Importar CSV/JSON con asignación de columnas/unidades, vista previa y validación por fila. | — | NO INICIADO |
-| SEC-009 | P1 | Exportar perfiles del usuario y mantener origen, licencia de datos, norma, revisión y método de cálculo. | — | NO INICIADO |
-| SEC-010 | P1 | Detectar duplicados e incoherencias entre datos publicados y propiedades calculadas. | — | NO INICIADO |
-| SEC-011 | P1 | Cambiar geometría genera nueva revisión; proyectos existentes conservan referencia previa. | ADR-001 (contrato de convenciones, aprobado 2026-10-27) | PARCIAL / DOCUMENTAL — sin implementación ni tests |
+| SEC-008 | P1 | Importar CSV/JSON con asignación de columnas/unidades, vista previa y validación por fila. | T-022 E2 (`catalogs/columns.py`, `importer.py`, `cli_catalog.py`; ADR-009): `veritas catalog import` con mapeo JSON, `--simular`, `--estricto`; `tests/test_catalog_columns.py`, `test_catalog_importer.py`, `test_catalog_cli.py`, `test_catalog_acceptance.py` | PARCIAL — E2 aceptada 2026-11-03. Sin DXF (TK-015) ni interfaz gráfica |
+| SEC-009 | P1 | Exportar perfiles del usuario y mantener origen, licencia de datos, norma, revisión y método de cálculo. | T-022 (ADR-009): fuente, licencia, edición y método obligatorios en cada catálogo y perfil; lote con archivo, mapeo y fecha | PARCIAL — E1 y E2 aceptadas 2026-11-03. Sin exportar perfiles de usuario (T-023, TK-020) |
+| SEC-010 | P1 | Detectar duplicados e incoherencias entre datos publicados y propiedades calculadas. | T-022 E2 (D11): clave repetida (todas las filas rechazadas) y avisos de masa/A·ρ, A/chapas de la I e Iy < Iz; `tests/test_catalog_importer.py` | PARCIAL — E2 aceptada 2026-11-03. Sin comparar con propiedades calculadas del editor (EDT-011, F3A, TK-021); los avisos son heurísticos |
+| SEC-011 | P1 | Cambiar geometría genera nueva revisión; proyectos existentes conservan referencia previa. | ADR-001 (contrato de convenciones, aprobado 2026-10-27); T-022 (ADR-009): un cambio de contenido de una clave natural crea la revisión n+1 y conserva las anteriores; `tests/test_catalog_store.py`, `test_catalog_cli.py` | PARCIAL — catálogo: E1 aceptada 2026-11-03; E2 pendiente. Proyectos existentes: T-024 |
 | SEC-012 | P1 | Sustitución masiva de perfiles en barras con validación de compatibilidad. | — | NO INICIADO |
 | SEC-013 | P1 | Separar sección apta para FEM de sección cubierta por una norma de diseño. | — | NO INICIADO |
 | SEC-014 | P2 | Catálogos adicionales de proveedores mediante adaptadores importables. | — | NO INICIADO |
@@ -129,7 +129,7 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | NOR-011 | P1 | Validar ámbito de aplicación del DB seleccionado frente a la tipología estructural declarada. | — | NO INICIADO |
 | DAT-001 | P0 | Guardar y abrir archivo de proyecto autocontenido/versionado, con comprobación de integridad. | ADR-001; T-012 E1 (`persistence/`, ADR-006 ACCEPTED) | IMPLEMENTADO en E1 (aceptado 2026-10-31): archivo JSON único versionado con integridad SHA-256, round-trip exacto del modelo y `veritas project`; desde T-014 E2 (aceptado 2026-11-02) también las normativas de usuario y la seleccionada (esquema v3); sin catálogo (DAT-003) |
 | DAT-002 | P1 | Migraciones controladas, copias y restauración ante fallo. | T-012 E1 (`persistence/migrations.py`, escritura atómica y `.bak`) | PARCIAL — marco probado con migraciones sintéticas y migraciones reales v1→v2 (`runs` vacío) y v2→v3 (`norms` vacío, T-014 E2); sin recuperación automática |
-| DAT-003 | P1 | SQLite de catálogos independiente y snapshot de perfiles usados en cada proyecto. | — | NO INICIADO |
+| DAT-003 | P1 | SQLite de catálogos independiente y snapshot de perfiles usados en cada proyecto. | T-022 (ADR-009): SQLite estándar con `application_id`/`user_version` (hoy 2), migraciones, transacción única, `verify` | PARCIAL — catálogo independiente: E1 aceptada 2026-11-03 y E2 (esquema v2 con lotes) pendiente. Snapshot en el proyecto: T-024 |
 | DAT-004 | P1 | Mantener ejecuciones históricas inmutables con hash de versión del modelo. | ADR-001; T-012 E1 (hash canónico `veritas-canon/1`) | IMPLEMENTADO y aceptado en T-012 E2 (2026-11-02): ejecuciones guardadas inmutables con `model_hash`, CURRENT/STALE y `veritas project analyze/runs/move-node`; límites: sin deduplicación ni compresión |
 | DAT-005 | P1 | CSV/JSON para tablas; DXF sujeto a contrato de intercambio específico. | — | NO INICIADO |
 | RPT-001 | P1 | Editor de plantillas: capítulos activables, orden, selección y filtros. | — | NO INICIADO |
@@ -149,7 +149,7 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | NFR-009 | Localización | Cadenas externalizadas; español inicial, arquitectura preparada para alemán e inglés. | — | NO INICIADO |
 | NFR-010 | Accesibilidad | Diálogos/tabla navegables por teclado y escalado DPI. | — | NO INICIADO |
 | NFR-011 | Recuperación | Autoguardado y recuperación explícita sin sobrescritura oculta. | — | NO INICIADO |
-| NFR-012 | Licencias | Auditoría de dependencias, catálogos y normas antes de redistribución. | — | NO INICIADO |
+| NFR-012 | Licencias | Auditoría de dependencias, catálogos y normas antes de redistribución. | T-022: no se distribuye ninguna tabla real (fixtures sintéticos); procedencia y licencia obligatorias por perfil | NO INICIADO — sin auditoría. Los datos de `steel-sections` (licencias distintas por archivo: Apache-2.0, CC BY 4.0, CC BY-SA 4.0) se probaron solo en local (TK-019) |
 
 ## Pruebas de aceptación SRS (sección 16)
 
