@@ -10,7 +10,7 @@ import pytest
 
 from catalog_cli_golden import DATA_DIR, MAPPING, SYNTHETIC_ARGS
 from test_catalog_batches import v1_file
-from veritas.catalogs.store import CatalogStore
+from veritas.catalogs.store import SCHEMA_VERSION, CatalogStore
 from veritas.cli import main
 
 DB = "c.sqlite"
@@ -477,7 +477,7 @@ def test_opening_a_v1_catalog_migrates_it_and_it_verifies(
     v1_file(work / "viejo.sqlite")
     code, out, err = run(capsys, "verify", "--db", "viejo.sqlite")
     assert (code, err) == (0, "")
-    assert "esquema v2" in out
+    assert f"esquema v{SCHEMA_VERSION}" in out
     assert "0 lote(s)" in out
     shown = run(capsys, "show", "--db", "viejo.sqlite", "--catalogo", "Antiguo", "SERIE-A", "OLD")[
         1

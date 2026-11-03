@@ -1,0 +1,236 @@
+$ veritas catalog lock --db c.sqlite --catalogo Sintetico
+--- stdout
+Catálogo «Sintetico» protegido (irreversible): no admite importar perfiles; se edita mediante un clon (T-023).
+--- stderr
+--- exit 0
+
+$ veritas catalog clone --db c.sqlite --catalogo Sintetico --nombre Copia
+--- stdout
+Catálogo «Sintetico» clonado como «Copia» (editable): 100 perfil(es) copiados como revisión 1
+  id: <uuid>
+  origen: «Sintetico» (protegido) · fuente SINTETICO · licencia CC BY 4.0 · edición 2026
+  el origen no se ha modificado; el clon admite importar (revisión n+1)
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog clone --db c.sqlite --catalogo Sintetico --nombre copia
+--- stdout
+--- stderr
+UNSUPPORTED_CONFIGURATION: Ya existe un catálogo llamado «copia».
+--- exit 2
+
+$ veritas catalog list --db c.sqlite
+--- stdout
+Archivo: c.sqlite
+Catálogo   Perfiles  Protegido  Edición  Fuente     Licencia
+---------  --------  ---------  -------  ---------  ---------
+Copia      100       no         2026     SINTETICO  CC BY 4.0
+Sintetico  100       sí         2026     SINTETICO  CC BY 4.0
+--- stderr
+--- exit 0
+
+$ veritas catalog ficha --db c.sqlite Copia/SINTETICO-I/SINT-100x50-4-6
+--- stdout
+Perfil SINTETICO-I / SINT-100x50-4-6 — revisión 1 de 1
+  id: <uuid>
+  catálogo: «Copia» (editable)
+  familia: I
+  dimensiones: b = 0.05 m, h = 0.1 m, tf = 0.006 m, tw = 0.004 m
+  propiedades (SI):
+    A = 0.000952 m² · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «A (cm²)» (cm²) y convertido a SI
+    Iy = 1.554357e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «Iy (cm⁴)» (cm⁴) y convertido a SI
+    Iz = 1.25469e-07 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «Iz (cm⁴)» (cm⁴) y convertido a SI
+    J = no disponible · NO_DISPONIBLE · origen: SINTETICO · método: No aportado en la fuente
+    m = 7.4732 kg/m · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «m (kg/m)» (kg/m) y convertido a SI
+  procedencia: fuente SINTETICO · licencia CC BY 4.0 · edición 2026
+  método de importación: Fixture sintético por fórmula cerrada (tests/data/make_catalog_fixture.py)
+  avisos: ninguno
+  origen de la revisión: clon de «Sintetico» (SINTETICO-I / SINT-100x50-4-6 rev 1)
+  hash SHA-256 de la revisión: <sha256>
+  historial de revisiones:
+    rev 1 · <sha12> · copiada por clon
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog favorito agregar --db c.sqlite --usuario u.json Sintetico/SINTETICO-I/SINT-100x50-4-6
+--- stdout
+«Sintetico/SINTETICO-I/SINT-100x50-4-6» añadido a los favoritos de u.json (1 en total)
+--- stderr
+--- exit 0
+
+$ veritas catalog favorito agregar --db c.sqlite --usuario u.json Sintetico/SINTETICO-I/SINT-100x55-5-6
+--- stdout
+«Sintetico/SINTETICO-I/SINT-100x55-5-6» añadido a los favoritos de u.json (2 en total)
+--- stderr
+--- exit 0
+
+$ veritas catalog favorito agregar --db c.sqlite --usuario u.json Sintetico/SINTETICO-I/SINT-100x55-5-6
+--- stdout
+«Sintetico/SINTETICO-I/SINT-100x55-5-6» ya estaba en los favoritos de u.json (2 en total)
+--- stderr
+--- exit 0
+
+$ veritas catalog ficha --db c.sqlite Sintetico/SINTETICO-I/SINT-100x50-4-6 --usuario u.json
+--- stdout
+Perfil SINTETICO-I / SINT-100x50-4-6 — revisión 1 de 1
+  id: <uuid>
+  catálogo: «Sintetico» (protegido)
+  familia: I
+  dimensiones: b = 0.05 m, h = 0.1 m, tf = 0.006 m, tw = 0.004 m
+  propiedades (SI):
+    A = 0.000952 m² · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «A (cm²)» (cm²) y convertido a SI
+    Iy = 1.554357e-06 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «Iy (cm⁴)» (cm⁴) y convertido a SI
+    Iz = 1.25469e-07 m⁴ · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «Iz (cm⁴)» (cm⁴) y convertido a SI
+    J = no disponible · NO_DISPONIBLE · origen: SINTETICO · método: No aportado en la fuente
+    m = 7.4732 kg/m · IMPORTADO_SIN_VERIFICAR · origen: SINTETICO · método: Importado de la columna «m (kg/m)» (kg/m) y convertido a SI
+  procedencia: fuente SINTETICO · licencia CC BY 4.0 · edición 2026
+  método de importación: Fixture sintético por fórmula cerrada (tests/data/make_catalog_fixture.py)
+  avisos: ninguno
+  lote que creó la revisión: <uuid> (lote105.csv, <utc>)
+  hash SHA-256 de la revisión: <sha256>
+  historial de revisiones:
+    rev 1 · <sha12> · <utc>
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog comparar --db c.sqlite Sintetico/SINTETICO-I/SINT-100x50-4-6 Sintetico/SINTETICO-I/SINT-100x55-5-6 --usuario u.json
+--- stdout
+Comparación de 2 perfiles (valores en SI)
+  P1 = Sintetico/SINTETICO-I/SINT-100x50-4-6 rev 1 · I
+  P2 = Sintetico/SINTETICO-I/SINT-100x55-5-6 rev 1 · I
+Magnitud  Unidad  P1           P2           P2/P1
+--------  ------  -----------  -----------  -----
+A         m²      0.000952     0.0011       1.155
+Iy        m⁴      1.55436e-06  1.74387e-06  1.122
+Iz        m⁴      1.25469e-07  1.67292e-07  1.333
+J         m⁴      -            -            -
+m         kg/m    7.4732       8.635        1.155
+b         m       0.05         0.055        1.1
+h         m       0.1          0.1          1
+tf        m       0.006        0.006        1
+tw        m       0.004        0.005        1.25
+«-»: dato no disponible; el cociente no se calcula con datos ausentes.
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog favorito listar --db c.sqlite --usuario u.json
+--- stdout
+Favoritos de u.json: 2 de este archivo
+Catálogo   Serie        Designación      Familia  Rev  Estado
+---------  -----------  ---------------  -------  ---  ------
+Sintetico  SINTETICO-I  SINT-100x50-4-6  I        1
+Sintetico  SINTETICO-I  SINT-100x55-5-6  I        1
+--- stderr
+--- exit 0
+
+$ veritas catalog favorito recientes --db c.sqlite --usuario u.json
+--- stdout
+Recientes (el último, primero) de u.json: 2 de este archivo
+Catálogo   Serie        Designación      Familia  Rev  Estado
+---------  -----------  ---------------  -------  ---  ------
+Sintetico  SINTETICO-I  SINT-100x50-4-6  I        1
+Sintetico  SINTETICO-I  SINT-100x55-5-6  I        1
+--- stderr
+--- exit 0
+
+$ veritas catalog favorito quitar --db c.sqlite --usuario u.json Sintetico/SINTETICO-I/SINT-100x55-5-6
+--- stdout
+«Sintetico/SINTETICO-I/SINT-100x55-5-6» quitado de los favoritos de u.json (1 en total)
+--- stderr
+--- exit 0
+
+$ veritas catalog favorito quitar --db c.sqlite --usuario u.json Sintetico/SINTETICO-I/SINT-100x55-5-6
+--- stdout
+«Sintetico/SINTETICO-I/SINT-100x55-5-6» no estaba en los favoritos de u.json (1 en total)
+--- stderr
+--- exit 0
+
+$ veritas catalog exportar --db c.sqlite --catalogo Copia --formato csv --salida e.csv
+--- stdout
+Catálogo «Copia» exportado a e.csv (CSV, 100 perfil(es), última revisión de cada uno)
+  SHA-256: <sha256>
+  procedencia y licencia: e.csv.procedencia.json
+Aviso: Los datos de este catálogo se rigen por su licencia «CC BY 4.0»: compruebe que puede redistribuirlos antes de compartir este archivo. Las propiedades importadas no están verificadas (IMPORTADO_SIN_VERIFICAR). Aplicación experimental.
+--- stderr
+--- exit 0
+
+$ veritas catalog exportar --db c.sqlite --catalogo Copia --formato csv --salida e.csv
+--- stdout
+--- stderr
+UNSUPPORTED_CONFIGURATION: Ya existe e.csv: use --forzar para sobrescribirlo.
+--- exit 2
+
+$ veritas catalog exportar --db c.sqlite --catalogo Copia --formato csv --salida e.csv --forzar
+--- stdout
+Catálogo «Copia» exportado a e.csv (CSV, 100 perfil(es), última revisión de cada uno)
+  SHA-256: <sha256>
+  procedencia y licencia: e.csv.procedencia.json
+Aviso: Los datos de este catálogo se rigen por su licencia «CC BY 4.0»: compruebe que puede redistribuirlos antes de compartir este archivo. Las propiedades importadas no están verificadas (IMPORTADO_SIN_VERIFICAR). Aplicación experimental.
+--- stderr
+--- exit 0
+
+$ veritas catalog exportar --db c.sqlite --catalogo Sintetico --formato json --salida e.json
+--- stdout
+Catálogo «Sintetico» exportado a e.json (JSON, 100 perfil(es), última revisión de cada uno)
+  SHA-256: <sha256>
+Aviso: Los datos de este catálogo se rigen por su licencia «CC BY 4.0»: compruebe que puede redistribuirlos antes de compartir este archivo. Las propiedades importadas no están verificadas (IMPORTADO_SIN_VERIFICAR). Aplicación experimental.
+--- stderr
+--- exit 0
+
+$ veritas catalog exportar --db c.sqlite --catalogo Sintetico --formato json --salida no_existe/e.json
+--- stdout
+--- stderr
+UNSUPPORTED_CONFIGURATION: No se pudo escribir no_existe/e.json.
+--- exit 2
+
+$ veritas catalog create --db d.sqlite --nombre Re --fuente S --licencia L --edicion 1
+--- stdout
+Catálogo «Re» creado: d.sqlite
+  id: <uuid>
+  fuente: S · licencia: L · edición: 1
+  protegido: no · esquema v3
+Importe perfiles con «veritas catalog import».
+--- stderr
+--- exit 0
+
+$ veritas catalog import --db d.sqlite --catalogo Re e.csv
+--- stdout
+Importación en el catálogo «Re» — ESCRITA en el lote <uuid> (<utc>)
+  archivo: e.csv (CSV, SHA-256 <sha256>)
+  mapeo: formato nativo (SI) (SHA-256 <sha256>)
+  filas leídas: 100 · aceptadas: 100 · rechazadas: 0 · con aviso: 0
+  creados: 100 · revisados: 0 · sin cambios: 0
+Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN_VERIFICAR y no son datos verificados.
+--- stderr
+--- exit 0
+
+$ veritas catalog verify --db c.sqlite
+--- stdout
+Catálogo íntegro: c.sqlite
+  esquema v3 · 200 revisión(es) comprobadas · 1 lote(s)
+--- stderr
+--- exit 0
+
+$ veritas catalog favorito listar --db c.sqlite --usuario mal.json
+--- stdout
+--- stderr
+UNSUPPORTED_CONFIGURATION: El archivo de usuario mal.json no es válido (se esperaba un objeto con favorites, format, recent); no se ha modificado.
+--- exit 2
+
+$ veritas catalog ficha --db c.sqlite Sintetico/SINTETICO-I/SINT-100x50-4-6 --usuario mal.json
+--- stdout
+--- stderr
+UNSUPPORTED_CONFIGURATION: El archivo de usuario mal.json no es válido (se esperaba un objeto con favorites, format, recent); no se ha modificado.
+--- exit 2
+
+$ veritas catalog verify --db t.sqlite
+--- stdout
+--- stderr
+Catálogo CON PROBLEMAS: t.sqlite (1)
+  INPUT_OUT_OF_RANGE: La trazabilidad de clonación de revisión 1 es incoherente (revisión de origen inexistente). [perfil <uuid>]
+--- exit 3
+

@@ -118,7 +118,7 @@ def test_a_v1_file_migrates_to_the_same_schema_and_keeps_its_data(tmp_path: Path
     catalog_id = v1_file(old)
     CatalogStore.create(new).close()
     with CatalogStore.open(old) as store:
-        assert store.version == SCHEMA_VERSION == 2
+        assert store.version == SCHEMA_VERSION
         (profile,) = store.list_profiles(catalog_id)
         assert profile.designation == "OLD"
         assert store.revision_batch(profile.id, 1) is None  # anterior a la migración
@@ -367,7 +367,11 @@ def test_verify_detects_a_revision_linked_to_another_catalogs_batch(tmp_path: Pa
     path, _ = verified(tmp_path)
     connection = raw(path)
     other = "00000000-0000-4000-8000-0000000000aa"
-    connection.execute("INSERT INTO catalogs VALUES (?, 'Otro', '', 'S', 'L', 'E', 0)", (other,))
+    connection.execute(
+        "INSERT INTO catalogs (id, name, description, source, license, edition, protected)"
+        " VALUES (?, 'Otro', '', 'S', 'L', 'E', 0)",
+        (other,),
+    )
     connection.execute("UPDATE import_batches SET catalog_id = ?", (other,))
     connection.close()
     assert problems(path) == [("catalog.verify_batch", "catálogo")]

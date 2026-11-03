@@ -1,4 +1,4 @@
-"""Grupo de comandos ``veritas catalog`` (planes T-022 E2 y T-023 E1; ADR-009).
+"""Grupo de comandos ``veritas catalog`` (planes T-022 E2 y T-023 E1/E2; ADR-009).
 
 Catálogo de perfiles en un archivo SQLite independiente del proyecto. Todos los comandos llevan
 ``--db RUTA`` (sin estado oculto ni carpeta de usuario, D10).
@@ -24,6 +24,15 @@ Catálogo de perfiles en un archivo SQLite independiente del proyecto. Todos los
   el historial de sus revisiones.
 - ``catalog comparar --db RUTA REF REF [REF ...]``: compara de 2 a 8 perfiles (SI), con el
   cociente de cada uno respecto al primero.
+- ``catalog clone --db RUTA --catalogo ORIGEN --nombre NUEVO [--descripcion D]``: copia un
+  catálogo (también uno protegido) en otro editable del mismo archivo, con trazabilidad del
+  origen; se edita reimportando en el clon.
+- ``catalog favorito agregar|quitar|listar|recientes --db RUTA --usuario RUTA [REF]``: favoritos y
+  recientes en un archivo de usuario aparte (nunca en el catálogo). ``ficha`` y ``comparar``
+  registran los recientes si se pasa ``--usuario``.
+- ``catalog exportar --db RUTA --catalogo N --formato csv|json --salida ARCHIVO [--forzar]``:
+  exporta la última revisión de cada perfil. El CSV (formato nativo, SI) se reimporta sin
+  mapeo y lleva un ``ARCHIVO.procedencia.json`` con la licencia y el aviso de redistribución.
 - ``catalog verify --db RUTA``: integridad del archivo, de cada revisión y de cada lote. Abrir un
   catálogo de una versión anterior lo migra (ADR-009, enmienda E2-A).
 
@@ -40,12 +49,21 @@ Los fallos dejan el archivo idéntico byte a byte. Las propiedades importadas qu
 import argparse
 import contextlib
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 from uuid import UUID
 
 from veritas.catalogs.columns import ColumnMapping, parse_mapping
-from veritas.catalogs.errors import catalog_error, file_error
+from veritas.catalogs.errors import CatalogError, catalog_error, file_error
+from veritas.catalogs.export import (
+    PROVENANCE_SUFFIX,
+    csv_text,
+    json_text,
+    provenance_text,
+    redistribution_warning,
+)
+from veritas.catalogs.fileio import write_files
 from veritas.catalogs.importer import (
     DECIMALS,
     FORMATS,
@@ -63,6 +81,7 @@ from veritas.catalogs.model import (
     ProfileFamily,
     profile_sha256,
     same_content,
+    sha256_of,
 )
 from veritas.catalogs.query import (
     FILTER_FIELDS,
@@ -85,6 +104,12 @@ from veritas.catalogs.query import (
     value_of,
 )
 from veritas.catalogs.store import SCHEMA_VERSION, CatalogStore, PutStatus
+from veritas.catalogs.userdata import (
+    UserData,
+    UserKey,
+    load_user_data,
+    save_user_data,
+)
 from veritas.core.diagnostics import DiagnosticCode
 from veritas.core.messages_es import render_message, render_text
 
@@ -154,6 +179,7 @@ def add_catalog_parser(subparsers: "argparse._SubParsersAction[argparse.Argument
     show.add_argument("--revision", type=int, metavar="R", help="Revisión (la última).")
 
     _add_query_parsers(sub)
+    _add_manage_parsers(sub)
 
     verify = sub.add_parser("verify", help="Verifica la integridad del archivo.")
     _db(verify)
@@ -195,11 +221,53 @@ def _add_query_parsers(
     ficha = sub.add_parser("ficha", help="Ficha de un perfil con el historial de sus revisiones.")
     _db(ficha)
     ficha.add_argument("reference", metavar="REF", help="CATÁLOGO/SERIE/DESIGNACIÓN[@REVISIÓN]")
+    _user_option(ficha)
 
     comparing = sub.add_parser("comparar", help="Compara de 2 a 8 perfiles.")
     _db(comparing)
     comparing.add_argument(
         "references", nargs="+", metavar="REF", help="CATÁLOGO/SERIE/DESIGNACIÓN[@REVISIÓN]"
+    )
+    _user_option(comparing)
+
+
+def _add_manage_parsers(
+    sub: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    """Acciones de gestión: clone, favorito y exportar (T-023 E2)."""
+    clone = sub.add_parser("clone", help="Clona un catálogo en otro editable (con trazabilidad).")
+    _db(clone)
+    _catalog(clone)
+    clone.add_argument("--nombre", required=True, help="Nombre del catálogo nuevo.")
+    clone.add_argument("--descripcion", help="Descripción del clon (por defecto, la del origen).")
+
+    favorite = sub.add_parser("favorito", help="Favoritos y recientes en un archivo de usuario.")
+    actions = favorite.add_subparsers(dest="favorite_action", metavar="ACCIÓN", required=True)
+    for action, needs_ref, text in (
+        ("agregar", True, "Marca un perfil como favorito (sigue a su última revisión)."),
+        ("quitar", True, "Quita un perfil de los favoritos."),
+        ("listar", False, "Lista los favoritos de este catálogo."),
+        ("recientes", False, "Lista los perfiles consultados recientemente."),
+    ):
+        one = actions.add_parser(action, help=text)
+        _db(one)
+        one.add_argument("--usuario", required=True, metavar="RUTA", help="Archivo de usuario.")
+        if needs_ref:
+            one.add_argument("reference", metavar="REF", help="CATÁLOGO/SERIE/DESIGNACIÓN")
+
+    export = sub.add_parser("exportar", help="Exporta los perfiles de un catálogo (CSV o JSON).")
+    _db(export)
+    _catalog(export)
+    export.add_argument("--formato", required=True, choices=("csv", "json"))
+    export.add_argument("--salida", required=True, metavar="ARCHIVO")
+    export.add_argument("--forzar", action="store_true", help="Sobrescribe si ya existe.")
+
+
+def _user_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--usuario",
+        metavar="RUTA",
+        help="Archivo de usuario: registra el perfil consultado entre los recientes.",
     )
 
 
@@ -219,8 +287,8 @@ def run_catalog(args: argparse.Namespace) -> tuple[str, int]:
     with CatalogStore.open(Path(args.db)) as store:
         if command == "verify":
             return _verify(args, store)
-        if command in _QUERIES:
-            return _QUERIES[command](args, store), EXIT_OK
+        if command in _ACTIONS:
+            return _ACTIONS[command](args, store), EXIT_OK
         info = store.catalog_by_name(args.catalogo)
         if command == "lock":
             return _lock(store, info), EXIT_OK
@@ -397,6 +465,7 @@ def _describe_lines(
 ) -> list[str]:
     data = profile.data
     batch = store.revision_batch(profile.id, profile.revision)
+    origin = store.revision_origin(profile.id, profile.revision)
     lines = [
         f"Perfil {data.series} / {data.designation} — revisión {profile.revision} de {latest}",
         f"  id: {profile.id}",
@@ -417,10 +486,23 @@ def _describe_lines(
         f"  procedencia: fuente {prov.source} · licencia {prov.license} · edición {prov.edition}",
         f"  método de importación: {prov.method}",
         "  avisos: " + (" | ".join(render_text(key) for key in data.warnings) or "ninguno"),
-        "  lote que creó la revisión: " + _batch_text(batch),
+        _creation_line(store, batch, origin),
         f"  hash SHA-256 de la revisión: {profile_sha256(profile)}",
     ]
     return lines
+
+
+def _creation_line(
+    store: CatalogStore, batch: ImportBatch | None, origin: CatalogProfile | None
+) -> str:
+    """Cómo nació la revisión: por un lote de importación o copiada por un clon."""
+    if origin is not None:
+        source = store.get_catalog(origin.catalog_id)
+        return (
+            f"  origen de la revisión: clon de «{source.name}» "
+            f"({origin.series} / {origin.designation} rev {origin.revision})"
+        )
+    return "  lote que creó la revisión: " + _batch_text(batch)
 
 
 def _batch_text(batch: ImportBatch | None) -> str:
@@ -527,7 +609,26 @@ def _find(store: CatalogStore, ref: ProfileRef) -> tuple[CatalogInfo, CatalogPro
     return info, profile, history[-1].revision
 
 
+def _user(args: argparse.Namespace) -> tuple[Path, UserData] | None:
+    """Archivo de usuario indicado, leído y validado antes de hacer nada (ilegible = error)."""
+    path = getattr(args, "usuario", None)
+    return None if path is None else (Path(path), load_user_data(Path(path)))
+
+
+def _remember(user: tuple[Path, UserData] | None, entries: Sequence[Entry]) -> None:
+    """Anota las consultas entre los recientes (la primera de ``entries``, la más reciente)."""
+    if user is not None:
+        path, data = user
+        keys = [_key(e.catalog, e.profile) for e in entries]
+        save_user_data(path, data.touch(list(reversed(keys))))
+
+
+def _key(info: CatalogInfo, profile: CatalogProfile) -> UserKey:
+    return UserKey(info.id, info.name, profile.series, profile.designation)
+
+
 def _ficha(args: argparse.Namespace, store: CatalogStore) -> str:
+    user = _user(args)
     ref = parse_reference(args.reference)
     info, profile, latest = _find(store, ref)
     lines = _describe_lines(store, info, profile, latest)
@@ -536,18 +637,33 @@ def _ficha(args: argparse.Namespace, store: CatalogStore) -> str:
         batch = store.revision_batch(past.id, past.revision)
         lines.append(
             f"    rev {past.revision} · {profile_sha256(past)[:12]} · "
-            + ("anterior al registro de lotes" if batch is None else batch.imported_at)
+            + _revision_moment(store, past, batch)
         )
     lines.append(_WARNING)
+    _remember(user, [Entry(info, profile)])
     return "\n".join(lines)
 
 
+def _revision_moment(
+    store: CatalogStore, profile: CatalogProfile, batch: ImportBatch | None
+) -> str:
+    """Cuándo y cómo nació una revisión, para el historial de la ficha."""
+    if batch is not None:
+        return batch.imported_at
+    if store.revision_origin(profile.id, profile.revision) is not None:
+        return "copiada por clon"
+    return "anterior al registro de lotes"
+
+
 def _compare(args: argparse.Namespace, store: CatalogStore) -> str:
+    user = _user(args)
     refs = [parse_reference(text) for text in args.references]
     if len(refs) > MAX_COMPARED:  # el límite se comprueba antes de leer nada
         compare([])  # lanza catalog.compare_count
     entries = [Entry(info, profile) for info, profile, _ in (_find(store, r) for r in refs)]
-    return _compare_text(compare(entries))
+    comparison = compare(entries)
+    _remember(user, entries)
+    return _compare_text(comparison)
 
 
 def _compare_text(comparison: Comparison) -> str:
@@ -574,11 +690,120 @@ def _compare_text(comparison: Comparison) -> str:
     return "\n".join(lines)
 
 
-_QUERIES: Final = {
+# --- clone / favorito / exportar ----------------------------------------------------------------
+
+
+def _clone(args: argparse.Namespace, store: CatalogStore) -> str:
+    origin = store.catalog_by_name(args.catalogo)
+    result = store.clone_catalog(origin.id, args.nombre, description=args.descripcion)
+    return "\n".join(
+        [
+            f"Catálogo «{origin.name}» clonado como «{result.catalog.name}» (editable): "
+            f"{len(result.profiles)} perfil(es) copiados como revisión 1",
+            f"  id: {result.catalog.id}",
+            f"  origen: «{origin.name}» ({'protegido' if origin.protected else 'editable'}) · "
+            f"fuente {origin.source} · licencia {origin.license} · edición {origin.edition}",
+            "  el origen no se ha modificado; el clon admite importar (revisión n+1)",
+            _WARNING,
+        ]
+    )
+
+
+def _favorite(args: argparse.Namespace, store: CatalogStore) -> str:
+    path = Path(args.usuario)
+    data = load_user_data(path)  # ilegible = error antes de hacer nada
+    action = args.favorite_action
+    if action in {"listar", "recientes"}:
+        keys = data.favorites if action == "listar" else data.recent
+        return _user_listing(path, action, keys, store)
+    ref = parse_reference(args.reference)
+    if action == "agregar":
+        info, profile, _ = _find(store, ref)
+        key = _key(info, profile)
+        data, changed = data.add_favorite(key)
+        said = "añadido a" if changed else "ya estaba en"
+    else:
+        info = store.catalog_by_name(ref.catalog)
+        key = UserKey(info.id, info.name, ref.series, ref.designation)
+        data, changed = data.remove_favorite(key)
+        said = "quitado de" if changed else "no estaba en"
+    if changed:
+        save_user_data(path, data)
+    return (
+        f"«{key.catalog_name}/{key.series}/{key.designation}» {said} los favoritos de {path}"
+        f" ({len(data.favorites)} en total)"
+    )
+
+
+def _user_listing(path: Path, action: str, keys: Sequence[UserKey], store: CatalogStore) -> str:
+    title = "Favoritos" if action == "listar" else "Recientes (el último, primero)"
+    here = {info.id: info for info in store.list_catalogs()}
+    rows: list[tuple[str, ...]] = []
+    elsewhere = 0
+    for key in keys:
+        info = here.get(key.catalog_id)
+        if info is None:
+            elsewhere += 1
+            continue
+        try:
+            profile = store.latest(info.id, key.series, key.designation)
+        except CatalogError:
+            rows.append((info.name, key.series, key.designation, "-", "-", "perfil no encontrado"))
+            continue
+        rows.append(
+            (info.name, profile.series, profile.designation, profile.family.value,
+             str(profile.revision), "")
+        )  # fmt: skip
+    lines = [f"{title} de {path}: {len(rows)} de este archivo"]
+    if rows:
+        lines.append(_table(("Catálogo", "Serie", "Designación", "Familia", "Rev", "Estado"), rows))
+    if elsewhere:
+        lines.append(
+            f"Otros: {elsewhere} perfil(es) de catálogos de otros archivos (no se muestran)."
+        )
+    return "\n".join(lines)
+
+
+def _export(args: argparse.Namespace, store: CatalogStore) -> str:
+    info = store.catalog_by_name(args.catalogo)
+    profiles = store.list_profiles(info.id)
+    origin = store.clone_source(info.id)
+    out = Path(args.salida)
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if args.formato == "csv":
+        content = csv_text(profiles)
+        side = out.with_name(out.name + PROVENANCE_SUFFIX)
+        note = provenance_text(
+            info,
+            file_name=out.name,
+            content=content,
+            rows=len(profiles),
+            exported_at=stamp,
+            cloned_from=origin,
+        )
+        files = [(out, content.encode("utf-8")), (side, note.encode("utf-8"))]
+        extra = f"\n  procedencia y licencia: {side}"
+    else:
+        content = json_text(info, profiles, exported_at=stamp, cloned_from=origin)
+        files = [(out, content.encode("utf-8"))]
+        extra = ""
+    write_files(files, overwrite=args.forzar)
+    return (
+        f"Catálogo «{info.name}» exportado a {out} ({args.formato.upper()}, "
+        f"{len(profiles)} perfil(es), última revisión de cada uno)\n"
+        f"  SHA-256: {sha256_of(content)}{extra}\n"
+        f"Aviso: {redistribution_warning(info.license)}"
+    )
+
+
+_ACTIONS: Final = {
     "list": _list,
     "search": _search,
     "ficha": _ficha,
     "comparar": _compare,
+    "clone": _clone,
+    "favorito": _favorite,
+    "exportar": _export,
 }
 
 

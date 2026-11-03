@@ -58,7 +58,7 @@ from veritas.catalogs.model import (
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, Location
 from veritas.core.validation import invalid_type
 
-SCHEMA_VERSION: Final = 2
+SCHEMA_VERSION: Final = 3
 APPLICATION_ID: Final = 0x56434154  # «VCAT»
 _MAX_ID_ATTEMPTS: Final = 1000
 
@@ -129,7 +129,23 @@ def _migration_1_to_2(connection: sqlite3.Connection) -> None:
         connection.execute(statement)
 
 
-MIGRATIONS: Final[dict[int, Migration]] = {1: _migration_1_to_2}
+_MIGRATION_2_TO_3: Final = (
+    "ALTER TABLE catalogs ADD COLUMN cloned_from TEXT REFERENCES catalogs (id)",
+    "ALTER TABLE profile_revisions ADD COLUMN cloned_from_profile_id TEXT",
+    "ALTER TABLE profile_revisions ADD COLUMN cloned_from_revision INTEGER",
+)
+"""Esquema v3 (enmienda de ADR-009, T-023 E2): trazabilidad de los clones. ``cloned_from`` es el
+catálogo de origen (nulo si no es un clon); cada revisión copiada guarda la revisión exacta de
+origen. Los dos enlaces de revisión **no** llevan clave foránea (el padre sería compuesto) y se
+comprueban en ``verify``."""
+
+
+def _migration_2_to_3(connection: sqlite3.Connection) -> None:
+    for statement in _MIGRATION_2_TO_3:
+        connection.execute(statement)
+
+
+MIGRATIONS: Final[dict[int, Migration]] = {1: _migration_1_to_2, 2: _migration_2_to_3}
 """Migraciones reales registradas, ``N -> N+1``. ``create`` construye v1 y aplica estas mismas
 migraciones, de modo que un archivo nuevo y uno migrado tienen el mismo esquema."""
 
@@ -166,6 +182,14 @@ class BatchResult:
 
     batch: ImportBatch
     results: tuple[PutResult, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CloneResult:
+    """Catálogo clonado y sus perfiles (revisión 1), en el orden del origen."""
+
+    catalog: CatalogInfo
+    profiles: tuple[CatalogProfile, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,35 +435,119 @@ class CatalogStore:
     ) -> CatalogInfo:
         """Alta de un catálogo (no protegido). El nombre es único sin distinguir mayúsculas."""
         with self._transaction() as con:
-            info = CatalogInfo(
-                id=self._new_id(con, "catalogs", "id"),
+            return self._insert_catalog(
+                con,
                 name=name,
-                description=description,
                 source=source,
                 license=license,
                 edition=edition,
-                protected=False,
+                description=description,
             )
-            taken = con.execute("SELECT 1 FROM catalogs WHERE name = ?", (info.name,)).fetchone()
-            if taken is not None:
-                raise catalog_error(
-                    DiagnosticCode.UNSUPPORTED_CONFIGURATION,
-                    "catalog.name_taken",
-                    {"name": info.name},
-                )
-            con.execute(
-                "INSERT INTO catalogs (id, name, description, source, license, edition, protected)"
-                " VALUES (?, ?, ?, ?, ?, ?, 0)",
-                (
-                    str(info.id),
-                    info.name,
-                    info.description,
-                    info.source,
-                    info.license,
-                    info.edition,
-                ),
+
+    def _insert_catalog(  # noqa: PLR0913 (campos del catálogo por nombre)
+        self,
+        con: sqlite3.Connection,
+        *,
+        name: str,
+        source: str,
+        license: str,
+        edition: str,
+        description: str,
+        cloned_from: UUID | None = None,
+    ) -> CatalogInfo:
+        info = CatalogInfo(
+            id=self._new_id(con, "catalogs", "id"),
+            name=name,
+            description=description,
+            source=source,
+            license=license,
+            edition=edition,
+            protected=False,
+        )
+        taken = con.execute("SELECT 1 FROM catalogs WHERE name = ?", (info.name,)).fetchone()
+        if taken is not None:
+            raise catalog_error(
+                DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+                "catalog.name_taken",
+                {"name": info.name},
             )
+        con.execute(
+            "INSERT INTO catalogs (id, name, description, source, license, edition, protected,"
+            " cloned_from) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+            (
+                str(info.id),
+                info.name,
+                info.description,
+                info.source,
+                info.license,
+                info.edition,
+                None if cloned_from is None else str(cloned_from),
+            ),
+        )
         return info
+
+    @_translated
+    def clone_catalog(
+        self, origin_id: UUID, name: str, *, description: str | None = None
+    ) -> CloneResult:
+        """Clona un catálogo (también uno protegido) en otro nuevo y editable, de forma atómica.
+
+        Copia la última revisión de cada perfil como revisión 1, con identificadores nuevos y el
+        mismo contenido (la procedencia de cada perfil se conserva), y deja constancia del origen:
+        el catálogo guarda ``cloned_from`` y cada revisión la revisión exacta de la que procede.
+        La fuente, la licencia y la edición se copian; la descripción también salvo que se indique
+        otra. El origen no se modifica. Un fallo en cualquier punto no deja nada.
+        """
+        with self._transaction() as con:
+            origin = self._catalog(con, origin_id)
+            info = self._insert_catalog(
+                con,
+                name=name,
+                source=origin.source,
+                license=origin.license,
+                edition=origin.edition,
+                description=origin.description if description is None else description,
+                cloned_from=origin.id,
+            )
+            sources = self._profiles(con, origin.id, all_revisions=False)
+            results = self._put_all(con, info.id, [p.data for p in sources], None)
+            for source, result in zip(sources, results, strict=True):
+                con.execute(
+                    "UPDATE profile_revisions SET cloned_from_profile_id = ?,"
+                    " cloned_from_revision = ? WHERE profile_id = ? AND revision = ?",
+                    (
+                        str(source.id),
+                        source.revision,
+                        str(result.profile.id),
+                        result.profile.revision,
+                    ),
+                )
+            return CloneResult(info, tuple(result.profile for result in results))
+
+    @_translated
+    def clone_source(self, catalog_id: UUID) -> CatalogInfo | None:
+        """Catálogo del que procede este clon, o ``None`` si no es un clon."""
+        con = self._con()
+        self._catalog(con, catalog_id)
+        row = con.execute(
+            "SELECT cloned_from FROM catalogs WHERE id = ?", (str(catalog_id),)
+        ).fetchone()
+        return None if row[0] is None else self._catalog(con, UUID(str(row[0])))
+
+    @_translated
+    def revision_origin(self, profile_id: UUID, revision: int) -> CatalogProfile | None:
+        """Revisión de origen de una revisión copiada por un clon, o ``None`` si no lo es."""
+        con = self._con()
+        row = con.execute(
+            "SELECT cloned_from_profile_id, cloned_from_revision FROM profile_revisions"
+            " WHERE profile_id = ? AND revision = ?",
+            (str(profile_id), revision),
+        ).fetchone()
+        if row is None:
+            raise _profile_missing(f"{profile_id} rev {revision}")
+        if row[0] is None or row[1] is None:
+            return None
+        return self.get_profile(UUID(str(row[0])), int(row[1]))
 
     @_translated
     def lock_catalog(self, catalog_id: UUID) -> CatalogInfo:
@@ -693,7 +801,11 @@ class CatalogStore:
         self, catalog_id: UUID, *, all_revisions: bool = False
     ) -> tuple[CatalogProfile, ...]:
         """Perfiles de un catálogo por serie y designación; por defecto, solo la última revisión."""
-        con = self._con()
+        return self._profiles(self._con(), catalog_id, all_revisions=all_revisions)
+
+    def _profiles(
+        self, con: sqlite3.Connection, catalog_id: UUID, *, all_revisions: bool
+    ) -> tuple[CatalogProfile, ...]:
         self._catalog(con, catalog_id)
         latest_only = (
             " AND revision = (SELECT MAX(r.revision) FROM profile_revisions AS r"
@@ -759,12 +871,14 @@ class CatalogStore:
                     " ORDER BY profile_id, revision"
                 ).fetchall()
                 batch_issues = _verify_batches(con)
+                clone_issues = _verify_clones(con)
             except sqlite3.DatabaseError as error:
                 issues.append(_issue("catalog.verify_integrity", {"detail": str(error)}))
                 return VerifyReport(checked, tuple(issues))
             checked = len(rows)
             issues.extend(_verify_rows(rows))
             issues.extend(batch_issues)
+            issues.extend(clone_issues)
         finally:
             with contextlib.suppress(sqlite3.Error):
                 con.execute("ROLLBACK")
@@ -935,6 +1049,74 @@ def _verify_batches(con: sqlite3.Connection) -> list[Diagnostic]:
         elif set(per_catalog) - {str(batch.catalog_id)}:
             issues.append(_issue("catalog.verify_batch", {"batch": label, "field": "catálogo"}))
     return issues
+
+
+def _verify_clones(con: sqlite3.Connection) -> list[Diagnostic]:
+    """Trazabilidad de los clones: enlaces completos, de la revisión 1, a un origen que existe en
+    el catálogo de origen declarado, con el mismo contenido."""
+    issues: list[Diagnostic] = []
+    origin_of: dict[str, str | None] = {}
+    for catalog_id, cloned_from in con.execute("SELECT id, cloned_from FROM catalogs").fetchall():
+        origin_of[str(catalog_id)] = None if cloned_from is None else str(cloned_from)
+        if cloned_from is not None and str(cloned_from) == str(catalog_id):
+            issues.append(
+                _issue(
+                    "catalog.verify_clone", {"item": f"catálogo {catalog_id}", "field": "origen"}
+                )
+            )
+    rows = con.execute(
+        "SELECT profile_id, revision, catalog_id, content_json, cloned_from_profile_id,"
+        " cloned_from_revision FROM profile_revisions"
+        " WHERE cloned_from_profile_id IS NOT NULL OR cloned_from_revision IS NOT NULL"
+        " ORDER BY profile_id, revision"
+    ).fetchall()
+    for row in rows:
+        field = _clone_link_problem(con, origin_of, row)
+        if field is None:
+            field = _clone_content_problem(con, str(row[3]), str(row[4]), int(row[5]))
+        if field is not None:
+            issues.append(
+                _issue(
+                    "catalog.verify_clone",
+                    {"item": f"revisión {row[1]}", "field": field},
+                    str(row[0]),
+                )
+            )
+    return issues
+
+
+def _clone_link_problem(
+    con: sqlite3.Connection, origin_of: dict[str, str | None], row: tuple[object, ...]
+) -> str | None:
+    """Problema de los enlaces de una revisión (``row`` = fila de ``_verify_clones``)."""
+    revision, catalog_id, link_profile, link_revision = row[1], row[2], row[4], row[5]
+    if link_profile is None or link_revision is None:
+        return "enlace incompleto"
+    if revision != 1:
+        return "revisión posterior a la primera"
+    origin = con.execute(
+        "SELECT catalog_id FROM profile_revisions WHERE profile_id = ? AND revision = ?",
+        (str(link_profile), link_revision),
+    ).fetchone()
+    if origin is None:
+        return "revisión de origen inexistente"
+    if origin_of.get(str(catalog_id)) is None or str(origin[0]) != origin_of[str(catalog_id)]:
+        return "catálogo de origen distinto"
+    return None
+
+
+def _clone_content_problem(
+    con: sqlite3.Connection, text: str, link_profile: str, link_revision: int
+) -> str | None:
+    origin = con.execute(
+        "SELECT content_json FROM profile_revisions WHERE profile_id = ? AND revision = ?",
+        (link_profile, link_revision),
+    ).fetchone()
+    try:
+        same = same_content(decode_profile(text).data, decode_profile(str(origin[0])).data)
+    except CatalogError:
+        return None  # un documento ilegible ya lo informa la verificación de cada revisión
+    return None if same else "contenido distinto al del origen"
 
 
 def _verify_rows(rows: list[tuple[object, ...]]) -> list[Diagnostic]:

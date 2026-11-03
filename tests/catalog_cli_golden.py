@@ -10,10 +10,12 @@ enmascara también los números, y aquí los recuentos son parte de lo que se ac
 Regenerar solo con una salida aceptada (ver ``tests/golden/README.md``):
 
     uv run python tests/catalog_cli_golden.py            # ambas sesiones
-    uv run python tests/catalog_cli_golden.py consulta   # solo la de consulta (T-023)
+    uv run python tests/catalog_cli_golden.py consulta   # solo la de consulta (T-023 E1)
+    uv run python tests/catalog_cli_golden.py gestion    # solo la de gestión (T-023 E2)
 
 La sesión de consulta (``search``, ``ficha`` y ``comparar``; T-023 E1) vive en su propio
-archivo para no tocar la salida ya aceptada de T-022.
+archivo para no tocar la salida ya aceptada de T-022; la de gestión (``clone``, ``favorito`` y
+``exportar``; T-023 E2) también.
 """
 
 import contextlib
@@ -34,6 +36,7 @@ from veritas import cli
 DATA_DIR: Final = Path(__file__).parent / "data"
 GOLDEN_FILE: Final = Path(__file__).parent / "golden" / "catalogo_cli.txt"
 QUERY_GOLDEN_FILE: Final = Path(__file__).parent / "golden" / "catalogo_consulta.txt"
+MANAGE_GOLDEN_FILE: Final = Path(__file__).parent / "golden" / "catalogo_gestion.txt"
 
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 _SHA = re.compile(r"\b[0-9a-f]{64}\b")
@@ -207,6 +210,63 @@ def query_session() -> str:
     return "".join(_run(step) for step in steps)
 
 
+def management_session() -> str:
+    """Sesión de gestión (T-023 E2): clon, favoritos y recientes, exportación y verify de clones."""
+    work = Path.cwd()
+    _prepare(work)
+    db = ["--db", "c.sqlite"]
+    user = ["--usuario", "u.json"]
+    quiet = io.StringIO()
+    with contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
+        cli.main(["catalog", "create", *db, "--nombre", "Sintetico", "--fuente", "SINTETICO",
+                  "--licencia", "CC BY 4.0", "--edicion", "2026"])  # fmt: skip
+        cli.main(["catalog", "import", *db, "--catalogo", "Sintetico", "lote105.csv",
+                  *SYNTHETIC_ARGS])  # fmt: skip
+    first = "Sintetico/SINTETICO-I/SINT-100x50-4-6"
+    second = "Sintetico/SINTETICO-I/SINT-100x55-5-6"
+    log = [
+        _run(["lock", *db, "--catalogo", "Sintetico"]),
+        _run(["clone", *db, "--catalogo", "Sintetico", "--nombre", "Copia"]),
+        _run(["clone", *db, "--catalogo", "Sintetico", "--nombre", "copia"]),
+        _run(["list", *db]),
+        _run(["ficha", *db, "Copia/SINTETICO-I/SINT-100x50-4-6"]),
+        _run(["favorito", "agregar", *db, *user, first]),
+        _run(["favorito", "agregar", *db, *user, second]),
+        _run(["favorito", "agregar", *db, *user, second]),
+        _run(["ficha", *db, first, *user]),
+        _run(["comparar", *db, first, second, *user]),
+        _run(["favorito", "listar", *db, *user]),
+        _run(["favorito", "recientes", *db, *user]),
+        _run(["favorito", "quitar", *db, *user, second]),
+        _run(["favorito", "quitar", *db, *user, second]),
+        _run(["exportar", *db, "--catalogo", "Copia", "--formato", "csv", "--salida", "e.csv"]),
+        _run(["exportar", *db, "--catalogo", "Copia", "--formato", "csv", "--salida", "e.csv"]),
+        _run(["exportar", *db, "--catalogo", "Copia", "--formato", "csv", "--salida", "e.csv",
+              "--forzar"]),
+        _run(["exportar", *db, "--catalogo", "Sintetico", "--formato", "json",
+              "--salida", "e.json"]),
+        _run(["exportar", *db, "--catalogo", "Sintetico", "--formato", "json",
+              "--salida", "no_existe/e.json"]),
+        _run(["create", "--db", "d.sqlite", "--nombre", "Re", "--fuente", "S",
+              "--licencia", "L", "--edicion", "1"]),
+        _run(["import", "--db", "d.sqlite", "--catalogo", "Re", "e.csv"]),
+        _run(["verify", *db]),
+    ]  # fmt: skip
+    Path("mal.json").write_text('{"format": "veritas-catalog-user/1"}', encoding="utf-8")
+    log.append(_run(["favorito", "listar", *db, "--usuario", "mal.json"]))
+    log.append(_run(["ficha", *db, first, "--usuario", "mal.json"]))
+    shutil.copy("c.sqlite", "t.sqlite")
+    connection = sqlite3.connect("t.sqlite")
+    connection.execute(
+        "UPDATE profile_revisions SET cloned_from_revision = 99"
+        " WHERE designation = 'SINT-100x50-4-6' AND cloned_from_revision IS NOT NULL"
+    )
+    connection.commit()
+    connection.close()
+    log.append(_run(["verify", "--db", "t.sqlite"]))
+    return "".join(log).replace("\\", "/")  # rutas iguales en Windows y Linux
+
+
 def capture(run: Callable[[], str] | None = None) -> str:
     """Ejecuta una sesión en un directorio temporal y devuelve su salida normalizada."""
     previous = Path.cwd()
@@ -219,6 +279,10 @@ def capture(run: Callable[[], str] | None = None) -> str:
 
 
 if __name__ == "__main__":
-    if sys.argv[1:] != ["consulta"]:
+    only = sys.argv[1:]
+    if not only:
         GOLDEN_FILE.write_text(capture(), encoding="utf-8", newline="\n")
-    QUERY_GOLDEN_FILE.write_text(capture(query_session), encoding="utf-8", newline="\n")
+    if only in ([], ["consulta"]):
+        QUERY_GOLDEN_FILE.write_text(capture(query_session), encoding="utf-8", newline="\n")
+    if only in ([], ["gestion"]):
+        MANAGE_GOLDEN_FILE.write_text(capture(management_session), encoding="utf-8", newline="\n")

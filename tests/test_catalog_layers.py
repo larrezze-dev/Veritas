@@ -28,10 +28,13 @@ def test_catalog_modules_exist() -> None:
         "__init__.py",
         "columns.py",
         "errors.py",
+        "export.py",
+        "fileio.py",
         "importer.py",
         "model.py",
         "query.py",
         "store.py",
+        "userdata.py",
     }
 
 
@@ -62,13 +65,23 @@ def test_catalogs_do_not_import_upper_layers(path: Path) -> None:
 
 
 def test_domain_modules_are_free_of_sqlite() -> None:
-    for name in ("model.py", "errors.py", "__init__.py", "columns.py", "importer.py", "query.py"):
+    for name in (
+        "model.py",
+        "errors.py",
+        "__init__.py",
+        "columns.py",
+        "importer.py",
+        "query.py",
+        "export.py",
+        "fileio.py",
+        "userdata.py",
+    ):
         assert "sqlite3" not in tops(CATALOGS / name)
 
 
 def test_the_importer_is_pure_and_does_not_reach_the_store() -> None:
-    """Importador y consulta solo leen y validan (T-022 E2, T-023 E1): sin almacén ni escritura."""
-    for name in ("columns.py", "importer.py", "query.py"):
+    """Importador, consulta, exportación y archivos de usuario no usan el almacén (T-022/T-023)."""
+    for name in ("columns.py", "importer.py", "query.py", "export.py", "fileio.py", "userdata.py"):
         names = imported_modules(CATALOGS / name, PACKAGE_ROOT)
         assert "veritas.catalogs.store" not in names
         assert not any(n.startswith("veritas.persistence") for n in names)

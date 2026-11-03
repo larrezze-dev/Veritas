@@ -96,3 +96,47 @@ def test_the_query_session_renders_each_key_with_its_real_parameters(
     template_fragment, rendered = texts
     assert template_fragment in MESSAGES_ES[key]  # el fragmento pertenece a esa plantilla
     assert rendered in query_text
+
+
+# --- Sesión de gestión (T-023 E2) --------------------------------------------------------------
+
+
+@pytest.fixture
+def manage_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    monkeypatch.chdir(tmp_path)
+    return golden.management_session()
+
+
+def test_the_management_session_matches_the_accepted_output(manage_text: str) -> None:
+    assert manage_text == golden.MANAGE_GOLDEN_FILE.read_text(encoding="utf-8")
+
+
+def test_the_management_session_covers_every_exit_code_with_no_unfilled_template(
+    manage_text: str,
+) -> None:
+    exits = re.findall(r"^--- exit (\d+)$", manage_text, flags=re.MULTILINE)
+    assert set(exits) == {"0", "2", "3"}
+    assert "{" not in manage_text
+    assert "\\" not in manage_text  # rutas iguales en Windows y Linux
+    assert "<sha256>" in manage_text
+
+
+MANAGE_FRAGMENTS = {
+    "catalog.name_taken": ("Ya existe un catálogo llamado", "llamado «copia»"),
+    "catalog.user_file": ("no es válido (", "mal.json no es válido ("),
+    "catalog.output_exists": ("use --forzar", "Ya existe e.csv: use --forzar"),
+    "catalog.output_error": ("No se pudo escribir", "No se pudo escribir no_existe/e.json"),
+    "catalog.verify_clone": (
+        "trazabilidad de clonación",
+        "trazabilidad de clonación de revisión 1 es incoherente (revisión de origen inexistente)",
+    ),
+}
+
+
+@pytest.mark.parametrize(("key", "texts"), sorted(MANAGE_FRAGMENTS.items()))
+def test_the_management_session_renders_each_key_with_its_real_parameters(
+    manage_text: str, key: str, texts: tuple[str, str]
+) -> None:
+    template_fragment, rendered = texts
+    assert template_fragment in MESSAGES_ES[key]
+    assert rendered in manage_text

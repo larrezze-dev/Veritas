@@ -957,6 +957,12 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "catalog.compare_count": (
         "Se comparan de {minimum} a {maximum} perfiles; se recibieron {count}."
     ),
+    "catalog.verify_clone": "La trazabilidad de clonación de {item} es incoherente ({field}).",
+    "catalog.user_file": (
+        "El archivo de usuario {path} no es válido ({reason}); no se ha modificado."
+    ),
+    "catalog.output_exists": "Ya existe {path}: use --forzar para sobrescribirlo.",
+    "catalog.output_error": "No se pudo escribir {path}.",
     "catalog.compare_repeated": "El perfil «{profile}» aparece más de una vez en la comparación.",
 }
 

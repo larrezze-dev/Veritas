@@ -3,7 +3,7 @@ $ veritas catalog create --db c.sqlite --nombre Sintetico --fuente SINTETICO --l
 Catálogo «Sintetico» creado: c.sqlite
   id: <uuid>
   fuente: SINTETICO · licencia: Sin valor comercial · edición: 2026
-  protegido: no · esquema v2
+  protegido: no · esquema v3
 Importe perfiles con «veritas catalog import».
 --- stderr
 --- exit 0
@@ -80,7 +80,7 @@ $ veritas catalog create --db c.sqlite --nombre Nativo --fuente SINTETICO --lice
 Catálogo «Nativo» añadido al archivo existente: c.sqlite
   id: <uuid>
   fuente: SINTETICO · licencia: Sin valor comercial · edición: 2026
-  protegido: no · esquema v2
+  protegido: no · esquema v3
 Importe perfiles con «veritas catalog import».
 --- stderr
 --- exit 0
@@ -202,7 +202,7 @@ INPUT_OUT_OF_RANGE: Opción decimal no válida: «,» («,» exige --sep «;»).
 $ veritas catalog verify --db c.sqlite
 --- stdout
 Catálogo íntegro: c.sqlite
-  esquema v2 · 101 revisión(es) comprobadas · 3 lote(s)
+  esquema v3 · 101 revisión(es) comprobadas · 3 lote(s)
 --- stderr
 --- exit 0
 

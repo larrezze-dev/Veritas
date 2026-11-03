@@ -47,8 +47,18 @@ Aprobada por el usuario en la consulta de inicio de E2 (opción b: «esquema v2 
 5. **Consecuencias.** Reimportar sin cambios deja los perfiles intactos pero **registra un lote** (el archivo cambia: es una auditoría, no un fallo). Abrir un catálogo v1 lo migra (también con `list`, `show` o `verify`). El enlace revisión → lote es nulo en las revisiones anteriores a la migración. Un lote sin ninguna fila aceptada no se escribe.
 6. **Sin cambios.** Entidad `CatalogProfile`, estados, documento canónico, hash de revisión y reglas de D8/D9 no cambian.
 
+## Enmienda de T-023 E2 (2026-11-03): trazabilidad de los clones, esquema v3
+
+Decidida por delegación del usuario («profesional y exacto») al aprobar el plan T-023 (D7 = B). Cambia el contrato de E2 solo de forma aditiva:
+
+1. **Esquema v3.** `user_version` = 3. `catalogs.cloned_from` (clave foránea al catálogo de origen; nulo si no es un clon) y, en `profile_revisions`, `cloned_from_profile_id` y `cloned_from_revision` (la revisión exacta de la que se copió; nulos si no es una copia). Los dos enlaces de revisión **no** llevan clave foránea: el padre sería compuesto y `profile_id` solo no es único; los comprueba `verify`. Migración 2 → 3 en la cadena (`create` aplica las mismas); los archivos v1 y v2 se migran al abrirse y un v3 queda idéntico byte a byte.
+2. **API.** `clone_catalog(origen, nombre, descripcion=None)` crea, en una sola transacción, un catálogo no protegido con la fuente, la licencia, la edición y (salvo que se indique otra) la descripción del origen, y copia la última revisión de cada perfil como revisión 1, con identificadores nuevos y el mismo contenido (la procedencia de cada perfil se conserva). Funciona también con un origen protegido y vacío; el origen no se modifica. `clone_source(catalogo)` y `revision_origin(perfil, revisión)` leen la trazabilidad; `CatalogInfo`, `CatalogProfile`, el documento canónico y su hash no cambian.
+3. **`verify`.** Para cada revisión copiada: enlaces completos, solo en la revisión 1, a una revisión de origen que existe y es del catálogo `cloned_from` del clon, con el mismo contenido (`same_content`); y un catálogo no es clon de sí mismo (`catalog.verify_clone`). Las revisiones que nacen de reimportar o editar el clon no llevan enlace y es legítimo.
+4. **Consecuencias.** Un clon de un clon enlaza con su origen inmediato. `show` y `ficha` dicen «clon de …» en vez de «anterior al registro de lotes». Los favoritos y recientes viven fuera del catálogo (archivo de usuario), por lo que un catálogo protegido sigue siendo de solo lectura.
+
 ## Historial
 
 - 2026-11-02: redactado con E1 de T-022 (PROPUESTO).
 - 2026-11-03: enmienda de E2 (esquema v2, lotes de importación) aprobada por el usuario en la consulta de inicio de E2.
 - 2026-11-03: aprobado por el usuario (ACCEPTED). Hallazgo de `section.py` resuelto con la opción (b).
+- 2026-11-03: enmienda de T-023 E2 (esquema v3, trazabilidad de los clones) decidida por delegación del usuario; pendiente de la aceptación de E2.
