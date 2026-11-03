@@ -113,7 +113,7 @@ def _check_properties(
         at = Location(entity_id=entity_id, revision=revision, field=name)
         Quantity(1.0, get_unit(prop.unit).dimension).require(get_unit(unit).dimension)
         value = prop.value
-        if prop.status is not PropertyStatus.CALCULADO or value is None:
+        if prop.status is PropertyStatus.NO_DISPONIBLE or value is None:
             continue  # NO_DISPONIBLE (value None) ya lo valida SectionProperty.
         if name in _STRICTLY_POSITIVE:
             checked_positive(value, name, at)

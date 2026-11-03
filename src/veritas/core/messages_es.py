@@ -838,6 +838,54 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Borrar «{name}» no se puede deshacer: repita el comando con --confirmar."
     ),
     "norm.self_derived": "La configuración {entity_id} no puede derivar de sí misma.",
+    "catalog.invalid_dimension_name": (
+        "Nombre de dimensión de perfil no válido: «{name}» (minúscula ASCII, dígitos y «_»)."
+    ),
+    "catalog.duplicate_dimension": "Dimensión de perfil repetida: {name}.",
+    "catalog.invalid_status": (
+        "Estado {status} no admitido en la propiedad {field} de un perfil de catálogo: solo "
+        "IMPORTADO_SIN_VERIFICAR o NO_DISPONIBLE."
+    ),
+    "catalog.invalid_warning": "Clave de aviso de perfil no válida o repetida: «{key}».",
+    "catalog.invalid_document": (
+        "Documento de perfil no válido en {path} (faltan: {missing}; sobran: {extra})."
+    ),
+    "catalog.database_error": "Error de la base de datos del catálogo.",
+    "catalog.file_exists": "Ya existe el archivo {path}: no se sobrescribe.",
+    "catalog.file_missing": "No existe el archivo de catálogo {path}.",
+    "catalog.unreadable": "El archivo {path} no se puede leer como base de datos SQLite.",
+    "catalog.not_a_catalog": "El archivo {path} no es un catálogo de Veritas: no se modifica.",
+    "catalog.unsupported_version": (
+        "Versión de catálogo {found} no soportada (esta versión admite hasta la {supported})."
+    ),
+    "catalog.migration_gap": "No hay migración de catálogo de la versión {step} a la {next}.",
+    "catalog.store_closed": "El catálogo {path} está cerrado.",
+    "catalog.name_taken": "Ya existe un catálogo llamado «{name}».",
+    "catalog.protected": (
+        "El catálogo «{catalog}» está protegido: no admite importar perfiles; se edita "
+        "mediante un clon."
+    ),
+    "catalog.duplicate_key": (
+        "Clave de perfil repetida en el lote: serie «{series}», designación «{designation}»."
+    ),
+    "catalog.not_found": "No existe el catálogo «{catalog}».",
+    "catalog.profile_not_found": "No existe el perfil «{profile}».",
+    "catalog.verify_integrity": "El archivo de catálogo falla la comprobación de SQLite: {detail}.",
+    "catalog.verify_orphan": "Fila huérfana en {table}: no existe su registro en {parent}.",
+    "catalog.verify_header": "Cabecera del catálogo inesperada ({field}).",
+    "catalog.verify_identity": (
+        "La identidad del perfil es incoherente en la revisión {revision} "
+        "(un mismo perfil con varias claves, o una clave con varios perfiles)."
+    ),
+    "catalog.verify_revision_sequence": ("Revisiones del perfil no consecutivas desde 1: {found}."),
+    "catalog.verify_hash": "El hash de contenido de la revisión {revision} no coincide.",
+    "catalog.verify_document": (
+        "El documento de la revisión {revision} no es válido o no está en forma canónica."
+    ),
+    "catalog.verify_columns": (
+        "Las columnas de consulta de la revisión {revision} no coinciden con su documento: "
+        "{fields}."
+    ),
 }
 
 

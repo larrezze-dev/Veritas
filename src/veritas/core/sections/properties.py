@@ -14,10 +14,19 @@ from veritas.core.validation import invalid_type, require_text
 
 
 class PropertyStatus(StrEnum):
-    """Estado de una propiedad. Los estados de importación llegan con el catálogo (F2)."""
+    """Estado de una propiedad (SRS §5.2).
+
+    ``CALCULADO`` lo calcula Veritas; ``NO_DISPONIBLE`` no tiene valor. Desde T-022 E1
+    (ADR-009, aditivo) los valores de catálogo: ``IMPORTADO_SIN_VERIFICAR`` (T-022 solo emite
+    este), ``CONTRASTADO`` y ``VERIFICADO`` (reservados a F3A). Todo estado distinto de
+    ``NO_DISPONIBLE`` exige un valor real finito.
+    """
 
     CALCULADO = "CALCULADO"
     NO_DISPONIBLE = "NO_DISPONIBLE"
+    IMPORTADO_SIN_VERIFICAR = "IMPORTADO_SIN_VERIFICAR"
+    CONTRASTADO = "CONTRASTADO"
+    VERIFICADO = "VERIFICADO"
 
 
 @dataclass(frozen=True, slots=True)

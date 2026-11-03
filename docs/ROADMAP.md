@@ -10,7 +10,7 @@ El Product Owner puede probar cada fase y detener el desarrollo sin invalidar lo
 | F1A | Node/Member, material, sección rectangular, conexión rígida I/J | CLI o pequeña vista de barras y propiedades | ACEPTADA — 2026-10-27, aceptación expresa del usuario (T-003 y T-004) |
 | F1B | Apoyos y cargas nodales/barras, adaptador OpenSeesPy | Viga de referencia, reacciones/desplazamientos verificables | ACEPTADA 2026-10-28 (T-005 a T-009 aceptados; puerta superada con `veritas analyze referencias`, T-FEM-001…004; la «primera demostración solicitada» pasa a T-010) |
 | F1C | Cambio de liberación I/J, resorte rotacional y errores por mecanismo | Usuario compara tres uniones y verifica mensajes | ACEPTADA 2026-10-28 (T-010 aceptado: «Acepto T-010 (y con ello F1C)»; puerta superada con `veritas analyze uniones`, `analyze demo --caso tres-materiales` y T-CON-REF-01…04) |
-| F2 | Catálogo SQLite, importador y tabla buscable | Importación 100 perfiles, filtros y asignación | NO INICIADA |
+| F2 | Catálogo SQLite, importador y tabla buscable | Importación 100 perfiles, filtros y asignación | NO INICIADA — dividida en T-022 (catálogo e importador, plan [aprobado](../plans/T-022.md) 2026-11-02), T-023 (búsqueda) y T-024 (asignación y esquema v4); se acepta al cerrar T-024 |
 | F3A | Editor paramétrico de perfiles y propiedades básicas | Rectángulo/I/tubo con medidas y A/I verificadas | NO INICIADA |
 | F3B | Croquis libre, huecos, validación y versiones | Sección con hueco y error por autointersección | NO INICIADA |
 | F4 | Modelador 3D, inspector, snapping, undo/redo, guardado | Montar pórtico sin código y editar uniones | NO INICIADA |
