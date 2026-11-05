@@ -98,6 +98,7 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Uso: assign-profile ARCHIVO ETIQUETA REFERENCIA, o con --todas: ARCHIVO REFERENCIA."
     ),
     "project.replace_usage": "Indique exactamente una selección: --barras E1 E2… o --todas.",
+    "project.update_usage": "Indique exactamente una selección: ETIQUETA… o --todas.",
     "project.case_required": "Indique el caso de carga con --carga. Casos del proyecto: {cases}.",
     "project.invalid_version": "Versión de esquema no válida: {found}.",
     "project.migration_gap": "No hay migración registrada de la versión {step} a la {next}.",

@@ -39,7 +39,7 @@ from veritas.persistence.runs import Validity, validity
 EXIT_OK = 0
 EXIT_REJECTED = 2
 
-PROFILE_COMMANDS = ("assign-profile", "replace-profile", "sections")
+PROFILE_COMMANDS = ("assign-profile", "replace-profile", "sections", "update-profile")
 
 _STATUS_TEXT = {
     ReplacementStatus.APPLIED: "aplicada(s)",
@@ -88,6 +88,18 @@ def add_profile_parsers(sub: "argparse._SubParsersAction[argparse.ArgumentParser
     replace.add_argument("--todas", action="store_true", help="Todas las barras del proyecto.")
     replace.add_argument("--barras", nargs="+", metavar="ETIQUETA", help="Barras a sustituir.")
     replace.add_argument("reference", metavar="REFERENCIA", help="CAT/SERIE/DES[@REV].")
+    update = sub.add_parser(
+        "update-profile",
+        help="Actualiza perfiles de catálogo con revisión posterior (vista previa o --aplicar).",
+    )
+    common(update)
+    update.add_argument("--todas", action="store_true", help="Todas las barras del proyecto.")
+    update.add_argument(
+        "--aplicar",
+        action="store_true",
+        help="Escribe la actualización; sin esta orden solo se muestra la vista previa.",
+    )
+    update.add_argument("labels", nargs="*", metavar="ETIQUETA", help="Barras a actualizar.")
     sections = sub.add_parser(
         "sections", help="Lista las secciones del proyecto con sus dictámenes FEM y de norma."
     )
@@ -101,6 +113,8 @@ def run_profile_command(args: argparse.Namespace, project: Project) -> tuple[str
     """Ejecuta ``assign-profile``, ``replace-profile`` o ``sections``."""
     if args.project_command == "sections":
         return _sections(args, project), EXIT_OK
+    if args.project_command == "update-profile":
+        return _update(args, project)
     if args.project_command == "assign-profile":
         labels, reference = _assign_targets(args)
     else:
@@ -243,6 +257,136 @@ def _member_lines(report: ReplacementReport) -> list[str]:
     summary = ", ".join(f"{n} {_STATUS_TEXT[s]}" for s, n in counts.items() if n)
     lines.append(f"Resultado: {summary}")
     return lines
+
+
+# --- Actualización guiada (T-026, TK-025) -------------------------------------------------
+
+_STALE = (Freshness.NEWER_REVISION, Freshness.CONTENT_DIFFERS)
+_UPDATE_PROPERTIES = (
+    ("area", "A", "m²"),
+    ("iy", "Iy", "m⁴"),
+    ("iz", "Iz", "m⁴"),
+    ("torsion_constant", "J", "m⁴"),
+    ("linear_mass", "masa lineal", "kg/m"),
+)
+
+
+def _latest_snapshot(snapshot: CatalogSnapshot, db: str) -> CatalogSnapshot | None:
+    """Snapshot de la última revisión del perfil en el catálogo, o ``None`` si no existe."""
+    with CatalogStore.open(Path(db)) as store:
+        try:
+            info = store.get_catalog(snapshot.catalog_id)
+            latest = store.history(info.id, snapshot.series, snapshot.designation)[-1]
+        except CatalogError:
+            return None
+    return snapshot_from_profile(latest, info)
+
+
+def _value_text(value: float | None, unit: str) -> str:
+    return "no disponible" if value is None else f"{value:.6g} {unit}"
+
+
+def _change_lines(old: CatalogSnapshot, new: CatalogSnapshot) -> list[str]:
+    lines: list[str] = []
+    for name, text, unit in _UPDATE_PROPERTIES:
+        before = getattr(old, name).value
+        after = getattr(new, name).value
+        if before == after:
+            continue
+        rel = (
+            f" ({(after - before) / before:+.2%})"
+            if before is not None and after is not None
+            else ""
+        )
+        lines.append(f"    {text}: {_value_text(before, unit)} → {_value_text(after, unit)}{rel}")
+    old_dims = {d.name: d.value for d in old.dimensions}
+    new_dims = {d.name: d.value for d in new.dimensions}
+    for name in sorted(old_dims.keys() | new_dims.keys()):
+        if old_dims.get(name) != new_dims.get(name):
+            lines.append(
+                f"    dimensión {name}: {_value_text(old_dims.get(name), 'm')} → "
+                f"{_value_text(new_dims.get(name), 'm')}"
+            )
+    return lines or ["    (sin diferencias en propiedades ni dimensiones; cambia el contenido)"]
+
+
+def _update(args: argparse.Namespace, project: Project) -> tuple[str, int]:  # noqa: PLR0915
+    if args.todas == bool(args.labels):  # exactamente una de las dos selecciones
+        raise _usage("project.update_usage")
+    model = project.model
+    ids = _member_ids(project, None if args.todas else list(args.labels))
+    # perfil nuevo (profile_id) -> (snapshot nuevo, barras); y avisos de lo no actualizable
+    targets: dict[UUID, tuple[CatalogSnapshot, list[UUID]]] = {}
+    previews: dict[tuple[UUID, int], tuple[CatalogSnapshot, CatalogSnapshot, list[str]]] = {}
+    skipped: list[str] = []
+    for member_id in ids:
+        member = model.member(member_id)
+        label = member.label or str(member_id)
+        old = model.section(member.section).parameters
+        if not isinstance(old, CatalogSnapshot):
+            skipped.append(f"  barra «{label}»: sin perfil de catálogo (no se toca)")
+            continue
+        state = freshness(old, args.db)
+        if state is Freshness.MISSING:
+            skipped.append(f"  barra «{label}»: no actualizable, el catálogo no contiene el perfil")
+            continue
+        if state not in _STALE:
+            skipped.append(f"  barra «{label}»: {old.label} vigente (sin cambio)")
+            continue
+        new = _latest_snapshot(old, args.db)
+        if new is None:  # carrera: el perfil desapareció tras comprobar la vigencia
+            skipped.append(f"  barra «{label}»: no actualizable, el catálogo no contiene el perfil")
+            continue
+        key = (member.section.entity_id, member.section.revision)
+        previews.setdefault(key, (old, new, []))[2].append(label)
+        targets.setdefault(new.profile_id, (new, []))[1].append(member_id)
+    mode = "APLICACIÓN" if args.aplicar else "VISTA PREVIA (no se escribe nada)"
+    lines = [f"Actualización de perfiles de catálogo — {mode}"]
+    for old, new, labels in previews.values():
+        lines.append(
+            f"Perfil {old.label} → {new.label} [{_FRESHNESS_TEXT[freshness(old, args.db)]}]; "
+            f"barras: {', '.join(sorted(labels))}"
+        )
+        lines.extend(_change_lines(old, new))
+    lines.extend(skipped)
+    if not targets:
+        lines.append("Sin cambios: ningún perfil necesita actualización; el archivo no se toca.")
+        return "\n".join(lines), EXIT_OK
+    rejected = False
+    applied = False
+    before = model.snapshot().model_revision
+    sections: list[SectionRevision] = []
+    for new, member_ids in targets.values():
+        section = ensure_section(model, new)
+        sections.append(section)
+        report = model.replace_sections(member_ids, section.ref, partial=args.parcial)
+        lines.append(_report_header(new, report))
+        lines.extend(_member_lines(report))
+        applied = applied or bool(report.applied)
+        rejected = rejected or bool(report.rejected)
+    if not args.aplicar:
+        lines.append("Vista previa: el archivo no se ha modificado. Use --aplicar para escribirla.")
+        lines.extend(_verdicts(sections[-1]))
+        return "\n".join(lines), EXIT_OK
+    if rejected and (not args.parcial or not applied):
+        lines.append(_rejection("partial" if args.parcial else "strict"))
+        return "\n".join(lines), EXIT_REJECTED  # nada escrito: el archivo no cambia
+    saved = save_project(
+        args.file, model, project.user_profiles, runs=project.runs, norms=project.norms
+    )
+    states = [validity(r, model) for r in saved.runs]
+    lines.append(
+        f"Proyecto guardado: {args.file} · model_revision {before} → "
+        f"{model.snapshot().model_revision}"
+    )
+    lines.append(f"  hash del modelo: {saved.model_hash}")
+    lines.append(
+        f"  ejecuciones: {states.count(Validity.CURRENT)} CURRENT, "
+        f"{states.count(Validity.STALE)} STALE"
+    )
+    for section in sections:
+        lines.extend(_verdicts(section))
+    return "\n".join(lines), EXIT_OK
 
 
 # --- Dictámenes y vigencia ----------------------------------------------------------------
