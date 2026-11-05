@@ -44,6 +44,13 @@ from veritas.core.geometry.local_axes import (
     recompute_local_axes,
     validate_alpha,
 )
+from veritas.core.geometry.replacement import (
+    MemberReplacement,
+    ReplacementReport,
+    ReplacementStatus,
+    compatibility_errors,
+    replacement_warnings,
+)
 from veritas.core.geometry.snapshot import ModelSnapshot
 from veritas.core.geometry.vector import Vec3
 from veritas.core.loads.load_case import LoadCase, LoadCategory
@@ -657,6 +664,66 @@ class StructuralModel:
         self._members[member_id] = updated
         self._model_revision += 1
         return updated
+
+    def replace_sections(
+        self, member_ids: Iterable[UUID], section: RevisionRef, *, partial: bool = False
+    ) -> ReplacementReport:
+        """Sustitución masiva de la sección de varias barras (SEC-012, D5-A).
+
+        Una sola revisión de modelo (+1) y reversible: las revisiones anteriores de barra y de
+        sección no se tocan y se puede volver a asignar la anterior. Modo estricto (por defecto):
+        si alguna barra es incompatible no se aplica ninguna y el informe las lista todas. Con
+        ``partial`` se aplica solo a las compatibles; el informe lista siempre las bloqueadas y
+        omitidas. Una barra que ya tiene esa revisión consta como ``SIN_CAMBIO``.
+        """
+        ids = tuple(dict.fromkeys(member_ids))
+        if not ids:
+            raise InputValueError(
+                Diagnostic.create(DiagnosticCode.INPUT_OUT_OF_RANGE, "model.empty_selection")
+            )
+        target_ref = self._resolve_section(section, ids[0])
+        target = self._sections.get(target_ref, Location(field="section"))
+        before = self._model_revision
+        plan: list[tuple[Member, MemberReplacement]] = []
+        for member_id in ids:
+            member = self.member(member_id)
+            label = member.label or str(member_id)
+            material = self.material(member.material)
+            blocking: tuple[Diagnostic, ...] = ()
+            warnings: tuple[Diagnostic, ...] = ()
+            change: float | None = None
+            if member.section == target_ref:
+                status = ReplacementStatus.UNCHANGED
+            else:
+                old = self._sections.get(member.section, Location(field="section"))
+                blocking = compatibility_errors(target, material, label)
+                warnings, change = replacement_warnings(old, target, label)
+                status = ReplacementStatus.BLOCKED if blocking else ReplacementStatus.APPLIED
+            plan.append(
+                (
+                    member,
+                    MemberReplacement(
+                        member_id, label, status, member.section, blocking, warnings, change
+                    ),
+                )
+            )
+        if not partial and any(r.status is ReplacementStatus.BLOCKED for _, r in plan):
+            plan = [  # todo o nada: las compatibles no se aplican
+                (m, replace(r, status=ReplacementStatus.OMITTED))
+                if r.status is ReplacementStatus.APPLIED
+                else (m, r)
+                for m, r in plan
+            ]
+        applying = [m for m, r in plan if r.status is ReplacementStatus.APPLIED]
+        for member in applying:
+            self._members[member.id] = replace(
+                member, revision=member.revision + 1, section=target_ref
+            )
+        if applying:
+            self._model_revision += 1
+        return ReplacementReport(
+            target_ref, partial, tuple(r for _, r in plan), before, self._model_revision
+        )
 
     def linear_mass(self, member_id: UUID) -> Quantity:
         """Masa lineal ρ·A (kg/m) de una barra con su material y sección asignados."""

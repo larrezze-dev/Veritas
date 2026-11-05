@@ -34,6 +34,14 @@ PROFILE_SHAPES: Final = frozenset(
 )
 """Formas de perfil admitidas en un snapshot (las de ``catalogs.model.ProfileFamily``)."""
 
+BISYMMETRIC_SHAPES: Final = frozenset({"I", "SHS", "RHS", "CHS", "RECT", "ROUND"})
+"""Formas declaradas con doble simetría (T-024 E2, TK-026): el centroide está en la intersección
+de los ejes de simetría y ``Iyz`` es exactamente 0 si los ejes y/z del perfil son esos ejes."""
+
+SYMMETRY_ORIGIN: Final = "simetría de la familia"
+SYMMETRY_METHOD: Final = "deducido de la doble simetría de la forma declarada (no importado)"
+"""Origen y método con los que una propiedad derivada de la simetría consta en la sección."""
+
 SNAPSHOT_STATUSES: Final = frozenset(
     {PropertyStatus.NO_DISPONIBLE, PropertyStatus.IMPORTADO_SIN_VERIFICAR}
 )

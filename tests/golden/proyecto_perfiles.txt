@@ -1,0 +1,144 @@
+$ veritas project sections p.json
+--- stdout
+Secciones de p.json (revisiones: 2):
+  CATALOGO-SINTETICO/SERIE-A/IPE-SINT@1 · rev 1 · CATALOGO · usada por 0 barra(s)
+    FEM: APTA para FEM
+    Norma: NO_COMPROBADO — Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada.
+  R 100x200 · rev 1 · RECTANGULAR · usada por 3 barra(s)
+    FEM: APTA para FEM
+    Norma: NO_COMPROBADO — Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada.
+--- stderr
+--- exit 0
+
+$ veritas project assign-profile p.json --todas Sint/SINTETICO-I/SINT-100x50-4-6 --db c.sqlite
+--- stdout
+Perfil Sint/SINTETICO-I/SINT-100x50-4-6@1 · I · procedencia: SINTÉTICO, licencia Sin valor comercial, edición 2026
+Sustitución en modo estricto (todo o nada): 3 barra(s) seleccionada(s)
+  barra «A»: OMITIDA
+    aviso: Barra «A»: la masa lineal cambia -95.2 %.
+    aviso: Barra «A»: la sección nueva no es apta para FEM (falta J).
+  barra «B»: OMITIDA
+    aviso: Barra «B»: la masa lineal cambia -95.2 %.
+    aviso: Barra «B»: la sección nueva no es apta para FEM (falta J).
+  barra «T»: BLOQUEADA
+    bloqueo: Barra «T»: un perfil de forma I (metálico) no es compatible con un material de la familia TIMBER.
+    aviso: Barra «T»: la masa lineal cambia -95.2 %.
+    aviso: Barra «T»: la sección nueva no es apta para FEM (falta J).
+Resultado: 2 omitida(s), 1 bloqueada(s)
+Sustitución rechazada (modo estricto, todo o nada): no se ha aplicado ninguna barra ni se ha escrito el archivo. Use --parcial para aplicar solo a las compatibles.
+Dictámenes de la sección (independientes):
+    FEM: NO apta para FEM (falta J)
+    Norma: NO_COMPROBADO — Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada.
+--- stderr
+--- exit 2
+
+$ veritas project assign-profile p.json --todas Sint/SINTETICO-I/SINT-100x50-4-6 --db c.sqlite --parcial
+--- stdout
+Perfil Sint/SINTETICO-I/SINT-100x50-4-6@1 · I · procedencia: SINTÉTICO, licencia Sin valor comercial, edición 2026
+Sustitución en modo parcial: 3 barra(s) seleccionada(s)
+  barra «A»: APLICADA
+    aviso: Barra «A»: la masa lineal cambia -95.2 %.
+    aviso: Barra «A»: la sección nueva no es apta para FEM (falta J).
+  barra «B»: APLICADA
+    aviso: Barra «B»: la masa lineal cambia -95.2 %.
+    aviso: Barra «B»: la sección nueva no es apta para FEM (falta J).
+  barra «T»: BLOQUEADA
+    bloqueo: Barra «T»: un perfil de forma I (metálico) no es compatible con un material de la familia TIMBER.
+    aviso: Barra «T»: la masa lineal cambia -95.2 %.
+    aviso: Barra «T»: la sección nueva no es apta para FEM (falta J).
+Resultado: 2 aplicada(s), 1 bloqueada(s)
+Proyecto guardado: p.json · model_revision 8
+  hash del modelo: <sha256>
+  ejecuciones: 0 CURRENT, 0 STALE
+Dictámenes de la sección (independientes):
+    FEM: NO apta para FEM (falta J)
+    Norma: NO_COMPROBADO — Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada.
+--- stderr
+--- exit 0
+
+$ veritas project assign-profile p.json A Sint/SINTETICO-I/SINT-100x50-4-6 --db c.sqlite
+--- stdout
+Perfil Sint/SINTETICO-I/SINT-100x50-4-6@1 · I · procedencia: SINTÉTICO, licencia Sin valor comercial, edición 2026
+Sustitución en modo estricto (todo o nada): 1 barra(s) seleccionada(s)
+  barra «A»: SIN_CAMBIO
+Resultado: 1 sin cambio
+Sin cambios: ninguna barra necesitaba la sustitución; el archivo no se toca.
+Dictámenes de la sección (independientes):
+    FEM: NO apta para FEM (falta J)
+    Norma: NO_COMPROBADO — Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada.
+--- stderr
+--- exit 0
+
+$ veritas project replace-profile p.json Sint/SINTETICO-I/SINT-100x50-4-6 --barras T --db c.sqlite --parcial
+--- stdout
+Perfil Sint/SINTETICO-I/SINT-100x50-4-6@1 · I · procedencia: SINTÉTICO, licencia Sin valor comercial, edición 2026
+Sustitución en modo parcial: 1 barra(s) seleccionada(s)
+  barra «T»: BLOQUEADA
+    bloqueo: Barra «T»: un perfil de forma I (metálico) no es compatible con un material de la familia TIMBER.
+    aviso: Barra «T»: la masa lineal cambia -95.2 %.
+    aviso: Barra «T»: la sección nueva no es apta para FEM (falta J).
+Resultado: 1 bloqueada(s)
+Sustitución rechazada: ninguna barra es compatible; no se ha escrito el archivo.
+Dictámenes de la sección (independientes):
+    FEM: NO apta para FEM (falta J)
+    Norma: NO_COMPROBADO — Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada.
+--- stderr
+--- exit 2
+
+$ veritas project sections p.json --db c.sqlite
+--- stdout
+Secciones de p.json (revisiones: 3):
+  CATALOGO-SINTETICO/SERIE-A/IPE-SINT@1 · rev 1 · CATALOGO · usada por 0 barra(s)
+    FEM: APTA para FEM
+    Norma: NO_COMPROBADO — Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada.
+    Vigencia: el catálogo no contiene este perfil
+  R 100x200 · rev 1 · RECTANGULAR · usada por 1 barra(s)
+    FEM: APTA para FEM
+    Norma: NO_COMPROBADO — Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada.
+  Sint/SINTETICO-I/SINT-100x50-4-6@1 · rev 1 · CATALOGO · usada por 2 barra(s)
+    FEM: NO apta para FEM (falta J)
+    Norma: NO_COMPROBADO — Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada.
+    Vigencia: vigente: coincide con la última revisión del catálogo
+--- stderr
+--- exit 0
+
+$ veritas project verify p.json --db c.sqlite
+--- stdout
+Proyecto íntegro y válido: p.json
+  hash del modelo (SHA-256): <sha256>
+Vigencia de los perfiles de catálogo (informativo):
+  perfil Sint/SINTETICO-I/SINT-100x50-4-6@1: vigente: coincide con la última revisión del catálogo
+--- stderr
+--- exit 0
+
+$ veritas project verify p.json
+--- stdout
+Proyecto íntegro y válido: p.json
+  hash del modelo (SHA-256): <sha256>
+--- stderr
+--- exit 0
+
+$ veritas project assign-profile p.json A Sint/SINTETICO-I/NO-EXISTE --db c.sqlite
+--- stdout
+--- stderr
+REFERENCE_NOT_FOUND: No existe el perfil «SINTETICO-I / NO-EXISTE».
+--- exit 2
+
+$ veritas project assign-profile p.json Z Sint/SINTETICO-I/SINT-100x50-4-6 --db c.sqlite
+--- stdout
+--- stderr
+REFERENCE_NOT_FOUND: No existe barra con identificador Z (0 coincidencias).
+--- exit 2
+
+$ veritas project assign-profile p.json Sint/SINTETICO-I/SINT-100x50-4-6 --db c.sqlite
+--- stdout
+--- stderr
+INPUT_OUT_OF_RANGE: Uso: assign-profile ARCHIVO ETIQUETA REFERENCIA, o con --todas: ARCHIVO REFERENCIA.
+--- exit 2
+
+$ veritas project replace-profile p.json Sint/SINTETICO-I/SINT-100x50-4-6 --db c.sqlite
+--- stdout
+--- stderr
+INPUT_OUT_OF_RANGE: Indique exactamente una selección: --barras E1 E2… o --todas.
+--- exit 2
+

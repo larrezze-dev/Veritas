@@ -31,7 +31,18 @@ Un perfil de catálogo no puede representarse hoy como `SectionRevision` (solo r
 - `RectangularParameters` y los proyectos rectangulares no cambian de contenido; su hash analítico es idéntico entre v3 y v4.
 - Los datos de catálogo siguen siendo sintéticos en los tests (TK-019, NFR-012).
 
+## Enmienda de E2 (2026-11-05): simetría, dictámenes y sustitución
+
+Cambios aditivos aprobados en el plan T-024 (D3 = C, D4-A, D5-A, D6-A, D8-A); aceptados con E2 el 2026-11-05.
+
+1. **TK-026: datos derivados por simetría.** `BISYMMETRIC_SHAPES` = I, SHS, RHS, CHS, RECT, ROUND. Para ellas el puente fija centroide = 0 e `Iyz` = +0.0 con estado `CALCULADO`, origen «simetría de la familia» y método «deducido de la doble simetría de la forma declarada (no importado)»; `SectionRevision` solo acepta esos valores con ese origen y método y solo en esas formas (cualquier otro valor, origen o forma se rechaza). U, L, T y OTRO siguen `NO_DISPONIBLE`. Condición declarada: los ejes y/z del perfil son los de simetría (convención del catálogo). `derive_symmetry=False` mantiene el comportamiento de E1. Contraste: un voladizo con un perfil en I sintético reproduce P·L³/(3·E·Iy) en los adaptadores plano y espacial (`tests/test_catalog_assign.py`).
+2. **Dictámenes (SEC-013).** `assess_section` devuelve `fem_ready` (A, Iy, Iz, J, centroide e Iyz disponibles, con un diagnóstico por ausente) y `code_coverage` = `NO_COMPROBADO` con motivo; nunca un único «apta».
+3. **Sustitución masiva (SEC-012).** `StructuralModel.replace_sections` con informe por barra (APLICADA, SIN_CAMBIO, OMITIDA, BLOQUEADA). Una sola revisión de modelo y reversible. Estricto por defecto; `partial=True` aplica a las compatibles y el informe lista siempre el resto. **Compatibilidad (decisión de detalle):** el catálogo no trae el material compatible (TK-023), por lo que solo se bloquea un perfil metálico (I, U, L, T, SHS, RHS, CHS) con material de madera; se avisa si la masa lineal cambia más de un 20 % o si la sección nueva no es apta para FEM.
+4. **CLI.** `veritas project assign-profile`, `replace-profile`, `sections` y `verify --db` (`cli_profiles.py`). El catálogo se abre solo para leer el perfil o comparar su vigencia; el proyecto guarda el snapshot y una sola sección por perfil y revisión (`ensure_section`). `Freshness` (VIGENTE, REVISION_POSTERIOR, CONTENIDO_DISTINTO, AUSENTE) es informativo y no modifica nada.
+5. **Límites.** Un perfil sin J no se calcula en 3D (nunca se deduce); un perfil U/L/T tampoco en plano (`Iyz`). «I» se declara bisimétrica por familia: un perfil I asimétrico mal etiquetado en el catálogo no se detecta (el contraste con el fabricante es de F3A, TK-021).
+
 ## Historial
 
 - 2026-11-05: propuesto con E1 de T-024.
 - 2026-11-05: ACCEPTED con la aceptación de E1.
+- 2026-11-05: enmienda de E2 (simetría, dictámenes, sustitución y CLI), ACEPTADA.

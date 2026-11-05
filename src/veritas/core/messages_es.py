@@ -94,6 +94,10 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "El modelo cambió desde la corrida (revisión {run_revision} frente a {model_revision}): "
         "no se puede ligar a su hash."
     ),
+    "project.assign_usage": (
+        "Uso: assign-profile ARCHIVO ETIQUETA REFERENCIA, o con --todas: ARCHIVO REFERENCIA."
+    ),
+    "project.replace_usage": "Indique exactamente una selección: --barras E1 E2… o --todas.",
     "project.case_required": "Indique el caso de carga con --carga. Casos del proyecto: {cases}.",
     "project.invalid_version": "Versión de esquema no válida: {found}.",
     "project.migration_gap": "No hay migración registrada de la versión {step} a la {next}.",
@@ -126,6 +130,22 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "La propiedad {field} de un perfil de catálogo debe ser NO_DISPONIBLE: el catálogo no la "
         "aporta y no se deduce."
     ),
+    "section.fem_missing": "No apta para FEM: falta la propiedad {property}.",
+    "section.code_not_verified": (
+        "Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada."
+    ),
+    "section.replace_incompatible_material": (
+        "Barra «{member}»: un perfil de forma {shape} (metálico) no es compatible con un "
+        "material de la familia {family}."
+    ),
+    "section.replace_mass_change": "Barra «{member}»: la masa lineal cambia {change}.",
+    "section.replace_mass_unknown": (
+        "Barra «{member}»: no se puede comparar la masa lineal (falta el área de una sección)."
+    ),
+    "section.replace_not_fem_ready": (
+        "Barra «{member}»: la sección nueva no es apta para FEM (falta {missing})."
+    ),
+    "model.empty_selection": "No se ha seleccionado ninguna barra.",
     "section.properties_mismatch": (
         "Las propiedades de la sección no coinciden con las calculadas a partir de sus parámetros."
     ),

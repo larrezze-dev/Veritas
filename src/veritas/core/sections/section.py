@@ -13,7 +13,12 @@ from uuid import UUID
 
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError, Location
 from veritas.core.references import RevisionRef, check_identity
-from veritas.core.sections.catalog import CatalogSnapshot
+from veritas.core.sections.catalog import (
+    BISYMMETRIC_SHAPES,
+    SYMMETRY_METHOD,
+    SYMMETRY_ORIGIN,
+    CatalogSnapshot,
+)
 from veritas.core.sections.properties import PropertyStatus, SectionProperties
 from veritas.core.sections.rectangular import (
     METHOD_CLOSED_FORM,
@@ -181,8 +186,9 @@ def _check_catalog_properties(
     """Perfil de catálogo (ADR-010): las propiedades son las del snapshot y nada más.
 
     A, Iy, Iz y J son idénticas a las copiadas del catálogo (valor, unidad, origen, método y
-    estado); el centroide e Iyz son ``NO_DISPONIBLE``: el catálogo no los aporta y en T-024 E1
-    no se deducen. Los estados son solo ``IMPORTADO_SIN_VERIFICAR`` o ``NO_DISPONIBLE``.
+    estado). El centroide e Iyz, que el catálogo no aporta, son ``NO_DISPONIBLE`` o, solo en
+    formas doblemente simétricas (T-024 E2, TK-026), exactamente +0.0 ``CALCULADO`` con el
+    origen y el método de la simetría; nunca un valor a mano.
     """
 
     def mismatch(key: str, name: str) -> InputValueError:
@@ -199,7 +205,17 @@ def _check_catalog_properties(
         if getattr(properties, name) != getattr(snapshot, name):
             raise mismatch("section.catalog_properties_mismatch", name)
     for name in _CATALOG_ABSENT:
-        if getattr(properties, name).status is not PropertyStatus.NO_DISPONIBLE:
+        prop = getattr(properties, name)
+        if prop.status is PropertyStatus.NO_DISPONIBLE:
+            continue
+        if not (
+            snapshot.shape in BISYMMETRIC_SHAPES
+            and prop.status is PropertyStatus.CALCULADO
+            and prop.value == 0.0
+            and math.copysign(1.0, prop.value) > 0.0
+            and prop.origin == SYMMETRY_ORIGIN
+            and prop.method == SYMMETRY_METHOD
+        ):
             raise mismatch("section.catalog_not_derivable", name)
 
 

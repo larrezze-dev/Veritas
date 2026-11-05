@@ -94,7 +94,8 @@ def test_only_catalogs_depend_on_the_catalog_store() -> None:
         if any(n.startswith("veritas.catalogs") for n in imported_modules(path, PACKAGE_ROOT))
     }
     assert users
-    assert all(user.startswith("catalogs/") or user == "cli_catalog.py" for user in users)
+    cli_modules = {"cli_catalog.py", "cli_profiles.py"}  # fronteras de la CLI (T-024 E2)
+    assert all(user.startswith("catalogs/") or user in cli_modules for user in users)
 
 
 # --- Unidades que usará el importador (hecho 4 del plan): ya estaban registradas -------------

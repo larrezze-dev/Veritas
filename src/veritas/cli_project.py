@@ -14,6 +14,12 @@ import argparse
 from pathlib import Path
 from typing import Final
 
+from veritas.cli_profiles import (
+    PROFILE_COMMANDS,
+    add_profile_parsers,
+    freshness_lines,
+    run_profile_command,
+)
 from veritas.core import units as u
 from veritas.core.connections.end import Dof, EndConnection
 from veritas.core.diagnostics import DiagnosticCode, DiagnosticError
@@ -49,6 +55,9 @@ def add_project_parser(subparsers: "argparse._SubParsersAction[argparse.Argument
     open_parser.add_argument("file", metavar="ARCHIVO")
     verify = sub.add_parser("verify", help="Verifica la integridad y la validez de un proyecto.")
     verify.add_argument("file", metavar="ARCHIVO")
+    verify.add_argument(
+        "--db", metavar="RUTA", help="Catálogo con el que informar de la vigencia de los perfiles."
+    )
     analyze = sub.add_parser("analyze", help="Analiza un caso del proyecto; --guardar lo archiva.")
     analyze.add_argument("file", metavar="ARCHIVO")
     analyze.add_argument("--carga", metavar="NOMBRE", help="Caso de carga (si hay más de uno).")
@@ -65,6 +74,7 @@ def add_project_parser(subparsers: "argparse._SubParsersAction[argparse.Argument
     move.add_argument(
         "--a", required=True, nargs=3, metavar=("X", "Y", "Z"), help="Nueva posición en m."
     )
+    add_profile_parsers(sub)
 
 
 def _demo_model(case: str) -> StructuralModel:
@@ -132,6 +142,8 @@ def run_project(args: argparse.Namespace) -> tuple[str, int]:  # noqa: PLR0911 (
         project = open_project(Path(args.file))
     except IntegrityError as error:
         return f"{error.code}: {render_message(error.diagnostic)}", EXIT_INTEGRITY
+    if args.project_command in PROFILE_COMMANDS:
+        return run_profile_command(args, project)
     if args.project_command == "analyze":
         return _analyze(args, project)
     if args.project_command == "runs":
@@ -139,11 +151,14 @@ def run_project(args: argparse.Namespace) -> tuple[str, int]:  # noqa: PLR0911 (
     if args.project_command == "move-node":
         return _move_node(args, project), EXIT_OK
     if args.project_command == "verify":
-        return (
-            f"Proyecto íntegro y válido: {args.file}\n"
+        lines = [
+            f"Proyecto íntegro y válido: {args.file}",
             f"  hash del modelo (SHA-256): {project.model_hash}",
-            EXIT_OK,
-        )
+        ]
+        if args.db is not None:
+            lines.append("Vigencia de los perfiles de catálogo (informativo):")
+            lines.extend(freshness_lines(project, args.db))
+        return "\n".join(lines), EXIT_OK
     return _summary(args.file, project), EXIT_OK
 
 

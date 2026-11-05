@@ -142,7 +142,9 @@ def test_bridge_rejects_a_profile_of_another_catalog() -> None:
 
 
 def test_section_of_a_catalog_profile_deduces_nothing() -> None:
-    sec = bridge.section_from_profile(profile(torsion=None), CATALOG, section_id=uid(800))
+    sec = bridge.section_from_profile(
+        profile(torsion=None), CATALOG, section_id=uid(800), derive_symmetry=False
+    )
     assert sec.family is SectionFamily.CATALOGO
     assert isinstance(sec.parameters, CatalogSnapshot)
     props = sec.properties
@@ -283,7 +285,9 @@ def test_round_trip_is_exact_and_needs_no_catalog(tmp_path: Path) -> None:
 
 
 def test_missing_properties_stay_none_after_round_trip(tmp_path: Path) -> None:
-    sec = bridge.section_from_profile(profile(torsion=None), CATALOG, section_id=uid(800))
+    sec = bridge.section_from_profile(
+        profile(torsion=None), CATALOG, section_id=uid(800), derive_symmetry=False
+    )
     model, member_id = model_with(sec)
     path = tmp_path / "p.json"
     save_project(path, model)
