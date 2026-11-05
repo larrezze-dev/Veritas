@@ -76,7 +76,7 @@ Cada línea requiere plan y aprobación propios antes de implementarse; ninguna 
 
 | T-022 | — | F2 | Catálogo de perfiles: dominio, almacén SQLite independiente e importador CSV/JSON (ADR-009) | SEC-008, SEC-009/010/011 (parcial), DAT-003 (parcial) | PLAN APROBADO 2026-11-02 ([plan](../plans/T-022.md), D1–D11 = A); E1 ACEPTADA 2026-11-03 con ADR-009 ACCEPTED; E2 ACEPTADA 2026-11-03; T-022 ACEPTADO |
 | T-023 | — | F2 | Búsqueda, filtros, comparación, clones editables y favoritos | SEC-005, SEC-006, SEC-007, SEC-009 | PLAN APROBADO 2026-11-03 ([plan](../plans/T-023.md), D1–D10; D7 = B y D10 = A por delegación); E1 ACEPTADA 2026-11-03; E2 ACEPTADA 2026-11-03; T-023 ACEPTADO |
-| T-024 | — | F2 | Perfil de catálogo asignable a barras, esquema v4 y snapshot en el proyecto (ADR-010); supera la puerta de F2 | DAT-003, SEC-012 (parcial), SEC-013 | POR PLANIFICAR (tras T-023) |
+| T-024 | — | F2 | Perfil de catálogo asignable a barras, esquema v4 y snapshot en el proyecto (ADR-010); supera la puerta de F2 | DAT-003, SEC-012 (parcial), SEC-013 | PLAN APROBADO 2026-11-05 ([plan](../plans/T-024.md), D1–D9; D3 = C, D5 con modo parcial), a la espera de orden de inicio de E1 |
 
 Las fases F2, F3A/B, F5A/B, F6, F7A/B y F8 se desglosarán en tickets cuando se acepte la fase anterior.
 
