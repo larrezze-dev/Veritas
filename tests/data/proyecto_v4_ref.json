@@ -1,0 +1,1051 @@
+{
+ "app_version": "0.0.1",
+ "canon_version": "veritas-canon/1",
+ "content": {
+  "model": {
+   "load_cases": [
+    {
+     "category": "VARIABLE",
+     "description": "",
+     "id": "f9c1cf2c-7d58-4ef5-ad86-964db4c230ae",
+     "name": "Q1",
+     "revision": 1
+    }
+   ],
+   "loads": [
+    {
+     "case_id": "f9c1cf2c-7d58-4ef5-ad86-964db4c230ae",
+     "force": [
+      0.0,
+      0.0,
+      -10000.0
+     ],
+     "id": "20b07e90-54db-4c89-97b7-95cc17d73f86",
+     "moment": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "node_id": "a57c6315-566c-4d00-aa56-cd142250ea39",
+     "revision": 1,
+     "type": "nodal"
+    }
+   ],
+   "materials": [
+    {
+     "density": 7850.0,
+     "elastic_modulus": 210000000000.0,
+     "family": "STEEL",
+     "id": "cebfb162-14d8-4f08-a029-b697875be3b4",
+     "name": "Acero estructural (ejemplo)",
+     "poisson_ratio": 0.3,
+     "revision": 1,
+     "shear_modulus": 81000000000.0,
+     "source": "CTE DB-SE-A §4.2",
+     "specific_weight": null,
+     "standard_edition": "edición a confirmar"
+    }
+   ],
+   "members": [
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "c61fb313-89aa-4413-8823-feb99d6f46a8",
+     "label": "B1",
+     "material": {
+      "id": "cebfb162-14d8-4f08-a029-b697875be3b4",
+      "revision": 1
+     },
+     "node_i": "40b49b27-cad9-4b74-9839-0f0de67cdb37",
+     "node_j": "a57c6315-566c-4d00-aa56-cd142250ea39",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "c7871d86-00ed-42c8-bbc7-68bb00b70fe8",
+      "revision": 1
+     }
+    },
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "e6cb1949-cdc9-471a-bb94-43c41574c322",
+     "label": "BC",
+     "material": {
+      "id": "cebfb162-14d8-4f08-a029-b697875be3b4",
+      "revision": 1
+     },
+     "node_i": "40b49b27-cad9-4b74-9839-0f0de67cdb37",
+     "node_j": "bd121693-1d42-4954-841b-52e40fae195d",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "00000000-0000-4000-8000-000000000320",
+      "revision": 1
+     }
+    }
+   ],
+   "model_revision": 8,
+   "nodes": [
+    {
+     "id": "40b49b27-cad9-4b74-9839-0f0de67cdb37",
+     "label": "N1",
+     "position": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "a57c6315-566c-4d00-aa56-cd142250ea39",
+     "label": "N2",
+     "position": [
+      2.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "bd121693-1d42-4954-841b-52e40fae195d",
+     "label": "N3",
+     "position": [
+      0.0,
+      1.0,
+      0.0
+     ],
+     "revision": 1
+    }
+   ],
+   "sections": [
+    {
+     "family": "RECTANGULAR",
+     "id": "c7871d86-00ed-42c8-bbc7-68bb00b70fe8",
+     "name": "R 200×400",
+     "parameters": {
+      "b": 0.2,
+      "h": 0.4
+     },
+     "properties": {
+      "area": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.08000000000000002
+      },
+      "centroid_y": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.001066666666666667
+      },
+      "iyz": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.00026666666666666673
+      },
+      "torsion_constant": {
+       "method": "saint-venant-series/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0007317813667826264
+      }
+     },
+     "revision": 1
+    },
+    {
+     "family": "CATALOGO",
+     "id": "00000000-0000-4000-8000-000000000320",
+     "name": "CATALOGO-SINTETICO/SERIE-A/P-100@1",
+     "parameters": {
+      "area": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m²",
+       "value": 0.001
+      },
+      "catalog": {
+       "edition": "2026",
+       "id": "00000000-0000-4000-8000-000000000384",
+       "license": "Sin valor comercial",
+       "name": "CATALOGO-SINTETICO",
+       "source": "SINTÉTICO (prueba)"
+      },
+      "dimensions": [
+       {
+        "name": "b",
+        "value": 0.05
+       },
+       {
+        "name": "h",
+        "value": 0.1
+       }
+      ],
+      "iy": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 2e-06
+      },
+      "iz": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 3e-07
+      },
+      "linear_mass": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "kg/m",
+       "value": 7.85
+      },
+      "profile": {
+       "designation": "P-100",
+       "id": "00000000-0000-4000-8000-0000000002bc",
+       "revision": 1,
+       "series": "SERIE-A",
+       "shape": "I",
+       "source_sha256": "ccc3de0000269c7eef697bbe5c35ea85e44f31888522f026787a9031fc0d8c6d"
+      },
+      "provenance": {
+       "edition": "2026",
+       "license": "Sin valor comercial",
+       "method": "Generado en la prueba",
+       "source": "SINTÉTICO (prueba)"
+      },
+      "torsion_constant": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 4e-08
+      },
+      "warnings": []
+     },
+     "properties": {
+      "area": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m²",
+       "value": 0.001
+      },
+      "centroid_y": {
+       "method": "deducido de la doble simetría de la forma declarada (no importado)",
+       "origin": "simetría de la familia",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "deducido de la doble simetría de la forma declarada (no importado)",
+       "origin": "simetría de la familia",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 2e-06
+      },
+      "iyz": {
+       "method": "deducido de la doble simetría de la forma declarada (no importado)",
+       "origin": "simetría de la familia",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 3e-07
+      },
+      "torsion_constant": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 4e-08
+      }
+     },
+     "revision": 1
+    }
+   ],
+   "supports": [
+    {
+     "basis": {
+      "kind": "GLOBAL",
+      "rows": null
+     },
+     "id": "a2d6065b-99bd-4ede-94b3-a9e054296dfb",
+     "label": "Empotramiento",
+     "node_id": "40b49b27-cad9-4b74-9839-0f0de67cdb37",
+     "restraints": [
+      {
+       "kind": "FIXED",
+       "stiffness": null
+      },
+      {
+       "kind": "FIXED",
+       "stiffness": null
+      },
+      {
+       "kind": "FIXED",
+       "stiffness": null
+      },
+      {
+       "kind": "FIXED",
+       "stiffness": null
+      },
+      {
+       "kind": "FIXED",
+       "stiffness": null
+      },
+      {
+       "kind": "FIXED",
+       "stiffness": null
+      }
+     ],
+     "revision": 1
+    }
+   ]
+  },
+  "norms": {
+   "selected": null,
+   "user": []
+  },
+  "runs": [
+   {
+    "canon_version": "veritas-canon/1",
+    "kind": "spatial",
+    "model_hash": "9d68bdcd12b5da58a5c353bb0610a77ca02c7a556bdd3b6f872ea9e3fc3d7551",
+    "results": {
+     "case_id": "f9c1cf2c-7d58-4ef5-ad86-964db4c230ae",
+     "case_revision": 1,
+     "end_jumps": [],
+     "hypotheses": [
+      "fem3d.hypothesis_spatial",
+      "fem3d.hypothesis_euler_bernoulli",
+      "fem3d.hypothesis_lagrange",
+      "fem3d.hypothesis_normalized"
+     ],
+     "members": [
+      {
+       "axes": [
+        {
+         "x": 1.0,
+         "y": 0.0,
+         "z": 0.0
+        },
+        {
+         "x": 0.0,
+         "y": 1.0,
+         "z": 0.0
+        },
+        {
+         "x": 0.0,
+         "y": 0.0,
+         "z": 1.0
+        }
+       ],
+       "inertia_axis": "3D",
+       "member_id": "c61fb313-89aa-4413-8823-feb99d6f46a8",
+       "p_i": {
+        "basis": "MEMBER_LOCAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 10000.000000000004
+         },
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -20000.000000000007
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "p_j": {
+        "basis": "MEMBER_LOCAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -10000.000000000004
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "section_end": {
+        "basis": "MEMBER_LOCAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -10000.000000000004
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "section_start": {
+        "basis": "MEMBER_LOCAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -10000.000000000004
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 20000.000000000007
+         },
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         }
+        ]
+       }
+      },
+      {
+       "axes": [
+        {
+         "x": 0.0,
+         "y": 1.0,
+         "z": 0.0
+        },
+        {
+         "x": -1.0,
+         "y": 0.0,
+         "z": 0.0
+        },
+        {
+         "x": 0.0,
+         "y": 0.0,
+         "z": 1.0
+        }
+       ],
+       "inertia_axis": "3D",
+       "member_id": "e6cb1949-cdc9-471a-bb94-43c41574c322",
+       "p_i": {
+        "basis": "MEMBER_LOCAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "p_j": {
+        "basis": "MEMBER_LOCAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "section_end": {
+        "basis": "MEMBER_LOCAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "section_start": {
+        "basis": "MEMBER_LOCAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -0.0
+         }
+        ]
+       }
+      }
+     ],
+     "model_revision": 8,
+     "nodes": [
+      {
+       "displacement": {
+        "basis": "GLOBAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "node_id": "40b49b27-cad9-4b74-9839-0f0de67cdb37"
+      },
+      {
+       "displacement": {
+        "basis": "GLOBAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -0.00011904761904761905
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 8.928571428571429e-05
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "node_id": "a57c6315-566c-4d00-aa56-cd142250ea39"
+      },
+      {
+       "displacement": {
+        "basis": "GLOBAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "node_id": "bd121693-1d42-4954-841b-52e40fae195d"
+      }
+     ],
+     "reactions": [
+      {
+       "axes": null,
+       "global_": {
+        "basis": "GLOBAL",
+        "components": [
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": 10000.000000000004
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         },
+         {
+          "status": "CALCULATED",
+          "value": -20000.000000000007
+         },
+         {
+          "status": "CALCULATED",
+          "value": 0.0
+         }
+        ]
+       },
+       "node_id": "40b49b27-cad9-4b74-9839-0f0de67cdb37",
+       "sources": [
+        [
+         "UX",
+         "FIX"
+        ],
+        [
+         "UY",
+         "FIX"
+        ],
+        [
+         "UZ",
+         "FIX"
+        ],
+        [
+         "RX",
+         "FIX"
+        ],
+        [
+         "RY",
+         "FIX"
+        ],
+        [
+         "RZ",
+         "FIX"
+        ]
+       ],
+       "support_basis": null,
+       "support_id": "a2d6065b-99bd-4ede-94b3-a9e054296dfb"
+      }
+     ],
+     "run_id": "4f8c65b6-2c3f-4657-b28a-65fe4b3de39d"
+    },
+    "run": {
+     "case_id": "f9c1cf2c-7d58-4ef5-ad86-964db4c230ae",
+     "case_revision": 1,
+     "configuration": {
+      "chain_alias_factor": 1000.0,
+      "end_axial_load_tolerance": 1e-09,
+      "end_contrast_reference_margin": 0.01,
+      "end_penalty_factor": 10.0,
+      "end_penalty_max_iterations": 20,
+      "end_penalty_min_stagnation_iteration": 3,
+      "end_penalty_stagnation_ratio": 10.0,
+      "end_penalty_tolerance": 1e-10,
+      "load_case_id": "f9c1cf2c-7d58-4ef5-ad86-964db4c230ae",
+      "max_free_dofs": 300,
+      "mechanism_guard_high": 0.0001,
+      "mechanism_guard_low": 1e-08,
+      "mechanism_participation": 1e-06,
+      "mechanism_residual_factor": 100.0,
+      "penalty_equilibrium_factor": 10.0,
+      "penalty_factor": 100000000.0,
+      "redundancy_tolerance": 1e-06,
+      "timeout_s": 60.0,
+      "tol_axis": 1e-09,
+      "tol_equilibrium": 1e-09,
+      "tol_penalty": 1e-06,
+      "tol_pivot": 1e-12
+     },
+     "diagnostics": [],
+     "duration_s": 1.4895705999806523,
+     "hypotheses": [
+      "fem3d.hypothesis_spatial",
+      "fem3d.hypothesis_euler_bernoulli",
+      "fem3d.hypothesis_lagrange"
+     ],
+     "model_hash": "9d68bdcd12b5da58a5c353bb0610a77ca02c7a556bdd3b6f872ea9e3fc3d7551",
+     "model_revision": 8,
+     "pivot": {
+      "component": "Rz",
+      "end": null,
+      "free_dofs": 12,
+      "mechanism": [],
+      "member_id": null,
+      "min_pivot": 0.2499999999999999,
+      "node_id": "bd121693-1d42-4954-841b-52e40fae195d",
+      "nullity": null
+     },
+     "raw": {
+      "basis": "GLOBAL",
+      "end_aux": [],
+      "grounds": [],
+      "members": [
+       {
+        "local_force": [
+         0.0,
+         0.0,
+         10000.000000000004,
+         -0.0,
+         -20000.000000000007,
+         0.0,
+         0.0,
+         0.0,
+         -10000.000000000004,
+         0.0,
+         0.0,
+         0.0
+        ],
+        "member_id": "c61fb313-89aa-4413-8823-feb99d6f46a8"
+       },
+       {
+        "local_force": [
+         0.0,
+         0.0,
+         0.0,
+         -0.0,
+         0.0,
+         0.0,
+         0.0,
+         0.0,
+         0.0,
+         0.0,
+         0.0,
+         0.0
+        ],
+        "member_id": "e6cb1949-cdc9-471a-bb94-43c41574c322"
+       }
+      ],
+      "nodes": [
+       {
+        "displacement": [
+         0.0,
+         0.0,
+         0.0,
+         0.0,
+         0.0,
+         0.0
+        ],
+        "node_id": "40b49b27-cad9-4b74-9839-0f0de67cdb37",
+        "reaction": [
+         0.0,
+         0.0,
+         10000.000000000004,
+         0.0,
+         -20000.000000000007,
+         0.0
+        ]
+       },
+       {
+        "displacement": [
+         0.0,
+         0.0,
+         -0.00011904761904761905,
+         0.0,
+         8.928571428571429e-05,
+         0.0
+        ],
+        "node_id": "a57c6315-566c-4d00-aa56-cd142250ea39",
+        "reaction": null
+       },
+       {
+        "displacement": [
+         0.0,
+         0.0,
+         0.0,
+         0.0,
+         0.0,
+         0.0
+        ],
+        "node_id": "bd121693-1d42-4954-841b-52e40fae195d",
+        "reaction": null
+       }
+      ]
+     },
+     "request_json": "{\"alpha_mp\":8400000000.000002,\"alpha_sp\":8400000000.000002,\"aux_nodes\":[],\"beam_loads\":[],\"beams\":[[1,\"c61fb313-89aa-4413-8823-feb99d6f46a8\",1,2,0.08000000000000002,210000000000.0,81000000000.0,0.0007317813667826264,0.001066666666666667,0.00026666666666666673,[0.0,0.0,1.0],0,0,false,false],[2,\"e6cb1949-cdc9-471a-bb94-43c41574c322\",1,3,0.001,210000000000.0,81000000000.0,4e-08,2e-06,3e-07,[0.0,0.0,1.0],0,0,false,false]],\"case_id\":\"f9c1cf2c-7d58-4ef5-ad86-964db4c230ae\",\"case_revision\":1,\"chains\":[],\"end_equals\":[],\"end_penalties\":[],\"end_penalty_max_iterations\":20,\"end_penalty_stagnation\":1e-06,\"end_penalty_tolerance\":1e-10,\"end_springs\":[],\"fixes\":[[1,[1,1,1,1,1,1]]],\"member_end_loads\":[],\"model_revision\":8,\"nodal_loads\":[[2,[0.0,0.0,-10000.0,0.0,0.0,0.0]]],\"nodes\":[[1,\"40b49b27-cad9-4b74-9839-0f0de67cdb37\",0.0,0.0,0.0],[2,\"a57c6315-566c-4d00-aa56-cd142250ea39\",2.0,0.0,0.0],[3,\"bd121693-1d42-4954-841b-52e40fae195d\",0.0,1.0,0.0]],\"orphan_fixes\":[],\"protocol\":\"veritas.opensees.spatial\",\"settlements\":[],\"springs\":[],\"version\":5}",
+     "run_id": "4f8c65b6-2c3f-4657-b28a-65fe4b3de39d",
+     "started_utc": "2026-11-05T20:05:23.773988+00:00",
+     "status": "SUCCEEDED",
+     "versions": {
+      "adapter": "veritas.fem.spatial/5",
+      "openseespy": "3.8.0.0",
+      "openseespywin": "3.8.0.0",
+      "protocol": "5",
+      "python": "3.12.9",
+      "veritas": "0.0.1"
+     },
+     "worker_stderr": "",
+     "worker_stdout": ""
+    }
+   }
+  ],
+  "settings": {
+   "user_profiles": []
+  }
+ },
+ "format": "veritas-project",
+ "integrity": {
+  "algorithm": "sha256",
+  "digest": "0edd4005fc0bf7695a73812eeb3b7f38582dded2e87063e14e6f948d0eec561e"
+ },
+ "model_hash": "9d68bdcd12b5da58a5c353bb0610a77ca02c7a556bdd3b6f872ea9e3fc3d7551",
+ "schema_version": 4
+}

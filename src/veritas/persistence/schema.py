@@ -45,12 +45,19 @@ from veritas.core.sections.catalog import (
     SnapshotDimension,
     SnapshotProvenance,
 )
+from veritas.core.sections.parametric import (
+    ParametricDimension,
+    ParametricParameters,
+    ParametricShape,
+)
 from veritas.core.sections.properties import PropertyStatus, SectionProperties, SectionProperty
 from veritas.core.sections.section import (
     RectangularParameters,
     SectionFamily,
+    SectionParameters,
     SectionRevision,
 )
+from veritas.core.sections.shear import ShearAreas
 from veritas.core.supports.support import (
     BasisKind,
     DofRestraint,
@@ -81,10 +88,12 @@ _DOFS: Final = 6
 class Reader:
     """Objeto JSON con el conjunto exacto de campos esperado."""
 
-    def __init__(self, data: object, path: str, fields: Sequence[str]) -> None:
+    def __init__(
+        self, data: object, path: str, fields: Sequence[str], optional: Sequence[str] = ()
+    ) -> None:
         if not isinstance(data, dict):
             raise format_error("project.invalid_field", {"expected": "objeto"}, path=path)
-        unknown = sorted(set(data) - set(fields))
+        unknown = sorted(set(data) - set(fields) - set(optional))
         if unknown:
             raise format_error("project.unknown_fields", {"fields": ", ".join(unknown)}, path=path)
         missing = [name for name in fields if name not in data]
@@ -98,6 +107,9 @@ class Reader:
 
     def raw(self, name: str) -> object:
         return self._data[name]
+
+    def has(self, name: str) -> bool:
+        return name in self._data
 
     def _bad(self, name: str, expected: str) -> DiagnosticError:
         return format_error("project.invalid_field", {"expected": expected}, path=self.at(name))
@@ -335,6 +347,10 @@ _MATERIAL: Final = (
     "specific_weight",
 )
 _SECTION: Final = ("id", "revision", "name", "family", "parameters", "properties")
+_SECTION_OPTIONAL: Final = ("shear",)  # Esquema v5 (T-025): solo si la sección lo tiene.
+_SHEAR_PROPERTY_NAMES: Final = ("shear_y", "shear_z")
+_PARAMETRIC: Final = ("shape", "dimensions")
+_PARAMETRIC_DIMENSION: Final = ("name", "value")
 _PROPERTY: Final = ("value", "unit", "origin", "method", "status")
 
 
@@ -434,9 +450,14 @@ def _enc_section(s: SectionRevision) -> Json:
     parameters: Json
     if isinstance(s.parameters, CatalogSnapshot):
         parameters = _enc_snapshot(s.parameters)
+    elif isinstance(s.parameters, ParametricParameters):
+        parameters = {
+            "shape": str(s.parameters.shape),
+            "dimensions": [{"name": d.name, "value": d.value} for d in s.parameters.dimensions],
+        }
     else:
         parameters = {"b": s.parameters.b, "h": s.parameters.h}
-    return {
+    encoded: Json = {
         "id": str(s.id),
         "revision": s.revision,
         "name": s.name,
@@ -444,6 +465,11 @@ def _enc_section(s: SectionRevision) -> Json:
         "parameters": parameters,
         "properties": properties,
     }
+    if s.shear is not None:  # Sin la clave, el contenido (y el hash) de v1–v4 no cambia.
+        encoded["shear"] = {
+            name: _enc_property(getattr(s.shear, name)) for name in _SHEAR_PROPERTY_NAMES
+        }
+    return encoded
 
 
 def _dec_property(data: object, path: str) -> SectionProperty:
@@ -506,18 +532,56 @@ def _dec_snapshot(data: object, path: str) -> CatalogSnapshot:
     )
 
 
-def _dec_parameters(family: SectionFamily, r: Reader) -> RectangularParameters | CatalogSnapshot:
-    """Decodifica ``parameters`` según el discriminador ``family`` (esquema v4, ADR-010)."""
+def _dec_parametric_dimension(data: object, path: str) -> ParametricDimension:
+    d = Reader(data, path, _PARAMETRIC_DIMENSION)
+    return _build(path, lambda: ParametricDimension(d.text("name"), d.real("value")))
+
+
+def _dec_parametric(data: object, path: str) -> ParametricParameters:
+    r = Reader(data, path, _PARAMETRIC)
+    shape = r.enum("shape", ParametricShape)
+    dimensions = tuple(
+        _dec_parametric_dimension(item, f"{r.at('dimensions')}[{i}]")
+        for i, item in enumerate(r.items("dimensions"))
+    )
+    return _build(path, lambda: ParametricParameters(shape, dimensions))
+
+
+def _dec_parameters(family: SectionFamily, r: Reader) -> SectionParameters:
+    """Decodifica ``parameters`` según ``family``, con una rama explícita por familia.
+
+    Esquema v4 (ADR-010): catálogo; esquema v5 (ADR-011): perfil paramétrico. Ninguna familia
+    cae por defecto en el rectángulo.
+    """
     if family is SectionFamily.CATALOGO:
         return _dec_snapshot(r.raw("parameters"), r.at("parameters"))
-    p = r.obj("parameters", ("b", "h"))
-    return _build(p.path, lambda: RectangularParameters(p.real("b"), p.real("h")))
+    if family is SectionFamily.PARAMETRICA:
+        return _dec_parametric(r.raw("parameters"), r.at("parameters"))
+    if family is SectionFamily.RECTANGULAR:
+        p = r.obj("parameters", ("b", "h"))
+        return _build(p.path, lambda: RectangularParameters(p.real("b"), p.real("h")))
+    raise format_error(
+        "project.invalid_field",
+        {"expected": "una familia de sección conocida"},
+        path=r.at("family"),
+    )
+
+
+def _dec_shear(data: object, path: str) -> ShearAreas:
+    r = Reader(data, path, _SHEAR_PROPERTY_NAMES)
+    return _build(
+        path,
+        lambda: ShearAreas(
+            *(_dec_property(r.raw(name), r.at(name)) for name in _SHEAR_PROPERTY_NAMES)
+        ),
+    )
 
 
 def _dec_section(data: object, path: str) -> SectionRevision:
-    r = Reader(data, path, _SECTION)
+    r = Reader(data, path, _SECTION, _SECTION_OPTIONAL)
     family = r.enum("family", SectionFamily)
     parameters = _dec_parameters(family, r)
+    shear = _dec_shear(r.raw("shear"), r.at("shear")) if r.has("shear") else None
     pr = r.obj("properties", _SECTION_PROPERTY_NAMES)
     properties = _build(
         pr.path,
@@ -534,6 +598,7 @@ def _dec_section(data: object, path: str) -> SectionRevision:
             family,
             parameters,
             properties,
+            shear,
         ),
     )
 

@@ -130,6 +130,43 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "La propiedad {field} de un perfil de catálogo debe ser NO_DISPONIBLE: el catálogo no la "
         "aporta y no se deduce."
     ),
+    "editor.dimension_name": (
+        "Dimensión «{name}» de la forma {shape}: {problem} (dimensiones de la forma: {expected})."
+    ),
+    "section.not_parametric": (
+        "La sección es de la familia {family}: no tiene parámetros de un perfil paramétrico."
+    ),
+    "section.geometry_dimensions": (
+        "Dimensiones no válidas para la forma {shape}: se esperaban {expected} y se recibió "
+        "{found}."
+    ),
+    "section.geometry_flange_too_thick": (
+        "El espesor de ala tf = {tf:g} m no deja alma: se exige 2·tf < h = {h:g} m."
+    ),
+    "section.geometry_web_too_thick": (
+        "El espesor de alma tw = {tw:g} m no deja vuelo de ala: se exige tw < b = {b:g} m."
+    ),
+    "section.geometry_wall_too_thick": (
+        "El espesor t = {t:g} m cierra el hueco: se exige 2·t < {side:g} m (lado menor)."
+    ),
+    "section.geometry_wall_too_thick_circle": (
+        "El espesor t = {t:g} m cierra el hueco: se exige t < d/2 con d = {d:g} m."
+    ),
+    "section.geometry_radius_too_large": (
+        "El radio {field} = {value:g} m es demasiado grande: se exige como máximo {max:g} m."
+    ),
+    "section.shear_not_derivable": (
+        "Un perfil de catálogo no lleva áreas de cortante: el catálogo no las aporta y no se "
+        "deducen."
+    ),
+    "section.shear_invalid_status": (
+        "Estado no admitido en {field}: el área de cortante solo puede ser CALCULADO o "
+        "NO_DISPONIBLE."
+    ),
+    "section.shear_mismatch": (
+        "Las áreas de cortante de la sección no coinciden con las calculadas a partir de sus "
+        "parámetros."
+    ),
     "section.fem_missing": "No apta para FEM: falta la propiedad {property}.",
     "section.code_not_verified": (
         "Cobertura normativa NO COMPROBADA: no existe una verificación normativa validada."

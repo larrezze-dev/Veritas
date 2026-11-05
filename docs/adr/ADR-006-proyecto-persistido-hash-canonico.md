@@ -47,3 +47,4 @@ ZIP con partes (D1-B) y SQLite (D1-C); hash incluyendo etiquetas o todas las rev
 - 2026-10-31: aprobado por el usuario (ACCEPTED).
 - 2026-11-02: E2 implementada (esquema v2, ejecuciones históricas y vigencia, `model_hash` en las corridas); notas en ADR-001, ADR-002 y ADR-003.
 - 2026-11-02: nota de T-014 E2 (esquema v3 con `norms`, migración 2 → 3).
+- 2026-11-05: enmienda de esquema v5 por T-025 E1 ([ADR-011](ADR-011-perfiles-parametricos-cortante-contrastado.md), PROPUESTO): familia `PARAMETRICA`, clave opcional `shear` en secciones (solo se escribe si existe) y migración 4 → 5 que solo verifica. `veritas-canon/1` y el hash de cualquier modelo v1–v4 no cambian: un proyecto v4 auténtico abre con `model_hash` idéntico.

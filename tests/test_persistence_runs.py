@@ -24,6 +24,7 @@ from veritas.fem.spatial.results import SpatialAnalysisRun, SpatialResults, norm
 from veritas.persistence.canonical import model_hash
 from veritas.persistence.codec import decode, encode
 from veritas.persistence.errors import IntegrityError
+from veritas.persistence.migrations import CURRENT_SCHEMA_VERSION
 from veritas.persistence.project import append_runs, open_project, save_project
 from veritas.persistence.runs import (
     RunKind,
@@ -315,7 +316,7 @@ def test_schema_v1_file_with_runs_is_rejected(saved_with_run: Path) -> None:
 
 def test_newer_schema_is_still_rejected(saved_with_run: Path) -> None:
     def bump(data: dict[str, Any]) -> None:
-        data["schema_version"] = 5
+        data["schema_version"] = CURRENT_SCHEMA_VERSION + 1
 
     expect(edit(saved_with_run, bump), DiagnosticCode.UNSUPPORTED_CONFIGURATION)
 

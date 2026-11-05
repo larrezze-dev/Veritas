@@ -3,8 +3,9 @@
 Cada migración transforma el CONTENIDO (``content``) de la versión N a la N+1 en memoria,
 después de verificar la integridad del archivo tal como se guardó y antes de validarlo. El
 esquema inicial fue la v1; la v2 (T-012 E2) añade las ejecuciones guardadas y la v3 (T-014 E2), las
-normativas de usuario y la seleccionada. El registro es un
-argumento para poder probar la cadena con migraciones sintéticas.
+normativas de usuario y la seleccionada; la v4 (T-024) admite secciones de catálogo y la v5 (T-025),
+perfiles paramétricos y el grupo de cortante. El registro es un argumento para poder probar la
+cadena con migraciones sintéticas.
 """
 
 from collections.abc import Callable, Mapping
@@ -13,7 +14,7 @@ from typing import Final
 from veritas.core.diagnostics import DiagnosticCode
 from veritas.persistence.errors import format_error, value_error
 
-CURRENT_SCHEMA_VERSION: Final = 4
+CURRENT_SCHEMA_VERSION: Final = 5
 
 type Migration = Callable[[dict[str, object]], dict[str, object]]
 
@@ -52,7 +53,37 @@ def _v3_to_v4(content: dict[str, object]) -> dict[str, object]:
     return dict(content)
 
 
-MIGRATIONS: Final[dict[int, Migration]] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4}
+def _v4_to_v5(content: dict[str, object]) -> dict[str, object]:
+    """v5 (T-025 E1, ADR-011) admite perfiles paramétricos y el grupo ``shear`` en secciones.
+
+    Solo VERIFICA: la forma de una sección v4 no cambia (el hash del modelo tampoco). Un archivo
+    v4 solo puede tener secciones rectangulares o de catálogo y sin ``shear``; lo que no sea de
+    esa versión se rechaza en vez de reinterpretarse en silencio.
+    """
+    model = content.get("model")
+    sections = model.get("sections") if isinstance(model, dict) else None
+    if isinstance(sections, list):
+        for index, section in enumerate(sections):
+            if not isinstance(section, dict):
+                continue
+            path = f"content.model.sections[{index}]"
+            if section.get("family") not in ("RECTANGULAR", "CATALOGO"):
+                raise format_error(
+                    "project.invalid_field",
+                    {"expected": "RECTANGULAR o CATALOGO (esquema v4)"},
+                    path=f"{path}.family",
+                )
+            if "shear" in section:
+                raise format_error("project.unknown_fields", {"fields": "shear"}, path=path)
+    return dict(content)
+
+
+MIGRATIONS: Final[dict[int, Migration]] = {
+    1: _v1_to_v2,
+    2: _v2_to_v3,
+    3: _v3_to_v4,
+    4: _v4_to_v5,
+}
 """Migraciones reales registradas, ``N -> N+1``."""
 
 

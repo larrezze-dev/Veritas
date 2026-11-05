@@ -30,7 +30,7 @@ def test_demo_then_open_and_verify(
     assert (code, err) == (0, "")
     assert project.model_hash in out
     assert "CORRECTA" in out
-    assert "esquema v4" in out
+    assert "esquema v5" in out
     assert "veritas-canon/1" in out
     assert "experimental" in out
 

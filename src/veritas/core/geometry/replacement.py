@@ -14,6 +14,7 @@ from veritas.core.diagnostics import Diagnostic, DiagnosticCode, Severity
 from veritas.core.materials.material import MaterialFamily, MaterialRevision
 from veritas.core.references import RevisionRef
 from veritas.core.sections.catalog import CatalogSnapshot
+from veritas.core.sections.parametric import ParametricParameters
 from veritas.core.sections.readiness import assess_section
 from veritas.core.sections.section import SectionRevision
 
@@ -85,16 +86,16 @@ def compatibility_errors(
     metálico (I, U, L, T, SHS, RHS, CHS) con un material de madera se bloquea; el resto, no.
     """
     params = section.parameters
-    if (
-        isinstance(params, CatalogSnapshot)
-        and params.shape in METAL_SHAPES
-        and material.family is MaterialFamily.TIMBER
-    ):
+    # Los perfiles paramétricos (I, RHS, SHS, CHS; T-025) son todos de forma metálica.
+    shape = (
+        str(params.shape) if isinstance(params, CatalogSnapshot | ParametricParameters) else None
+    )
+    if shape in METAL_SHAPES and material.family is MaterialFamily.TIMBER:
         return (
             Diagnostic.create(
                 DiagnosticCode.UNSUPPORTED_CONFIGURATION,
                 "section.replace_incompatible_material",
-                {"member": member, "shape": params.shape, "family": str(material.family)},
+                {"member": member, "shape": str(shape), "family": str(material.family)},
             ),
         )
     return ()

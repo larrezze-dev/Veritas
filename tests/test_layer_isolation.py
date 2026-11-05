@@ -17,8 +17,10 @@ PACKAGE_ROOT = Path(veritas.__file__).resolve().parent
 FORBIDDEN_EXTERNAL = frozenset(
     {"PySide6", "shiboken6", "pyvista", "pyvistaqt", "vtk", "vtkmodules", "openseespy"}
 )
-# Capas internas de las que ``veritas.core`` no puede depender.
-FORBIDDEN_INTERNAL = frozenset({"veritas.gui", "veritas.fem", "veritas.reports"})
+# Capas internas de las que ``veritas.core`` no puede depender (T-025 D4: tampoco del editor).
+FORBIDDEN_INTERNAL = frozenset(
+    {"veritas.gui", "veritas.fem", "veritas.reports", "veritas.section_editor"}
+)
 
 
 def _module_name(path: Path, package_root: Path) -> str:
@@ -179,3 +181,43 @@ def test_only_the_worker_imports_openseespy() -> None:
         if any(name.split(".")[0] == "openseespy" for name in imported_modules(path, PACKAGE_ROOT))
     }
     assert importers == {"fem/adapters/opensees_worker.py", "fem/adapters/opensees_worker_3d.py"}
+
+
+SECTION_EDITOR_FORBIDDEN_TOP = frozenset(
+    {"sqlite3", "PySide6", "shiboken6", "pyvista", "pyvistaqt", "vtk", "vtkmodules", "openseespy"}
+)
+SECTION_EDITOR_FORBIDDEN_INTERNAL = (
+    "veritas.catalogs",
+    "veritas.persistence",
+    "veritas.fem",
+    "veritas.gui",
+    "veritas.design_codes",
+    "veritas.reports",
+)
+
+
+def test_section_editor_imports_only_core() -> None:
+    """``section_editor`` (T-025 D4): solo ``core``; sin catálogo, persistencia, solver ni GUI."""
+    files = sorted((PACKAGE_ROOT / "section_editor").rglob("*.py"))
+    assert {"draft.py", "builders.py"} <= {path.name for path in files}
+    for path in files:
+        for name in imported_modules(path, PACKAGE_ROOT):
+            assert name.split(".")[0] not in SECTION_EDITOR_FORBIDDEN_TOP, (path.name, name)
+            assert not any(
+                name == layer or name.startswith(f"{layer}.")
+                for layer in SECTION_EDITOR_FORBIDDEN_INTERNAL
+            ), (path.name, name)
+            if name.startswith("veritas."):
+                assert name.split(".")[1] in {"core", "section_editor"}, (path.name, name)
+
+
+def test_core_never_imports_the_section_editor() -> None:
+    importers = {
+        path.relative_to(PACKAGE_ROOT).as_posix()
+        for path in (PACKAGE_ROOT / "core").rglob("*.py")
+        if any(
+            name == "veritas.section_editor" or name.startswith("veritas.section_editor.")
+            for name in imported_modules(path, PACKAGE_ROOT)
+        )
+    }
+    assert importers == set()

@@ -22,7 +22,7 @@ nombre o la descripción de un caso, no. Retirar un caso retira sus cargas (una 
 +1). Contenido idéntico: sin cambio. El peso propio de cada barra se deriva bajo demanda.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 from enum import Enum, auto
 from types import MappingProxyType
@@ -78,7 +78,12 @@ from veritas.core.loads.loads import (
 from veritas.core.materials.material import MaterialFamily, MaterialRevision, build_material
 from veritas.core.references import RevisionRef, RevisionRegistry, require_ref
 from veritas.core.sections.mass import linear_mass, section_area
-from veritas.core.sections.section import SectionRevision, build_rectangular_section
+from veritas.core.sections.parametric import ParametricShape
+from veritas.core.sections.section import (
+    SectionRevision,
+    build_parametric_section,
+    build_rectangular_section,
+)
 from veritas.core.supports.support import (
     RestraintKind,
     Restraints,
@@ -631,6 +636,62 @@ class StructuralModel:
             latest.revision + 1,
             b=Quantity(current.b, LENGTH) if b is None else b,
             h=Quantity(current.h, LENGTH) if h is None else h,
+            name=latest.name if name is None else name,
+            with_shear=latest.shear is not None,  # T-025: no pierde el grupo de cortante.
+        )
+        if replace(revised, revision=latest.revision) == latest:
+            return latest
+        return self._sections.register(revised)
+
+    def add_parametric_section(
+        self, shape: ParametricShape, dimensions: Mapping[str, Quantity], *, name: str = ""
+    ) -> SectionRevision:
+        """Crea un perfil paramétrico I, RHS, SHS o CHS (revisión 1; T-025, ADR-011).
+
+        Una geometría inválida (EDT-004) se rechaza con su diagnóstico y no se registra nada.
+        No altera ``model_revision``.
+        """
+        return self._sections.register(
+            build_parametric_section(
+                new_entity_id(), 1, shape=shape, dimensions=dimensions, name=name
+            )
+        )
+
+    def revise_parametric_section(
+        self,
+        section_id: UUID,
+        *,
+        dimensions: Mapping[str, Quantity] | None = None,
+        name: str | None = None,
+    ) -> SectionRevision:
+        """Nueva revisión (max+1) con otras medidas; las barras conservan la anterior.
+
+        ``dimensions`` sustituye solo las dimensiones indicadas; la forma no puede cambiar. Si el
+        contenido no cambia devuelve la revisión actual.
+        """
+        latest = self._sections.latest(section_id)
+        current = latest.require_parametric()
+        merged = {n: Quantity(v, LENGTH) for n, v in current.as_dict().items()}
+        for key in dimensions or {}:
+            if key not in merged:
+                raise InputValueError(
+                    Diagnostic.create(
+                        DiagnosticCode.INPUT_OUT_OF_RANGE,
+                        "section.geometry_dimensions",
+                        {
+                            "shape": str(current.shape),
+                            "expected": ", ".join(merged),
+                            "found": key,
+                        },
+                        location=Location(entity_id=section_id, field="dimensions"),
+                    )
+                )
+        merged.update(dimensions or {})
+        revised = build_parametric_section(
+            section_id,
+            latest.revision + 1,
+            shape=current.shape,
+            dimensions=merged,
             name=latest.name if name is None else name,
         )
         if replace(revised, revision=latest.revision) == latest:

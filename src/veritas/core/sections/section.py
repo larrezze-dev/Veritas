@@ -6,6 +6,7 @@ conoce el material: la masa lineal se calcula al combinarlos (``sections.mass``)
 """
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
@@ -19,13 +20,16 @@ from veritas.core.sections.catalog import (
     SYMMETRY_ORIGIN,
     CatalogSnapshot,
 )
-from veritas.core.sections.properties import PropertyStatus, SectionProperties
+from veritas.core.sections.parametric import ParametricParameters, ParametricShape
+from veritas.core.sections.parametric_properties import parametric_properties
+from veritas.core.sections.properties import PropertyStatus, SectionProperties, SectionProperty
 from veritas.core.sections.rectangular import (
     METHOD_CLOSED_FORM,
     METHOD_SAINT_VENANT,
     rectangular_properties,
 )
-from veritas.core.units import LENGTH, Quantity, get_unit
+from veritas.core.sections.shear import ShearAreas, parametric_shear, rectangular_shear
+from veritas.core.units import AREA, LENGTH, Quantity, get_unit
 from veritas.core.validation import (
     checked_positive,
     invalid_type,
@@ -55,10 +59,12 @@ MATCH_RELATIVE_TOLERANCE: Final = 1e-12
 
 
 class SectionFamily(StrEnum):
-    """Familia de sección: el rectángulo macizo (T-004) y el perfil de catálogo (T-024, ADR-010)."""
+    """Familia de sección: el rectángulo macizo (T-004), el perfil de catálogo (T-024, ADR-010)
+    y los perfiles paramétricos I, RHS, SHS y CHS (T-025, ADR-011)."""
 
     RECTANGULAR = "RECTANGULAR"
     CATALOGO = "CATALOGO"
+    PARAMETRICA = "PARAMETRICA"
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +79,9 @@ class RectangularParameters:
         object.__setattr__(self, "h", positive_float(self.h, "h"))
 
 
+type SectionParameters = RectangularParameters | ParametricParameters | CatalogSnapshot
+
+
 @dataclass(frozen=True, slots=True)
 class SectionRevision:
     """Revisión de sección. Un mismo par (id, revisión) es contenido inmutable."""
@@ -81,8 +90,10 @@ class SectionRevision:
     revision: int
     name: str
     family: SectionFamily
-    parameters: RectangularParameters | CatalogSnapshot
+    parameters: SectionParameters
     properties: SectionProperties
+    shear: ShearAreas | None = None
+    """Áreas de cortante energéticas (T-025, D9-B): ``None`` = nunca calculadas (no es 0)."""
 
     def __post_init__(self) -> None:
         check_identity(self.id, self.revision, "SectionRevision")
@@ -91,12 +102,19 @@ class SectionRevision:
             raise invalid_type("name", "texto", self.name, location)
         if not isinstance(self.family, SectionFamily):
             raise invalid_type("family", "SectionFamily", self.family, location)
-        if not isinstance(self.parameters, RectangularParameters | CatalogSnapshot):
+        if not isinstance(
+            self.parameters, RectangularParameters | ParametricParameters | CatalogSnapshot
+        ):
             raise invalid_type(
-                "parameters", "RectangularParameters o CatalogSnapshot", self.parameters, location
+                "parameters",
+                "RectangularParameters, ParametricParameters o CatalogSnapshot",
+                self.parameters,
+                location,
             )
         if not isinstance(self.properties, SectionProperties):
             raise invalid_type("properties", "SectionProperties", self.properties, location)
+        if self.shear is not None and not isinstance(self.shear, ShearAreas):
+            raise invalid_type("shear", "ShearAreas o None", self.shear, location)
         expected = _PARAMETERS_OF[self.family]
         if not isinstance(self.parameters, expected):
             raise InputValueError(
@@ -110,6 +128,7 @@ class SectionRevision:
                 )
             )
         _check_properties(self.parameters, self.properties, self.id, self.revision)
+        _check_shear(self.parameters, self.shear, self.id, self.revision)
 
     @property
     def ref(self) -> RevisionRef:
@@ -129,15 +148,29 @@ class SectionRevision:
             )
         return self.parameters
 
+    def require_parametric(self) -> ParametricParameters:
+        """Parámetros de un perfil paramétrico, o un error explícito si es de otra familia."""
+        if not isinstance(self.parameters, ParametricParameters):
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+                    "section.not_parametric",
+                    {"family": str(self.family)},
+                    location=Location(entity_id=self.id, revision=self.revision),
+                )
+            )
+        return self.parameters
+
 
 _PARAMETERS_OF: Final = {
     SectionFamily.RECTANGULAR: RectangularParameters,
     SectionFamily.CATALOGO: CatalogSnapshot,
+    SectionFamily.PARAMETRICA: ParametricParameters,
 }
 
 
 def _check_properties(
-    parameters: RectangularParameters | CatalogSnapshot,
+    parameters: SectionParameters,
     properties: SectionProperties,
     entity_id: UUID,
     revision: int,
@@ -165,9 +198,16 @@ def _check_properties(
         _check_catalog_properties(parameters, properties, entity_id, revision)
         return
     methods = {getattr(properties, name).method for name in _PROPERTY_UNITS}
-    if methods <= _RECTANGLE_METHODS and not _matches(
-        properties, rectangular_properties(parameters.b, parameters.h)
-    ):
+    if isinstance(parameters, ParametricParameters):
+        expected = parametric_properties(parameters)
+        recomputed = methods <= {getattr(expected, name).method for name in _PROPERTY_UNITS}
+        match = recomputed and _matches(properties, expected)
+    else:
+        recomputed = methods <= _RECTANGLE_METHODS
+        match = recomputed and _matches(
+            properties, rectangular_properties(parameters.b, parameters.h)
+        )
+    if recomputed and not match:
         raise InputValueError(
             Diagnostic.create(
                 DiagnosticCode.INPUT_OUT_OF_RANGE,
@@ -219,28 +259,93 @@ def _check_catalog_properties(
             raise mismatch("section.catalog_not_derivable", name)
 
 
+def _same_property(old: SectionProperty, new: SectionProperty) -> bool:
+    if (old.unit, old.origin, old.method, old.status) != (
+        new.unit,
+        new.origin,
+        new.method,
+        new.status,
+    ):
+        return False
+    if old.value is None or new.value is None:
+        return old.value is new.value
+    return math.isclose(old.value, new.value, rel_tol=MATCH_RELATIVE_TOLERANCE)
+
+
 def _matches(stored: SectionProperties, computed: SectionProperties) -> bool:
-    for name in _PROPERTY_UNITS:
-        old, new = getattr(stored, name), getattr(computed, name)
-        if (old.unit, old.origin, old.method, old.status) != (
-            new.unit,
-            new.origin,
-            new.method,
-            new.status,
-        ):
-            return False
-        if old.value is None or new.value is None:
-            if old.value is not new.value:
-                return False
-        elif not math.isclose(old.value, new.value, rel_tol=MATCH_RELATIVE_TOLERANCE):
-            return False
-    return True
+    return all(
+        _same_property(getattr(stored, name), getattr(computed, name)) for name in _PROPERTY_UNITS
+    )
 
 
-def build_rectangular_section(
-    entity_id: UUID, revision: int, *, b: Quantity, h: Quantity, name: str = ""
+_SHEAR_STATUSES: Final = frozenset({PropertyStatus.CALCULADO, PropertyStatus.NO_DISPONIBLE})
+_SHEAR_NAMES: Final = ("shear_y", "shear_z")
+
+
+def _check_shear(
+    parameters: SectionParameters,
+    shear: ShearAreas | None,
+    entity_id: UUID,
+    revision: int,
+) -> None:
+    """Invariantes del grupo opcional de áreas de cortante (T-025, D9-B).
+
+    Ausente (``None``) = nunca calculado: no se exige nada. Presente: unidad de área, estado
+    ``CALCULADO`` o ``NO_DISPONIBLE``, valor positivo, y con el método actual debe coincidir con
+    el recálculo a partir de los parámetros (no se introduce a mano; método de otra versión: se
+    acepta tal como se guardó, O3). Un perfil de catálogo no lleva cortante: el catálogo no lo
+    aporta y no se deduce.
+    """
+
+    def error(key: str, name: str) -> InputValueError:
+        return InputValueError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                key,
+                {"field": name},
+                location=Location(entity_id=entity_id, revision=revision, field=name),
+            )
+        )
+
+    if shear is None:
+        return
+    if isinstance(parameters, CatalogSnapshot):
+        raise error("section.shear_not_derivable", "shear")
+    for name in _SHEAR_NAMES:
+        prop: SectionProperty = getattr(shear, name)
+        Quantity(1.0, get_unit(prop.unit).dimension).require(AREA)
+        if prop.status not in _SHEAR_STATUSES:
+            raise error("section.shear_invalid_status", name)
+        if prop.value is not None:
+            checked_positive(
+                prop.value, name, Location(entity_id=entity_id, revision=revision, field=name)
+            )
+    expected = (
+        parametric_shear(parameters)
+        if isinstance(parameters, ParametricParameters)
+        else rectangular_shear(parameters.b, parameters.h)
+    )
+    current = {getattr(expected, name).method for name in _SHEAR_NAMES}
+    if {getattr(shear, name).method for name in _SHEAR_NAMES} <= current and not all(
+        _same_property(getattr(shear, name), getattr(expected, name)) for name in _SHEAR_NAMES
+    ):
+        raise error("section.shear_mismatch", "shear")
+
+
+def build_rectangular_section(  # noqa: PLR0913 (identidad, geometría y opciones, por nombre)
+    entity_id: UUID,
+    revision: int,
+    *,
+    b: Quantity,
+    h: Quantity,
+    name: str = "",
+    with_shear: bool = False,
 ) -> SectionRevision:
-    """Crea una revisión de sección rectangular y calcula sus propiedades."""
+    """Crea una revisión de sección rectangular y calcula sus propiedades.
+
+    ``with_shear`` añade el grupo de áreas de cortante (T-025, D10-C); por defecto no, para que
+    las secciones y los hashes existentes no cambien.
+    """
     check_identity(entity_id, revision, "SectionRevision")
 
     def at(field: str) -> Location:
@@ -260,4 +365,41 @@ def build_rectangular_section(
         properties=rectangular_properties(
             parameters.b, parameters.h, Location(entity_id=entity_id, revision=revision)
         ),
+        shear=rectangular_shear(parameters.b, parameters.h) if with_shear else None,
+    )
+
+
+def build_parametric_section(
+    entity_id: UUID,
+    revision: int,
+    *,
+    shape: ParametricShape,
+    dimensions: Mapping[str, Quantity],
+    name: str = "",
+) -> SectionRevision:
+    """Crea una revisión de perfil paramétrico (I, RHS, SHS o CHS) con propiedades y cortante.
+
+    ``dimensions`` son longitudes por nombre (los radios ``r``/``ro`` son opcionales y valen 0).
+    Una geometría inválida (EDT-004) se rechaza con su diagnóstico: no existe revisión inválida.
+    """
+    check_identity(entity_id, revision, "SectionRevision")
+    if name:
+        require_text(name, "name", Location(entity_id=entity_id, revision=revision, field="name"))
+    values: dict[str, float] = {}
+    for key, quantity in dimensions.items():
+        at = Location(entity_id=entity_id, revision=revision, field=key)
+        if not isinstance(quantity, Quantity):
+            raise invalid_type(key, "Quantity", quantity, at)
+        values[key] = quantity.require(LENGTH).si_value
+    parameters = ParametricParameters.from_values(ParametricShape(shape), values)
+    return SectionRevision(
+        id=entity_id,
+        revision=revision,
+        name=name,
+        family=SectionFamily.PARAMETRICA,
+        parameters=parameters,
+        properties=parametric_properties(
+            parameters, Location(entity_id=entity_id, revision=revision)
+        ),
+        shear=parametric_shear(parameters),
     )
