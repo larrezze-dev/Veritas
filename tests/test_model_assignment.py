@@ -127,7 +127,7 @@ def test_revise_section_keeps_member_reference() -> None:
     model, _, section, member = setup()
     revised = model.revise_rectangular_section(section.id, h=m(0.5))
     assert revised.revision == 2
-    assert revised.parameters.h == 0.5
+    assert revised.require_rectangular().h == 0.5
     assert revised.name == "R"
     assert model.member(member.id).section == section.ref
     assert model.section_history(section.id) == (section, revised)

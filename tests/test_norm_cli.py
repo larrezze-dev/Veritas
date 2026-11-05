@@ -400,10 +400,10 @@ def test_norm_group_appears_in_top_level_help(capsys: pytest.CaptureFixture[str]
     assert "norm" in capsys.readouterr().out
 
 
-def test_file_written_by_cli_is_valid_json_with_v3(
+def test_file_written_by_cli_is_valid_json_with_v4(
     capsys: pytest.CaptureFixture[str], project: Path
 ) -> None:
     new(capsys, project)
     data = json.loads(project.read_text(encoding="utf-8"))
-    assert data["schema_version"] == 3
+    assert data["schema_version"] == 4
     assert len(data["content"]["norms"]["user"]) == 1

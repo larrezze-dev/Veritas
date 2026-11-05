@@ -13,7 +13,7 @@ from typing import Final
 from veritas.core.diagnostics import DiagnosticCode
 from veritas.persistence.errors import format_error, value_error
 
-CURRENT_SCHEMA_VERSION: Final = 3
+CURRENT_SCHEMA_VERSION: Final = 4
 
 type Migration = Callable[[dict[str, object]], dict[str, object]]
 
@@ -32,7 +32,27 @@ def _v2_to_v3(content: dict[str, object]) -> dict[str, object]:
     return {**content, "norms": {"user": [], "selected": None}}
 
 
-MIGRATIONS: Final[dict[int, Migration]] = {1: _v1_to_v2, 2: _v2_to_v3}
+def _v3_to_v4(content: dict[str, object]) -> dict[str, object]:
+    """v4 (T-024 E1, ADR-010) admite secciones de catálogo; la forma del contenido v3 no cambia.
+
+    Un archivo v3 solo puede tener secciones rectangulares: una sección con otra familia no es
+    de esa versión y se rechaza en vez de reinterpretarse en silencio.
+    """
+    model = content.get("model")
+    sections = model.get("sections") if isinstance(model, dict) else None
+    if isinstance(sections, list):
+        for index, section in enumerate(sections):
+            family = section.get("family") if isinstance(section, dict) else None
+            if family != "RECTANGULAR":
+                raise format_error(
+                    "project.invalid_field",
+                    {"expected": "RECTANGULAR (esquema v3)"},
+                    path=f"content.model.sections[{index}].family",
+                )
+    return dict(content)
+
+
+MIGRATIONS: Final[dict[int, Migration]] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4}
 """Migraciones reales registradas, ``N -> N+1``."""
 
 

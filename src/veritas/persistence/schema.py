@@ -39,6 +39,12 @@ from veritas.core.loads.loads import (
 from veritas.core.materials.material import MaterialFamily, MaterialRevision
 from veritas.core.presentation import Precision, PrecisionMode, PresentationProfile, QuantityKind
 from veritas.core.references import RevisionRef
+from veritas.core.sections.catalog import (
+    SNAPSHOT_PROPERTY_DIMENSIONS,
+    CatalogSnapshot,
+    SnapshotDimension,
+    SnapshotProvenance,
+)
 from veritas.core.sections.properties import PropertyStatus, SectionProperties, SectionProperty
 from veritas.core.sections.section import (
     RectangularParameters,
@@ -368,23 +374,74 @@ def _dec_material(data: object, path: str) -> MaterialRevision:
     )
 
 
+def _enc_property(prop: SectionProperty) -> Json:
+    return {
+        "value": prop.value,
+        "unit": prop.unit,
+        "origin": prop.origin,
+        "method": prop.method,
+        "status": str(prop.status),
+    }
+
+
+_CATALOG_PARAMETERS: Final = (
+    "catalog",
+    "profile",
+    "dimensions",
+    "provenance",
+    *SNAPSHOT_PROPERTY_DIMENSIONS,
+    "warnings",
+)
+_CATALOG_REF: Final = ("id", "name", "source", "license", "edition")
+_PROFILE_REF: Final = ("id", "revision", "series", "designation", "shape", "source_sha256")
+_SNAPSHOT_DIMENSION: Final = ("name", "value")
+_PROVENANCE: Final = ("source", "license", "edition", "method")
+
+
+def _enc_snapshot(s: CatalogSnapshot) -> Json:
+    return {
+        "catalog": {
+            "id": str(s.catalog_id),
+            "name": s.catalog_name,
+            "source": s.catalog_source,
+            "license": s.catalog_license,
+            "edition": s.catalog_edition,
+        },
+        "profile": {
+            "id": str(s.profile_id),
+            "revision": s.profile_revision,
+            "series": s.series,
+            "designation": s.designation,
+            "shape": s.shape,
+            "source_sha256": s.source_sha256,
+        },
+        "dimensions": [{"name": d.name, "value": d.value} for d in s.dimensions],
+        "provenance": {
+            "source": s.provenance.source,
+            "license": s.provenance.license,
+            "edition": s.provenance.edition,
+            "method": s.provenance.method,
+        },
+        **{name: _enc_property(getattr(s, name)) for name in SNAPSHOT_PROPERTY_DIMENSIONS},
+        "warnings": list(s.warnings),
+    }
+
+
 def _enc_section(s: SectionRevision) -> Json:
-    properties: Json = {}
-    for name in _SECTION_PROPERTY_NAMES:
-        prop: SectionProperty = getattr(s.properties, name)
-        properties[name] = {
-            "value": prop.value,
-            "unit": prop.unit,
-            "origin": prop.origin,
-            "method": prop.method,
-            "status": str(prop.status),
-        }
+    properties: Json = {
+        name: _enc_property(getattr(s.properties, name)) for name in _SECTION_PROPERTY_NAMES
+    }
+    parameters: Json
+    if isinstance(s.parameters, CatalogSnapshot):
+        parameters = _enc_snapshot(s.parameters)
+    else:
+        parameters = {"b": s.parameters.b, "h": s.parameters.h}
     return {
         "id": str(s.id),
         "revision": s.revision,
         "name": s.name,
         "family": str(s.family),
-        "parameters": {"b": s.parameters.b, "h": s.parameters.h},
+        "parameters": parameters,
         "properties": properties,
     }
 
@@ -403,10 +460,64 @@ def _dec_property(data: object, path: str) -> SectionProperty:
     )
 
 
+def _text_item(value: object, path: str) -> str:
+    if not isinstance(value, str):
+        raise format_error("project.invalid_field", {"expected": "texto"}, path=path)
+    return value
+
+
+def _dec_snapshot_dimension(data: object, path: str) -> SnapshotDimension:
+    r = Reader(data, path, _SNAPSHOT_DIMENSION)
+    return _build(path, lambda: SnapshotDimension(r.text("name"), r.real("value")))
+
+
+def _dec_snapshot(data: object, path: str) -> CatalogSnapshot:
+    r = Reader(data, path, _CATALOG_PARAMETERS)
+    catalog = r.obj("catalog", _CATALOG_REF)
+    profile = r.obj("profile", _PROFILE_REF)
+    prov = r.obj("provenance", _PROVENANCE)
+    dimensions = tuple(
+        _dec_snapshot_dimension(item, f"{r.at('dimensions')}[{i}]")
+        for i, item in enumerate(r.items("dimensions"))
+    )
+    props = {name: _dec_property(r.raw(name), r.at(name)) for name in SNAPSHOT_PROPERTY_DIMENSIONS}
+    warnings = tuple(_text_item(item, r.at("warnings")) for item in r.items("warnings"))
+    return _build(
+        path,
+        lambda: CatalogSnapshot(
+            catalog_id=catalog.uuid("id"),
+            catalog_name=catalog.text("name"),
+            catalog_source=catalog.text("source"),
+            catalog_license=catalog.text("license"),
+            catalog_edition=catalog.text("edition"),
+            profile_id=profile.uuid("id"),
+            profile_revision=profile.integer("revision"),
+            series=profile.text("series"),
+            designation=profile.text("designation"),
+            shape=profile.text("shape"),
+            source_sha256=profile.text("source_sha256"),
+            dimensions=dimensions,
+            provenance=SnapshotProvenance(
+                prov.text("source"), prov.text("license"), prov.text("edition"), prov.text("method")
+            ),
+            warnings=warnings,
+            **props,
+        ),
+    )
+
+
+def _dec_parameters(family: SectionFamily, r: Reader) -> RectangularParameters | CatalogSnapshot:
+    """Decodifica ``parameters`` según el discriminador ``family`` (esquema v4, ADR-010)."""
+    if family is SectionFamily.CATALOGO:
+        return _dec_snapshot(r.raw("parameters"), r.at("parameters"))
+    p = r.obj("parameters", ("b", "h"))
+    return _build(p.path, lambda: RectangularParameters(p.real("b"), p.real("h")))
+
+
 def _dec_section(data: object, path: str) -> SectionRevision:
     r = Reader(data, path, _SECTION)
-    p = r.obj("parameters", ("b", "h"))
-    parameters = _build(p.path, lambda: RectangularParameters(p.real("b"), p.real("h")))
+    family = r.enum("family", SectionFamily)
+    parameters = _dec_parameters(family, r)
     pr = r.obj("properties", _SECTION_PROPERTY_NAMES)
     properties = _build(
         pr.path,
@@ -420,7 +531,7 @@ def _dec_section(data: object, path: str) -> SectionRevision:
             r.uuid("id"),
             r.integer("revision"),
             r.text("name"),
-            r.enum("family", SectionFamily),
+            family,
             parameters,
             properties,
         ),

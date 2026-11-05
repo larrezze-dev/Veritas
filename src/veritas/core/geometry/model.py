@@ -618,11 +618,12 @@ class StructuralModel:
     ) -> SectionRevision:
         """Nueva revisión (max+1) con otras dimensiones; las barras conservan la anterior."""
         latest = self._sections.latest(section_id)
+        current = latest.require_rectangular()
         revised = build_rectangular_section(
             section_id,
             latest.revision + 1,
-            b=Quantity(latest.parameters.b, LENGTH) if b is None else b,
-            h=Quantity(latest.parameters.h, LENGTH) if h is None else h,
+            b=Quantity(current.b, LENGTH) if b is None else b,
+            h=Quantity(current.h, LENGTH) if h is None else h,
             name=latest.name if name is None else name,
         )
         if replace(revised, revision=latest.revision) == latest:

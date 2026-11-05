@@ -13,6 +13,7 @@ from uuid import UUID
 
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError, Location
 from veritas.core.references import RevisionRef, check_identity
+from veritas.core.sections.catalog import CatalogSnapshot
 from veritas.core.sections.properties import PropertyStatus, SectionProperties
 from veritas.core.sections.rectangular import (
     METHOD_CLOSED_FORM,
@@ -42,14 +43,17 @@ _STRICTLY_POSITIVE: Final = frozenset({"area", "iy", "iz", "torsion_constant"})
 # El rectángulo se define con origen en su centroide y tiene doble simetría.
 _EXACT_ZERO: Final = frozenset({"centroid_y", "centroid_z", "iyz"})
 _RECTANGLE_METHODS: Final = frozenset({METHOD_CLOSED_FORM, METHOD_SAINT_VENANT})
+_CATALOG_COPIED: Final = ("area", "iy", "iz", "torsion_constant")
+_CATALOG_ABSENT: Final = ("centroid_y", "centroid_z", "iyz")
 MATCH_RELATIVE_TOLERANCE: Final = 1e-12
 """Tolerancia de coincidencia con el recálculo: independiente del redondeo de ``math.exp``."""
 
 
 class SectionFamily(StrEnum):
-    """Familia de sección. Solo el rectángulo macizo en T-004."""
+    """Familia de sección: el rectángulo macizo (T-004) y el perfil de catálogo (T-024, ADR-010)."""
 
     RECTANGULAR = "RECTANGULAR"
+    CATALOGO = "CATALOGO"
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +76,7 @@ class SectionRevision:
     revision: int
     name: str
     family: SectionFamily
-    parameters: RectangularParameters
+    parameters: RectangularParameters | CatalogSnapshot
     properties: SectionProperties
 
     def __post_init__(self) -> None:
@@ -82,10 +86,24 @@ class SectionRevision:
             raise invalid_type("name", "texto", self.name, location)
         if not isinstance(self.family, SectionFamily):
             raise invalid_type("family", "SectionFamily", self.family, location)
-        if not isinstance(self.parameters, RectangularParameters):
-            raise invalid_type("parameters", "RectangularParameters", self.parameters, location)
+        if not isinstance(self.parameters, RectangularParameters | CatalogSnapshot):
+            raise invalid_type(
+                "parameters", "RectangularParameters o CatalogSnapshot", self.parameters, location
+            )
         if not isinstance(self.properties, SectionProperties):
             raise invalid_type("properties", "SectionProperties", self.properties, location)
+        expected = _PARAMETERS_OF[self.family]
+        if not isinstance(self.parameters, expected):
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_INVALID_TYPE,
+                    "section.family_mismatch",
+                    {"family": str(self.family), "found": type(self.parameters).__name__},
+                    location=Location(
+                        entity_id=self.id, revision=self.revision, field="parameters"
+                    ),
+                )
+            )
         _check_properties(self.parameters, self.properties, self.id, self.revision)
 
     @property
@@ -93,9 +111,28 @@ class SectionRevision:
         """Referencia exacta (id, revisión) a esta revisión."""
         return RevisionRef(self.id, self.revision)
 
+    def require_rectangular(self) -> RectangularParameters:
+        """Parámetros b y h, o un error explícito si la sección no es un rectángulo."""
+        if not isinstance(self.parameters, RectangularParameters):
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+                    "section.not_rectangular",
+                    {"family": str(self.family)},
+                    location=Location(entity_id=self.id, revision=self.revision),
+                )
+            )
+        return self.parameters
+
+
+_PARAMETERS_OF: Final = {
+    SectionFamily.RECTANGULAR: RectangularParameters,
+    SectionFamily.CATALOGO: CatalogSnapshot,
+}
+
 
 def _check_properties(
-    parameters: RectangularParameters,
+    parameters: RectangularParameters | CatalogSnapshot,
     properties: SectionProperties,
     entity_id: UUID,
     revision: int,
@@ -119,6 +156,9 @@ def _check_properties(
             checked_positive(value, name, at)
         elif name in _EXACT_ZERO and (value != 0.0 or math.copysign(1.0, value) < 0.0):
             raise out_of_range(name, value, "+0.0", at)
+    if isinstance(parameters, CatalogSnapshot):
+        _check_catalog_properties(parameters, properties, entity_id, revision)
+        return
     methods = {getattr(properties, name).method for name in _PROPERTY_UNITS}
     if methods <= _RECTANGLE_METHODS and not _matches(
         properties, rectangular_properties(parameters.b, parameters.h)
@@ -130,6 +170,37 @@ def _check_properties(
                 location=Location(entity_id=entity_id, revision=revision, field="properties"),
             )
         )
+
+
+def _check_catalog_properties(
+    snapshot: CatalogSnapshot,
+    properties: SectionProperties,
+    entity_id: UUID,
+    revision: int,
+) -> None:
+    """Perfil de catálogo (ADR-010): las propiedades son las del snapshot y nada más.
+
+    A, Iy, Iz y J son idénticas a las copiadas del catálogo (valor, unidad, origen, método y
+    estado); el centroide e Iyz son ``NO_DISPONIBLE``: el catálogo no los aporta y en T-024 E1
+    no se deducen. Los estados son solo ``IMPORTADO_SIN_VERIFICAR`` o ``NO_DISPONIBLE``.
+    """
+
+    def mismatch(key: str, name: str) -> InputValueError:
+        return InputValueError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                key,
+                {"field": name},
+                location=Location(entity_id=entity_id, revision=revision, field=name),
+            )
+        )
+
+    for name in _CATALOG_COPIED:
+        if getattr(properties, name) != getattr(snapshot, name):
+            raise mismatch("section.catalog_properties_mismatch", name)
+    for name in _CATALOG_ABSENT:
+        if getattr(properties, name).status is not PropertyStatus.NO_DISPONIBLE:
+            raise mismatch("section.catalog_not_derivable", name)
 
 
 def _matches(stored: SectionProperties, computed: SectionProperties) -> bool:

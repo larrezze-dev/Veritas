@@ -101,6 +101,31 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Una revisión no puede cambiar la familia de {kind} ({current} -> {requested}); "
         "cree una entidad nueva."
     ),
+    "section.family_mismatch": (
+        "Los parámetros ({found}) no corresponden a la familia de sección {family}."
+    ),
+    "section.not_rectangular": (
+        "La sección es de la familia {family}: no tiene parámetros b y h de un rectángulo."
+    ),
+    "section.catalog_invalid_name": "Nombre de dimensión de perfil no válido: «{name}».",
+    "section.catalog_invalid_shape": "Forma de perfil de catálogo no admitida: «{shape}».",
+    "section.catalog_invalid_hash": (
+        "El hash de origen del perfil de catálogo debe ser un SHA-256 hexadecimal en minúsculas."
+    ),
+    "section.catalog_duplicate_dimension": "Dimensión de perfil repetida: «{name}».",
+    "section.catalog_invalid_warning": "Clave de aviso de perfil no válida o repetida: «{key}».",
+    "section.catalog_invalid_status": (
+        "Estado {status} no admitido en {field}: un perfil de catálogo solo puede ser "
+        "IMPORTADO_SIN_VERIFICAR o NO_DISPONIBLE."
+    ),
+    "section.catalog_invalid_unit": "Unidad {unit} no válida para {field} de un perfil.",
+    "section.catalog_properties_mismatch": (
+        "La propiedad {field} de la sección no coincide con la copiada del perfil de catálogo."
+    ),
+    "section.catalog_not_derivable": (
+        "La propiedad {field} de un perfil de catálogo debe ser NO_DISPONIBLE: el catálogo no la "
+        "aporta y no se deduce."
+    ),
     "section.properties_mismatch": (
         "Las propiedades de la sección no coinciden con las calculadas a partir de sus parámetros."
     ),
@@ -869,6 +894,7 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Clave de perfil repetida en el lote: serie «{series}», designación «{designation}»."
     ),
     "catalog.not_found": "No existe el catálogo «{catalog}».",
+    "catalog.profile_not_in_catalog": "El perfil «{profile}» no pertenece al catálogo «{catalog}».",
     "catalog.profile_not_found": "No existe el perfil «{profile}».",
     "catalog.verify_integrity": "El archivo de catálogo falla la comprobación de SQLite: {detail}.",
     "catalog.verify_orphan": "Fila huérfana en {table}: no existe su registro en {parent}.",

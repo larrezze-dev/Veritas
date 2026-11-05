@@ -315,7 +315,7 @@ def test_schema_v1_file_with_runs_is_rejected(saved_with_run: Path) -> None:
 
 def test_newer_schema_is_still_rejected(saved_with_run: Path) -> None:
     def bump(data: dict[str, Any]) -> None:
-        data["schema_version"] = 4
+        data["schema_version"] = 5
 
     expect(edit(saved_with_run, bump), DiagnosticCode.UNSUPPORTED_CONFIGURATION)
 

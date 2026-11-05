@@ -715,7 +715,7 @@ def format_section_rect(b: str, h: str, unit: str, profile_name: str) -> str:
         h=u.Quantity.of(_parse_number(h), length_unit),
     )
     profile = _profile(profile_name)
-    params = section.parameters
+    params = section.require_rectangular()
     lines = [
         "Sección rectangular maciza "
         f"b = {format_quantity(u.Quantity(params.b, u.LENGTH), QuantityKind.LENGTH, profile)} (y)"
