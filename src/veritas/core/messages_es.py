@@ -133,6 +133,36 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "editor.dimension_name": (
         "Dimensión «{name}» de la forma {shape}: {problem} (dimensiones de la forma: {expected})."
     ),
+    "editor.compare_tolerance": (
+        "Tolerancia {value} no válida: debe ser un número entre 0 y 1 (0,01 = 1 %)."
+    ),
+    "editor.compare_catalog_section": (
+        "La sección es de la familia {family}: ya es un perfil de catálogo, no hay nada que "
+        "contrastar."
+    ),
+    "editor.compare_shape_differs": (
+        "La forma del perfil de catálogo no coincide con la de la sección: la comparación no es "
+        "significativa."
+    ),
+    "editor.compare_fillet_differs": (
+        "Solo uno de los dos lados lleva radios de acuerdo: es la causa probable de la diferencia."
+    ),
+    "editor.cli_dimension": (
+        "Dimensión «{text}» no válida: use nombre=valor, por ejemplo h=300 (en la unidad de "
+        "--unidad)."
+    ),
+    "editor.cli_shape": ("Forma «{shape}» no válida para el editor: use rect, i, rhs, shs o chs."),
+    "editor.cli_contrast_usage": "--contrastar y --db se indican juntos (el catálogo se lee solo).",
+    "editor.cli_rect_dimensions": "El rectángulo se define con --dim b=… h=… y nada más.",
+    "editor.cli_not_comparable": (
+        "No se registra el contraste: ninguna propiedad comparable está dentro de la tolerancia."
+    ),
+    "editor.cli_section_not_found": (
+        "No hay ninguna sección «{name}» en el proyecto (nombre exacto de «project sections»)."
+    ),
+    "project.assign_section_usage": (
+        "Use «assign-section ARCHIVO ETIQUETA SECCIÓN» o «assign-section ARCHIVO --todas SECCIÓN»."
+    ),
     "section.not_parametric": (
         "La sección es de la familia {family}: no tiene parámetros de un perfil paramétrico."
     ),

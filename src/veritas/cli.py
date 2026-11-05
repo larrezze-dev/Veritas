@@ -110,6 +110,7 @@ from veritas.cli_catalog import add_catalog_parser, run_catalog
 from veritas.cli_gui import add_gui_parser, run_gui_command
 from veritas.cli_norm import add_norm_parser, run_norm
 from veritas.cli_project import add_project_parser, run_project
+from veritas.cli_section_editor import add_section_parsers, run_section_command
 from veritas.core import units as u
 from veritas.core.connections.end import Dof, DofState, EndConnection, MemberEnd
 from veritas.core.diagnostics import (
@@ -282,6 +283,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915 (un registro por
     rect.add_argument("--h", required=True, help="Canto h, según z local.")
     rect.add_argument("--unit", default="m", help="Unidad de b y h (m, cm, mm).")
     rect.add_argument("--profile", default="SI", choices=profile_names, help="Perfil de unidades.")
+    add_section_parsers(section_sub)
 
     model_parser = subparsers.add_parser("model", help="Modelos de demostración.")
     model_sub = model_parser.add_subparsers(dest="model_command", metavar="ACCIÓN", required=True)
@@ -3002,7 +3004,7 @@ def _tolerant_streams() -> None:
             stream.reconfigure(errors="replace")
 
 
-def _run(  # noqa: PLR0911 (un retorno por subcomando)
+def _run(  # noqa: PLR0911, PLR0912 (un retorno por subcomando)
     args: argparse.Namespace, parser: argparse.ArgumentParser
 ) -> str | None:
     if args.command == "info":
@@ -3016,6 +3018,8 @@ def _run(  # noqa: PLR0911 (un retorno por subcomando)
     if args.command == "geometry":
         return format_member_axes(args.point_i, args.point_j, args.unit, args.ref, args.alpha)
     if args.command == "section":
+        if args.section_command != "rect":
+            return run_section_command(args)
         return format_section_rect(args.b, args.h, args.unit, args.profile)
     if args.command == "model":
         return format_model_demo(args.profile)

@@ -77,6 +77,13 @@ from veritas.core.loads.loads import (
 )
 from veritas.core.materials.material import MaterialFamily, MaterialRevision, build_material
 from veritas.core.references import RevisionRef, RevisionRegistry, require_ref
+from veritas.core.sections.catalog import CatalogSnapshot
+from veritas.core.sections.contrast import (
+    DEFAULT_TOLERANCE,
+    ComparisonReport,
+    compare_with_snapshot,
+    contrasted_properties,
+)
 from veritas.core.sections.mass import linear_mass, section_area
 from veritas.core.sections.parametric import ParametricShape
 from veritas.core.sections.section import (
@@ -697,6 +704,29 @@ class StructuralModel:
         if replace(revised, revision=latest.revision) == latest:
             return latest
         return self._sections.register(revised)
+
+    def register_contrast(
+        self,
+        section_id: UUID,
+        snapshot: CatalogSnapshot,
+        *,
+        tolerance: float = DEFAULT_TOLERANCE,
+    ) -> tuple[SectionRevision, ComparisonReport]:
+        """Contrasta la última revisión con un perfil de catálogo (T-025 E2, D12-B, TK-021).
+
+        Las propiedades dentro de tolerancia pasan de ``CALCULADO`` a ``CONTRASTADO`` en una
+        NUEVA revisión (max+1) con la misma geometría y el mismo valor calculado; las demás no
+        cambian. Si nada se promueve (o ya constaba igual) devuelve la revisión actual sin
+        registrar nada. ``VERIFICADO`` no se emite. No altera ``model_revision``.
+        """
+        latest = self._sections.latest(section_id)
+        report = compare_with_snapshot(latest, snapshot, tolerance)
+        promoted = contrasted_properties(latest.properties, report)
+        if promoted == latest.properties:
+            return latest, report
+        return self._sections.register(
+            replace(latest, revision=latest.revision + 1, properties=promoted)
+        ), report
 
     def register_section(self, revision: SectionRevision) -> SectionRevision:
         """Alta de una revisión construida fuera (catálogo/persistencia futuros)."""

@@ -260,6 +260,10 @@ def _check_catalog_properties(
 
 
 def _same_property(old: SectionProperty, new: SectionProperty) -> bool:
+    if old.status is PropertyStatus.CONTRASTADO and new.status is PropertyStatus.CALCULADO:
+        # T-025 E2 (D12-B): CONTRASTADO conserva el valor y el método calculados; solo cambian el
+        # estado y el origen (que cita el contraste). El valor se sigue recalculando.
+        old = SectionProperty(old.value, old.unit, new.origin, old.method, new.status)
     if (old.unit, old.origin, old.method, old.status) != (
         new.unit,
         new.origin,

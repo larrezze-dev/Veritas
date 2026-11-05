@@ -29,6 +29,7 @@ from veritas.core.diagnostics import Diagnostic, DiagnosticCode, DiagnosticError
 from veritas.core.geometry.replacement import ReplacementReport, ReplacementStatus
 from veritas.core.messages_es import render_message
 from veritas.core.sections.catalog import CatalogSnapshot
+from veritas.core.sections.properties import PropertyStatus
 from veritas.core.sections.readiness import assess_section
 from veritas.core.sections.section import SectionFamily, SectionRevision
 from veritas.persistence.errors import value_error
@@ -168,6 +169,12 @@ def read_profile(db: str, ref: ProfileRef) -> tuple[CatalogInfo, CatalogProfile]
     )
 
 
+def read_snapshot(db: str, reference: str) -> CatalogSnapshot:
+    """Snapshot de la revisión ``CAT/SERIE/DES[@REV]`` del catálogo ``db`` (solo lectura)."""
+    info, profile = read_profile(db, parse_reference(reference))
+    return snapshot_from_profile(profile, info)
+
+
 # --- Sustitución --------------------------------------------------------------------------
 
 
@@ -276,6 +283,18 @@ def _sections(args: argparse.Namespace, project: Project) -> str:
             f"{section.family} · usada por {used} barra(s)"
         )
         lines.extend(_verdict_lines(section))
+        if section.family is not SectionFamily.CATALOGO and (
+            section.family is SectionFamily.PARAMETRICA
+            or section.shear is not None
+            or any(
+                getattr(section.properties, n).status is PropertyStatus.CONTRASTADO
+                for n in ("area", "iy", "iz", "torsion_constant")
+            )
+        ):
+            from veritas.cli_section_editor import property_lines  # noqa: PLC0415 (ciclo)
+
+            lines.append("    Propiedades:")
+            lines.extend(property_lines(section))
         if (
             args.db is not None
             and section.family is SectionFamily.CATALOGO

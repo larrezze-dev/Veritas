@@ -76,7 +76,7 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | EDT-008 | P1 | Calcular J/módulos plásticos solo con algoritmo específico y contrastado, indicando no soportado cuando proceda. | — | NO INICIADO |
 | EDT-009 | P2 | Cw, propiedades efectivas y secciones abiertas delgadas mediante métodos especializados verificados. | — | NO INICIADO |
 | EDT-010 | P1 | Guardar nuevo perfil, clon o revisión, con historial y bloqueo de revisiones en uso. | — | NO INICIADO |
-| EDT-011 | P1 | Comparar propiedades calculadas con valores de catálogo mostrando diferencia relativa. | — | NO INICIADO |
+| EDT-011 | P1 | Comparar propiedades calculadas con valores de catálogo mostrando diferencia relativa. | T-025 E2: `core/sections/contrast.py`, `section_editor/compare.py`, `veritas section comparar` y `project add-section --contrastar`; `tests/test_section_editor_e2.py` | PARCIAL — E2 aceptada 2026-11-05. Tolerancia 1 % por defecto (software, no normativa); sin GUI (F4) |
 | EDT-012 | P1 | Permitir borradores, pero impedir asignar perfiles con geometría inválida. | — | NO INICIADO |
 | EDT-013 | P1 | Exportar dibujo SVG y definición JSON del perfil. | — | NO INICIADO |
 | LD-001 | P0 | Casos de carga identificados por ID, categoría y descripción. | T-006 (`plans/T-006.md`): `veritas.core.loads.LoadCase` (UUID v4, revisión, nombre, `LoadCategory` PERMANENT/VARIABLE/ACCIDENTAL, descripción); `StructuralModel.add/revise/remove_load_case`; `tests/test_loads.py`, `test_model_loads.py`, `test_self_weight.py`, `test_load_resultant.py`, `test_load_cli.py` | PARCIAL — T-006 aceptado 2026-10-27; sin subtipos, ψ, edición normativa del caso ni combinaciones (F5A); nombre no único |

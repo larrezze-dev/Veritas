@@ -1,7 +1,7 @@
 """Editor de perfiles: borradores paramétricos con validación geométrica (T-025 E1).
 
 ``SectionDraft`` (EDT-004, EDT-012) y los constructores por forma. Importa solo ``veritas.core``.
-Pendiente (E2/F3B): comparación con catálogo, croquis y booleanas.
+Comparación con catálogo y CONTRASTADO (E2). Pendiente (F3B): croquis y booleanas.
 """
 
 from veritas.section_editor.builders import (

@@ -20,6 +20,11 @@ from veritas.cli_profiles import (
     freshness_lines,
     run_profile_command,
 )
+from veritas.cli_section_editor import (
+    PROJECT_EDITOR_COMMANDS,
+    add_project_section_parsers,
+    run_project_editor_command,
+)
 from veritas.core import units as u
 from veritas.core.connections.end import Dof, EndConnection
 from veritas.core.diagnostics import DiagnosticCode, DiagnosticError
@@ -75,6 +80,7 @@ def add_project_parser(subparsers: "argparse._SubParsersAction[argparse.Argument
         "--a", required=True, nargs=3, metavar=("X", "Y", "Z"), help="Nueva posición en m."
     )
     add_profile_parsers(sub)
+    add_project_section_parsers(sub)
 
 
 def _demo_model(case: str) -> StructuralModel:
@@ -144,6 +150,8 @@ def run_project(args: argparse.Namespace) -> tuple[str, int]:  # noqa: PLR0911 (
         return f"{error.code}: {render_message(error.diagnostic)}", EXIT_INTEGRITY
     if args.project_command in PROFILE_COMMANDS:
         return run_profile_command(args, project)
+    if args.project_command in PROJECT_EDITOR_COMMANDS:
+        return run_project_editor_command(args, project)
     if args.project_command == "analyze":
         return _analyze(args, project)
     if args.project_command == "runs":

@@ -1,6 +1,6 @@
 # ADR-011 — Perfiles paramétricos, área de cortante energética y estado CONTRASTADO (esquema v5)
 
-**Estado: ACCEPTED** (2026-11-05, con E1 de T-025). Las partes de E2 (estado `CONTRASTADO`, comparación y CLI) figuran como **pendientes** y se confirmarán en una enmienda al aceptar E2. Aceptarlo no valida ningún resultado estructural ni habilita justificar obras reales.
+**Estado: ACCEPTED** (2026-11-05, con E1 de T-025). La enmienda E2 (estado `CONTRASTADO`, comparación y CLI) fue aceptada el 2026-11-05. Aceptarlo no valida ningún resultado estructural ni habilita justificar obras reales.
 
 **Relación con otros ADR.**
 - [ADR-001](ADR-001-convenciones-dominio.md): ejes y signos (b según y, h según z; Iy = ∫z²dA), UUID, revisiones inmutables, SI interno y diagnósticos con clave estable.
@@ -59,9 +59,14 @@ Referencias independientes en Python puro (sin dependencias nuevas): cuadratura 
 - Fuera de E1: círculo macizo (ROUND), U, L, T y ejes principales (TK-027); J de I y RHS (TK-028); cortante con acuerdos y `Avy` de la I (TK-029); guardar perfil del editor en un catálogo de usuario y SVG/JSON (TK-030); GUI (TK-031).
 - Aplicación experimental, no apta para justificar obras reales sin validación independiente.
 
-## Pendiente de E2 (no decidido aquí como implementado)
+## Enmienda E2: comparación con catálogo y estado CONTRASTADO (D12-B, D14-A; ACEPTADA 2026-11-05)
 
-Comparación con perfiles de catálogo (EDT-011, diferencia relativa con signo y tolerancia por defecto 1 %), `register_contrast` y estado `CONTRASTADO` (D12-B: nueva revisión con el valor calculado por Veritas; `VERIFICADO` jamás lo emite ningún código), CLI `veritas section i|rhs|shs|chs`, `project add-section`/`assign-section`, y la prueba de la puerta de F3A. Se documentarán en una enmienda al aceptar E2.
+- `core/sections/contrast.py`: `compare_with_snapshot(sección, snapshot, tolerancia)` informa, por A, Iy, Iz y J, el valor de Veritas, el del catálogo, la diferencia relativa CON SIGNO `(Veritas − catálogo)/catálogo` y un dictamen `DENTRO`/`FUERA`/`NO_COMPARABLE`. Una propiedad ausente en cualquiera de los lados (J de la I y del RHS/SHS en Veritas; J no aportada por el catálogo) es `NO_COMPARABLE` y nunca se rellena. Tolerancia por defecto 1 % (parámetro de software, no normativo; editable con `--tol`; rango abierto (0, 1)).
+- `StructuralModel.register_contrast(section_id, snapshot, tolerance)`: las propiedades dentro de tolerancia pasan de `CALCULADO` a `CONTRASTADO` en una NUEVA revisión (max + 1) con la misma geometría, el valor, la unidad y el método calculados por Veritas (nunca el valor del catálogo). `origin` cita catálogo, perfil, revisión, `source_sha256` completo, diferencia relativa y tolerancia. Fuera de tolerancia, o sin propiedades promovibles, no se registra nada. Repetir el contraste es idempotente.
+- Contrato de `SectionRevision` (cambio aditivo): el recálculo antimanipulación acepta una propiedad `CONTRASTADO` si su valor coincide con el recálculo (1e-12 relativo), ignorando solo estado y origen. Un valor distinto se rechaza (`section.properties_mismatch`). El esquema v5 no cambia: `status` ya admitía el valor.
+- `VERIFICADO` no lo emite ningún código: queda reservado a validación externa del usuario. `CONTRASTADO` es una afirmación registrada, no una prueba criptográfica; solo `source_sha256` permite comprobarla contra el catálogo. Los estados `IMPORTADO_SIN_VERIFICAR` del catálogo y su snapshot no se tocan (ADR-009/010 intactos).
+- CLI (`cli_section_editor.py`, sin GUI): `section i|rhs|shs|chs --dim`, `section comparar`, `project add-section [--contrastar REF --db]`, `project assign-section [--parcial]` (reutiliza `replace_sections`, D5 de T-024); `project sections` muestra estado de A, Iy, Iz, J y cortante. `section rect` conserva su salida; `add-section rect` activa el cortante del rectángulo (D10-C). Códigos: 0 ejecutado; 2 diagnóstico o contraste sin propiedades dentro de tolerancia (archivo sin cambios).
+- El catálogo se lee solo por `cli_profiles.read_snapshot` (frontera de la CLI); `section_editor` y `core` no importan `catalogs`.
 
 ## Decisiones del usuario sobre E1 (2026-11-05)
 
@@ -74,3 +79,4 @@ Comparación con perfiles de catálogo (EDT-011, diferencia relativa con signo y
 
 - 2026-11-05: propuesto con E1 de T-025 (dominio, fórmulas, esquema v5 y migración 4 → 5). Aceptado por el usuario con E1.
 - 2026-11-05: decisiones 1–4 del usuario aplicadas (Avy RHS/SHS, cortante CHS); suite 3871 pasadas.
+- 2026-11-05: enmienda E2 redactada con la implementación de E2 (D12-B, D14-A); aceptada por el usuario con E2 (2026-11-05).
