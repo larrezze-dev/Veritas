@@ -88,6 +88,7 @@ from veritas.core.sections.mass import linear_mass, section_area
 from veritas.core.sections.parametric import ParametricShape
 from veritas.core.sections.section import (
     SectionRevision,
+    build_freeform_section,
     build_parametric_section,
     build_rectangular_section,
 )
@@ -702,6 +703,56 @@ class StructuralModel:
             name=latest.name if name is None else name,
         )
         if replace(revised, revision=latest.revision) == latest:
+            return latest
+        return self._sections.register(revised)
+
+    def add_freeform_section(
+        self,
+        outer: Sequence[tuple[Quantity, Quantity]],
+        holes: Sequence[Sequence[tuple[Quantity, Quantity]]] = (),
+        *,
+        name: str = "",
+    ) -> SectionRevision:
+        """Crea una sección de croquis libre (revisión 1; T-029, ADR-013).
+
+        Una geometría inválida (EDT-004) se rechaza con su diagnóstico y no se registra nada.
+        No altera ``model_revision``.
+        """
+        return self._sections.register(
+            build_freeform_section(new_entity_id(), 1, outer=outer, holes=holes, name=name)
+        )
+
+    def revise_freeform_section(
+        self,
+        section_id: UUID,
+        *,
+        outer: Sequence[tuple[Quantity, Quantity]] | None = None,
+        holes: Sequence[Sequence[tuple[Quantity, Quantity]]] | None = None,
+        name: str | None = None,
+    ) -> SectionRevision:
+        """Nueva revisión (max+1) con otro croquis; las barras conservan la anterior.
+
+        Sin ``outer``/``holes`` se conserva el contorno actual. Si el contenido no cambia
+        devuelve la revisión actual. Las propiedades vuelven a ser ``CALCULADO``: un contraste
+        previo no se hereda (la geometría pudo cambiar).
+        """
+        latest = self._sections.latest(section_id)
+        current = latest.require_freeform()
+
+        def quantities(points: Sequence[tuple[float, float]]) -> list[tuple[Quantity, Quantity]]:
+            return [(Quantity(y, LENGTH), Quantity(z, LENGTH)) for y, z in points]
+
+        revised = build_freeform_section(
+            section_id,
+            latest.revision + 1,
+            outer=quantities(current.outer) if outer is None else outer,
+            holes=[quantities(h) for h in current.holes] if holes is None else holes,
+            name=latest.name if name is None else name,
+        )
+        same_content = replace(revised, revision=latest.revision)
+        if same_content == latest or (
+            same_content.parameters == latest.parameters and same_content.name == latest.name
+        ):
             return latest
         return self._sections.register(revised)
 

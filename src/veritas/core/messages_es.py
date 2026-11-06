@@ -156,7 +156,17 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Dimensión «{text}» no válida: use nombre=valor, por ejemplo h=300 (en la unidad de "
         "--unidad)."
     ),
-    "editor.cli_shape": ("Forma «{shape}» no válida para el editor: use rect, i, rhs, shs o chs."),
+    "editor.cli_shape": (
+        "Forma «{shape}» no válida para el editor: use rect, i, rhs, shs, chs, u, l o t."
+    ),
+    "editor.cli_vertex": (
+        "Vértice «{text}» no válido: use y,z (números finitos), por ejemplo 0.2,0.1; los "
+        "vértices se separan con «;»."
+    ),
+    "editor.cli_sketch_usage": (
+        "El croquis necesita --exterior con al menos un vértice; --hueco se repite por hueco."
+    ),
+    "section.template_rule": "Plantilla {shape}: se exige {rule}.",
     "editor.cli_contrast_usage": "--contrastar y --db se indican juntos (el catálogo se lee solo).",
     "editor.cli_rect_dimensions": "El rectángulo se define con --dim b=… h=… y nada más.",
     "editor.cli_not_comparable": (

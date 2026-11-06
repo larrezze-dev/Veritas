@@ -18,6 +18,7 @@ sustitución estricta rechazada, contraste sin propiedades dentro de tolerancia)
 """
 
 import argparse
+import math
 from collections.abc import Sequence
 from uuid import UUID
 
@@ -47,17 +48,25 @@ from veritas.core.sections.contrast import (
     ContrastVerdict,
 )
 from veritas.core.sections.parametric import ParametricShape
+from veritas.core.sections.polygon import principal_axes
 from veritas.core.sections.properties import PropertyStatus, SectionProperty
-from veritas.core.sections.section import SectionRevision, build_rectangular_section
+from veritas.core.sections.section import (
+    SectionFamily,
+    SectionRevision,
+    build_rectangular_section,
+)
 from veritas.core.units import Quantity
 from veritas.persistence.errors import value_error
 from veritas.persistence.project import Project, save_project
 from veritas.persistence.runs import Validity, validity
 from veritas.section_editor.draft import SectionDraft
+from veritas.section_editor.sketch import SketchContour, SketchDraft
+from veritas.section_editor.templates import template_draft
 
-SHAPE_CHOICES = ("rect", "i", "rhs", "shs", "chs")
-SECTION_EDITOR_COMMANDS = ("i", "rhs", "shs", "chs", "comparar")
-PROJECT_EDITOR_COMMANDS = ("add-section", "assign-section")
+SHAPE_CHOICES = ("rect", "i", "rhs", "shs", "chs", "u", "l", "t")
+TEMPLATE_SHAPES = ("u", "l", "t")
+SECTION_EDITOR_COMMANDS = ("i", "rhs", "shs", "chs", "u", "l", "t", "sketch", "comparar")
+PROJECT_EDITOR_COMMANDS = ("add-section", "add-sketch", "assign-section")
 
 _PROFILE = next(p for p in BUILTIN_PROFILES if p.name == "SI")
 _ROWS = (
@@ -84,11 +93,37 @@ def _dim_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _sketch_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--exterior",
+        required=True,
+        metavar='"y,z;y,z;…"',
+        help="Vértices del contorno exterior (cierre implícito: no repita el primero).",
+    )
+    parser.add_argument(
+        "--hueco",
+        action="append",
+        default=[],
+        metavar='"y,z;y,z;…"',
+        help="Vértices de un hueco; se repite por hueco.",
+    )
+    parser.add_argument(
+        "--unidad", "--unit", dest="unidad", default="m", help="Unidad de longitud (m, cm, mm)."
+    )
+
+
 def add_section_parsers(section_sub: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     """Registra las formas del editor y ``comparar`` bajo ``veritas section``."""
-    for shape in ("i", "rhs", "shs", "chs"):
+    for shape in ("i", "rhs", "shs", "chs", "u", "l", "t"):
         parser = section_sub.add_parser(shape, help=f"Propiedades de un perfil {shape.upper()}.")
         _dim_arguments(parser)
+    sketch = section_sub.add_parser(
+        "sketch", help="Propiedades de un croquis libre (contorno exterior y huecos)."
+    )
+    _sketch_arguments(sketch)
+    sketch.add_argument("--ref", metavar="CAT/SERIE/DES[@REV]", help="Compara con este perfil.")
+    sketch.add_argument("--db", metavar="RUTA", help="Catálogo SQLite (obligatorio con --ref).")
+    sketch.add_argument("--tol", default=str(DEFAULT_TOLERANCE), help="Tolerancia relativa (0.01).")
     compare = section_sub.add_parser(
         "comparar", help="Compara un perfil del editor con uno de catálogo (solo informa)."
     )
@@ -111,6 +146,17 @@ def add_project_section_parsers(sub: "argparse._SubParsersAction[argparse.Argume
     add.add_argument("--contrastar", metavar="CAT/SERIE/DES[@REV]", help="Registra CONTRASTADO.")
     add.add_argument("--db", metavar="RUTA", help="Catálogo SQLite (obligatorio con --contrastar).")
     add.add_argument("--tol", default=str(DEFAULT_TOLERANCE), help="Tolerancia relativa (0.01).")
+    sketch = sub.add_parser("add-sketch", help="Añade un croquis libre al proyecto.")
+    sketch.add_argument("file", metavar="ARCHIVO")
+    _sketch_arguments(sketch)
+    sketch.add_argument(
+        "--nombre", metavar="TEXTO", help="Nombre de la sección (por defecto, auto)."
+    )
+    sketch.add_argument("--contrastar", metavar="CAT/SERIE/DES[@REV]", help="Registra CONTRASTADO.")
+    sketch.add_argument(
+        "--db", metavar="RUTA", help="Catálogo SQLite (obligatorio con --contrastar)."
+    )
+    sketch.add_argument("--tol", default=str(DEFAULT_TOLERANCE), help="Tolerancia relativa (0.01).")
     assign = sub.add_parser("assign-section", help="Asigna una sección del proyecto a barras.")
     assign.add_argument("file", metavar="ARCHIVO")
     assign.add_argument("--todas", action="store_true", help="Todas las barras del proyecto.")
@@ -147,6 +193,32 @@ def _parse_dimensions(texts: Sequence[str], unit: str) -> dict[str, Quantity]:
     return values
 
 
+def _parse_contour(text: str, unit: str) -> SketchContour:
+    length_unit = u.get_unit(unit)
+    points = []
+    for item in text.split(";"):
+        parts = item.split(",")
+        try:
+            if len(parts) != 2:  # noqa: PLR2004 (par y, z)
+                raise ValueError
+            y, z = float(parts[0]), float(parts[1])
+            if not (math.isfinite(y) and math.isfinite(z)):
+                raise ValueError
+        except ValueError:
+            raise _usage("editor.cli_vertex", {"text": item.strip()}) from None
+        points.append((Quantity.of(y, length_unit), Quantity.of(z, length_unit)))
+    return SketchContour(tuple(points))
+
+
+def _sketch_draft(args: argparse.Namespace) -> SketchDraft:
+    if not args.exterior.strip():
+        raise _usage("editor.cli_sketch_usage")
+    return SketchDraft(
+        _parse_contour(args.exterior, args.unidad),
+        tuple(_parse_contour(h, args.unidad) for h in args.hueco),
+    )
+
+
 def _parse_tolerance(text: str) -> float:
     try:
         return float(text)
@@ -181,6 +253,8 @@ def _build(
         )
     if shape not in SHAPE_CHOICES:
         raise _usage("editor.cli_shape", {"shape": shape})
+    if shape in TEMPLATE_SHAPES:
+        return template_draft(shape, dimensions).build(section_id, 1, name=name)
     draft = SectionDraft.of(ParametricShape(shape.upper()), dimensions)
     return draft.build(section_id, 1, name=name)
 
@@ -193,7 +267,9 @@ def property_lines(section: SectionRevision) -> list[str]:
     """Líneas de estado de A, Iy, Iz, J y del cortante de una sección (sin catálogo)."""
     lines = []
     for label, attribute, kind in _ROWS:
-        if attribute in ("centroid_y", "centroid_z", "iyz"):
+        if attribute in ("centroid_y", "centroid_z", "iyz") and (
+            section.family is not SectionFamily.FREEFORM
+        ):
             continue
         prop: SectionProperty = getattr(section.properties, attribute)
         lines.append(f"      {label}: {_fmt(prop, kind)} · {prop.status}")
@@ -202,7 +278,11 @@ def property_lines(section: SectionRevision) -> list[str]:
             reason = f" ({prop.origin})" if prop.status is PropertyStatus.NO_DISPONIBLE else ""
             lines.append(f"      {label}: {_fmt(prop, QuantityKind.AREA)} · {prop.status}{reason}")
     else:
-        lines.append("      Cortante (Avy, Avz): no calculado")
+        lines.append(
+            "      Cortante (Avy, Avz): no aplicable (croquis libre)"
+            if section.family is SectionFamily.FREEFORM
+            else "      Cortante (Avy, Avz): no calculado"
+        )
     return lines
 
 
@@ -216,12 +296,17 @@ def _properties_report(section: SectionRevision, title: str) -> str:
         )
         for label, attr, kind in _ROWS
     ]
-    lines = [
-        title,
-        "Sistema de referencia: origen en el centroide, ejes y/z locales de la barra; "
-        "Iy, Iz, Iyz centroidales (ADR-001 §1).",
-        _table(("Propiedad", "Valor", "Estado", "Método"), rows),
-    ]
+    freeform = section.family is SectionFamily.FREEFORM
+    reference = (
+        "Sistema de referencia: ejes y/z locales del croquis; el centroide (yc, zc) se da en "
+        "ese sistema; Iy, Iz, Iyz centroidales (ADR-001 §1)."
+        if freeform
+        else "Sistema de referencia: origen en el centroide, ejes y/z locales de la barra; "
+        "Iy, Iz, Iyz centroidales (ADR-001 §1)."
+    )
+    lines = [title, reference, _table(("Propiedad", "Valor", "Estado", "Método"), rows)]
+    if freeform:
+        lines.extend(_freeform_notes(section))
     if section.shear is not None:
         shear_rows = [
             (
@@ -235,6 +320,36 @@ def _properties_report(section: SectionRevision, title: str) -> str:
         lines.append("Área de cortante energética (corte recto; no es la de pared delgada):")
         lines.append(_table(("Propiedad", "Valor", "Estado", "Método"), shear_rows))
     return "\n".join(lines)
+
+
+_NOISE = 1e-9
+_NO_J = (
+    "J no disponible: no hay método validado para un croquis libre; la sección no es apta "
+    "para análisis 3D ni lleva área de cortante."
+)
+
+
+def _freeform_notes(section: SectionRevision) -> list[str]:
+    """Ejes principales (derivados) y límites declarados de un croquis libre."""
+    props = section.properties
+    iy, iz, iyz = (getattr(props, n).value for n in ("iy", "iz", "iyz"))
+    lines = []
+    if iy is not None and iz is not None and iyz is not None:
+        # Iyz del orden del redondeo (secciones simétricas) es ruido: no define un ángulo.
+        axes = principal_axes(iy, iz, 0.0 if abs(iyz) <= _NOISE * math.sqrt(iy * iz) else iyz)
+        if axes.i_max - axes.i_min <= _NOISE * axes.i_max:
+            lines.append(
+                f"Ejes principales indeterminados: Iy ≈ Iz e Iyz ≈ 0 (I = {axes.i_max:.6e} m⁴)."
+            )
+            lines.append(_NO_J)
+            return lines
+        lines.append(
+            "Ejes principales (ADR-001: inercia respecto al eje): el eje de I_max = "
+            f"{axes.i_max:.6e} m⁴ forma {math.degrees(axes.angle):.4f}° con +y (hacia +z); "
+            f"el perpendicular tiene I_min = {axes.i_min:.6e} m⁴."
+        )
+    lines.append(_NO_J)
+    return lines
 
 
 def _comparison_lines(report: ComparisonReport) -> list[str]:
@@ -281,12 +396,36 @@ def _comparison_lines(report: ComparisonReport) -> list[str]:
 
 def run_section_command(args: argparse.Namespace) -> str:
     """``section i|rhs|shs|chs`` y ``section comparar``; el texto va a stdout."""
+    if args.section_command == "sketch":
+        return _sketch(args)
     dimensions = _parse_dimensions(args.dim, args.unidad)
     if args.section_command == "comparar":
         return _compare(args, dimensions)
     section = _build(args.section_command, dimensions, section_id=new_entity_id())
     title = f"Perfil {args.section_command.upper()}: {' '.join(args.dim)} {args.unidad}"
     return _properties_report(section, title)
+
+
+def _sketch(args: argparse.Namespace) -> str:
+    """``section sketch``: propiedades de un croquis y, con ``--ref``, su comparación."""
+    if (args.ref is None) != (args.db is None):
+        raise _usage("editor.cli_contrast_usage")
+    tolerance = _parse_tolerance(args.tol)
+    section = _sketch_draft(args).build(new_entity_id(), 1)
+    parameters = section.require_freeform()
+    title = (
+        f"Croquis libre: {len(parameters.outer)} vértice(s) exteriores, "
+        f"{len(parameters.holes)} hueco(s) ({args.unidad})"
+    )
+    lines = [_properties_report(section, title)]
+    if args.ref is not None:
+        snapshot = read_snapshot(args.db, args.ref)
+        model = StructuralModel()
+        model.register_section(section)
+        _, report = model.register_contrast(section.id, snapshot, tolerance=tolerance)
+        lines.extend(_comparison_lines(report))
+        lines.append("Solo informe: ningún estado cambia.")
+    return "\n".join(lines)
 
 
 def _compare(args: argparse.Namespace, dimensions: dict[str, Quantity]) -> str:
@@ -313,6 +452,8 @@ def run_project_editor_command(args: argparse.Namespace, project: Project) -> tu
     """``add-section`` o ``assign-section``."""
     if args.project_command == "add-section":
         return _add_section(args, project)
+    if args.project_command == "add-sketch":
+        return _add_sketch(args, project)
     return _assign_section(args, project)
 
 
@@ -335,10 +476,24 @@ def _add_section(args: argparse.Namespace, project: Project) -> tuple[str, int]:
         raise _usage("editor.cli_contrast_usage")
     dimensions = _parse_dimensions(args.dim, args.unidad)
     name = args.nombre or _section_name(args.shape, args.dim, args.unidad)
+    built = _build(args.shape, dimensions, section_id=new_entity_id(), name=name)
+    return _register_section(args, project, built, name)
+
+
+def _add_sketch(args: argparse.Namespace, project: Project) -> tuple[str, int]:
+    if (args.contrastar is None) != (args.db is None):
+        raise _usage("editor.cli_contrast_usage")
+    draft = _sketch_draft(args)
+    name = args.nombre or f"CROQUIS {len(draft.outer.points)}v/{len(draft.holes)}h {args.unidad}"
+    return _register_section(args, project, draft.build(new_entity_id(), 1, name=name), name)
+
+
+def _register_section(
+    args: argparse.Namespace, project: Project, built: SectionRevision, name: str
+) -> tuple[str, int]:
+    """Registra la sección construida, la contrasta si se pide y guarda el proyecto."""
     model = project.model
-    section = model.register_section(
-        _build(args.shape, dimensions, section_id=new_entity_id(), name=name)
-    )
+    section = model.register_section(built)
     lines = [f"Sección «{name}» añadida: {section.family} · rev {section.revision}"]
     if args.contrastar is not None:
         snapshot = read_snapshot(args.db, args.contrastar)

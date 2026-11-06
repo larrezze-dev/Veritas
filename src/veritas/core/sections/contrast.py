@@ -21,6 +21,7 @@ from typing import Final
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError
 from veritas.core.sections.catalog import CatalogSnapshot
 from veritas.core.sections.parametric import ParametricParameters
+from veritas.core.sections.polygon import FreeformParameters
 from veritas.core.sections.properties import PropertyStatus, SectionProperties, SectionProperty
 from veritas.core.sections.section import SectionFamily, SectionRevision
 
@@ -127,6 +128,8 @@ def _notes(section: SectionRevision, snapshot: CatalogSnapshot) -> tuple[str, ..
         listed = {d.name for d in snapshot.dimensions}
         if has_fillet != any(n in listed for n in _FILLET_NAMES):
             notes.append("editor.compare_fillet_differs")
+    elif isinstance(parameters, FreeformParameters):
+        pass  # Un croquis libre no declara forma: el aviso de forma no aplica (T-029 E2).
     elif snapshot.shape != "RECT":
         notes.append("editor.compare_shape_differs")
     return tuple(notes)

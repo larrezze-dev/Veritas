@@ -84,7 +84,7 @@
 | T-MAT-001 | Intentar dos materiales en una barra | Invariante impide operación | F1A | SUPERADO (T-004 aceptado 2026-10-27: `tests/test_model_assignment.py`) |
 | T-SEC-001 | Rectángulo b×h | Área y momentos analíticos correctos | F1A | SUPERADO (T-004 aceptado 2026-10-27: `tests/test_sections_rectangular.py`) |
 | T-SEC-002 | Anillo con radios R,r | A=π(R²−r²), I=π(R⁴−r⁴)/4 | F3A | NO INICIADO |
-| T-SEC-003 | Polígono con hueco | Área neta y centroide correctos | F3B | SUPERADO en E1 (T-029 E1 aceptada 2026-11-06: `tests/test_freeform_section.py`, referencias por Steiner y tensor) |
+| T-SEC-003 | Polígono con hueco | Área neta y centroide correctos | F3B | SUPERADO en E1 (T-029 E1 aceptada 2026-11-06: `tests/test_freeform_section.py`, referencias por Steiner y tensor); puerta de F3B de extremo a extremo por CLI (T-029 E2 aceptada 2026-11-06: `tests/test_f3b_gate.py`) |
 | T-CAT-001 | CSV con unidades inválidas | Importación informada y sin corrupción | F2 | SUPERADO (T-022 E2 aceptada 2026-11-03: unidad desconocida o de otra dimensión = error de mapeo antes de leer filas; fila no representable = fila rechazada; el archivo no cambia: `tests/test_catalog_columns.py`, `test_catalog_importer.py`, `test_catalog_cli.py`) |
 | T-FEM-001 | Viga biapoyada, P central | Reacciones P/2, Mmax=PL/4 (con signo ADR-001: My = −PL/4), flecha −PL³/(48EI); tol 1e-9 (`tests/test_fem_reference.py`) | F1B (T-009) | SUPERADO (T-009 aceptado 2026-10-28) |
 | T-FEM-002 | Voladizo con q | Flecha extremo qL⁴/(8EI) bajo hipótesis adecuadas (Euler-Bernoulli sin cortante); n = 1, 2, 4 barras; tol 1e-9 | F1B (T-009) | SUPERADO (T-009 aceptado 2026-10-28) |

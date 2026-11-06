@@ -452,7 +452,7 @@ def _sections(args: argparse.Namespace, project: Project) -> str:
             if commercial:
                 lines.append(f"    {commercial}")
         if section.family is not SectionFamily.CATALOGO and (
-            section.family is SectionFamily.PARAMETRICA
+            section.family in (SectionFamily.PARAMETRICA, SectionFamily.FREEFORM)
             or section.shear is not None
             or any(
                 getattr(section.properties, n).status is PropertyStatus.CONTRASTADO
