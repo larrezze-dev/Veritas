@@ -15,6 +15,7 @@ Catálogo de perfiles en un archivo SQLite independiente del proyecto. Todos los
   revisión) o los lotes de uno.
 - ``catalog show --db RUTA --catalogo N SERIE DESIGNACIÓN [--revision R]``: un perfil completo.
 - ``catalog search --db RUTA [--catalogo N] [--serie S] [--designacion D] [--familia F]
+  [--fabricante TEXTO] [--material M [--incluir-sin-declarar]]
   [--area R] [--iy R] [--iz R] [--j R] [--masa R] [--dim NOMBRE R] [--orden CAMPO[:desc]]
   [--limite N]``: busca y ordena perfiles (última revisión) en uno o todos los catálogos. Un
   rango ``R`` es ``A..B UNIDAD``, ``A.. UNIDAD``, ``..B UNIDAD``, ``>=A UNIDAD`` o
@@ -74,6 +75,7 @@ from veritas.catalogs.importer import (
     read_source,
 )
 from veritas.catalogs.model import (
+    COMPATIBLE_MATERIALS,
     CatalogInfo,
     CatalogProfile,
     ImportBatch,
@@ -197,6 +199,21 @@ def _add_query_parsers(
     searching.add_argument("--serie", metavar="TEXTO", help="Subcadena de la serie.")
     searching.add_argument("--designacion", metavar="TEXTO", help="Subcadena de la designación.")
     searching.add_argument("--familia", choices=[f.value for f in ProfileFamily])
+    searching.add_argument(
+        "--fabricante",
+        metavar="TEXTO",
+        help="Fabricante exacto (sin distinguir mayúsculas ni acentos).",
+    )
+    searching.add_argument(
+        "--material",
+        choices=list(COMPATIBLE_MATERIALS),
+        help="Material que el perfil declara compatible.",
+    )
+    searching.add_argument(
+        "--incluir-sin-declarar",
+        action="store_true",
+        help="Con --material: incluye los perfiles que no declaran materiales.",
+    )
     for option, label in (
         ("area", "área"),
         ("iy", "Iy"),
@@ -456,6 +473,16 @@ def _revision(
     )
 
 
+def _commercial_lines(data: ProfileData) -> list[str]:
+    """Fabricante y materiales compatibles, solo si el perfil los declara (T-028)."""
+    lines: list[str] = []
+    if data.manufacturer is not None:
+        lines.append(f"  fabricante: {data.manufacturer}")
+    if data.compatible_materials:
+        lines.append("  materiales compatibles: " + ", ".join(data.compatible_materials))
+    return lines
+
+
 def _describe(store: CatalogStore, info: CatalogInfo, profile: CatalogProfile, latest: int) -> str:
     return "\n".join([*_describe_lines(store, info, profile, latest), _WARNING])
 
@@ -471,6 +498,7 @@ def _describe_lines(
         f"  id: {profile.id}",
         f"  catálogo: «{info.name}» ({'protegido' if info.protected else 'editable'})",
         f"  familia: {data.family.value}",
+        *_commercial_lines(data),
         "  dimensiones: "
         + (", ".join(f"{d.name} = {d.value:.10g} m" for d in data.dimensions) or "ninguna"),
         "  propiedades (SI):",
@@ -532,7 +560,15 @@ def _criteria(args: argparse.Namespace) -> Criteria:
         field = dimension_field(name)
         ranges.append((field, parse_range(text, field, f"--dim {name}")))
     family = None if args.familia is None else ProfileFamily(args.familia)
-    return Criteria(args.serie, args.designacion, family, tuple(ranges))
+    return Criteria(
+        args.serie,
+        args.designacion,
+        family,
+        tuple(ranges),
+        manufacturer=args.fabricante,
+        material=args.material,
+        include_undeclared=args.incluir_sin_declarar,
+    )
 
 
 def _entries(store: CatalogStore, name: str | None) -> list[Entry]:

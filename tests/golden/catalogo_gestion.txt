@@ -192,7 +192,7 @@ $ veritas catalog create --db d.sqlite --nombre Re --fuente S --licencia L --edi
 Catálogo «Re» creado: d.sqlite
   id: <uuid>
   fuente: S · licencia: L · edición: 1
-  protegido: no · esquema v3
+  protegido: no · esquema v4
 Importe perfiles con «veritas catalog import».
 --- stderr
 --- exit 0
@@ -211,7 +211,7 @@ Aviso: aplicación experimental; las propiedades importadas quedan IMPORTADO_SIN
 $ veritas catalog verify --db c.sqlite
 --- stdout
 Catálogo íntegro: c.sqlite
-  esquema v3 · 200 revisión(es) comprobadas · 1 lote(s)
+  esquema v4 · 200 revisión(es) comprobadas · 1 lote(s)
 --- stderr
 --- exit 0
 

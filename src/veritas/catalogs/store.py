@@ -58,7 +58,7 @@ from veritas.catalogs.model import (
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, Location
 from veritas.core.validation import invalid_type
 
-SCHEMA_VERSION: Final = 3
+SCHEMA_VERSION: Final = 4
 APPLICATION_ID: Final = 0x56434154  # «VCAT»
 _MAX_ID_ATTEMPTS: Final = 1000
 
@@ -145,13 +145,33 @@ def _migration_2_to_3(connection: sqlite3.Connection) -> None:
         connection.execute(statement)
 
 
-MIGRATIONS: Final[dict[int, Migration]] = {1: _migration_1_to_2, 2: _migration_2_to_3}
+_MIGRATION_3_TO_4: Final = (
+    "ALTER TABLE profile_revisions ADD COLUMN manufacturer TEXT",
+    "ALTER TABLE profile_revisions ADD COLUMN compatible_materials TEXT",
+)
+"""Esquema v4 (ADR-012, T-028 E1): fabricante y materiales compatibles del perfil, derivados de
+``content_json`` (que sigue siendo la fuente de verdad; ``verify`` los contrasta). Nulos en las
+revisiones anteriores, que no declaran nada; ``compatible_materials`` es la lista separada por
+comas en el orden canónico."""
+
+
+def _migration_3_to_4(connection: sqlite3.Connection) -> None:
+    for statement in _MIGRATION_3_TO_4:
+        connection.execute(statement)
+
+
+MIGRATIONS: Final[dict[int, Migration]] = {
+    1: _migration_1_to_2,
+    2: _migration_2_to_3,
+    3: _migration_3_to_4,
+}
 """Migraciones reales registradas, ``N -> N+1``. ``create`` construye v1 y aplica estas mismas
 migraciones, de modo que un archivo nuevo y uno migrado tienen el mismo esquema."""
 
 _PROFILE_COLUMNS: Final = (
     "profile_id, revision, catalog_id, series, designation, family, "
-    "area, iy, iz, torsion_constant, linear_mass, content_json, content_sha256"
+    "area, iy, iz, torsion_constant, linear_mass, content_json, content_sha256, "
+    "manufacturer, compatible_materials"
 )
 _SCALAR_FIELDS: Final = ("area", "iy", "iz", "torsion_constant", "linear_mass")
 _BATCH_COLUMNS: Final = (
@@ -745,7 +765,7 @@ class CatalogStore:
         props = profile.properties
         con.execute(
             f"INSERT INTO profile_revisions ({_PROFILE_COLUMNS})"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 str(profile.id),
                 profile.revision,
@@ -756,6 +776,8 @@ class CatalogStore:
                 *(getattr(props, name).value for name in _SCALAR_FIELDS),
                 profile_json(profile),
                 profile_sha256(profile),
+                profile.data.manufacturer,
+                _materials_column(profile.data.compatible_materials),
             ),
         )
 
@@ -1145,6 +1167,11 @@ def _verify_rows(rows: list[tuple[object, ...]]) -> list[Diagnostic]:
     return issues
 
 
+def _materials_column(materials: tuple[str, ...]) -> str | None:
+    """Columna derivada de ``compatible_materials``: comas, o nulo si no declara nada."""
+    return ",".join(materials) if materials else None
+
+
 def _verify_row(row: tuple[object, ...]) -> list[Diagnostic]:
     profile_id, revision = str(row[0]), int(str(row[1]))
     text, stored_hash = str(row[11]), str(row[12])
@@ -1164,6 +1191,8 @@ def _verify_row(row: tuple[object, ...]) -> list[Diagnostic]:
         "designation": profile.designation,
         "family": profile.family.value,
         **{name: getattr(profile.properties, name).value for name in _SCALAR_FIELDS},
+        "manufacturer": profile.data.manufacturer,
+        "compatible_materials": _materials_column(profile.data.compatible_materials),
     }
     names = (
         "profile_id",
@@ -1174,9 +1203,12 @@ def _verify_row(row: tuple[object, ...]) -> list[Diagnostic]:
         "family",
         *_SCALAR_FIELDS,
     )
+    stored_row = (*row[:11], row[13], row[14])
     differing = [
         name
-        for name, stored in zip(names, row[:11], strict=True)
+        for name, stored in zip(
+            (*names, "manufacturer", "compatible_materials"), stored_row, strict=True
+        )
         if repr(stored) != repr(expected[name])
     ]
     if differing:

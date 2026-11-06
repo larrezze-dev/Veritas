@@ -963,6 +963,10 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Estado {status} no admitido en la propiedad {field} de un perfil de catálogo: solo "
         "IMPORTADO_SIN_VERIFICAR o NO_DISPONIBLE."
     ),
+    "catalog.invalid_manufacturer": "Fabricante no válido (texto vacío o no textual): «{value}».",
+    "catalog.invalid_material": (
+        "Material compatible no válido «{value}»; valores admitidos: {allowed}."
+    ),
     "catalog.invalid_warning": "Clave de aviso de perfil no válida o repetida: «{key}».",
     "catalog.invalid_document": (
         "Documento de perfil no válido en {path} (faltan: {missing}; sobran: {extra})."
@@ -1048,6 +1052,13 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "catalog.row_not_positive": "{field}: «{value}» debe ser mayor que 0.",
     "catalog.row_unrepresentable": "{field}: «{value}» no es representable en SI.",
     "catalog.row_family_unknown": "Familia «{value}» desconocida. Familias: {known}.",
+    "catalog.row_material_unknown": (
+        "Material compatible «{value}» desconocido; no se ignora (la fila se rechaza). "
+        "Valores y alias admitidos: {known}."
+    ),
+    "catalog.mapping_material": (
+        "Alias de material no válido en {path}: «{value}» no es una familia de material admitida."
+    ),
     "catalog.row_duplicate_key": (
         "Clave repetida en el archivo: serie «{series}», designación «{designation}» (primera "
         "aparición en la línea {first_line}); se rechazan todas las filas con esa clave."

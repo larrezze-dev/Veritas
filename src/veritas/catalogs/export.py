@@ -66,13 +66,31 @@ def dimension_names(profiles: Sequence[CatalogProfile]) -> list[str]:
 def csv_text(profiles: Sequence[CatalogProfile]) -> str:
     """CSV nativo (SI) de los perfiles, en el orden recibido; reimportable sin mapeo."""
     names = dimension_names(profiles)
-    header = [*TEXT_COLUMNS, *PROPERTY_FIELDS, *(f"{DIMENSION_PREFIX}{n}" for n in names)]
+    # T-028: las columnas comerciales solo si algún perfil las declara (CSV antiguo intacto).
+    commercial = [
+        column
+        for column, present in (
+            ("manufacturer", any(p.data.manufacturer is not None for p in profiles)),
+            ("compatible_materials", any(p.data.compatible_materials for p in profiles)),
+        )
+        if present
+    ]
+    header = [
+        *TEXT_COLUMNS,
+        *commercial,
+        *PROPERTY_FIELDS,
+        *(f"{DIMENSION_PREFIX}{n}" for n in names),
+    ]
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(header)
     for profile in profiles:
         dims = {d.name: d.value for d in profile.data.dimensions}
         cells: list[str] = [profile.series, profile.designation, profile.family.value]
+        if "manufacturer" in commercial:
+            cells.append(profile.data.manufacturer or "")
+        if "compatible_materials" in commercial:
+            cells.append(";".join(profile.data.compatible_materials))
         for field in PROPERTY_FIELDS:
             value = getattr(profile.properties, field).value
             cells.append("" if value is None else repr(float(value)))

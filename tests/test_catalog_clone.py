@@ -62,15 +62,15 @@ def update(path: Path, sql: str, *params: object) -> None:
 # --- Esquema v3 y migración ----------------------------------------------------------------
 
 
-def test_the_schema_is_v3_and_a_new_file_has_the_clone_columns(tmp_path: Path) -> None:
-    assert SCHEMA_VERSION == 3
+def test_the_schema_is_v4_and_a_new_file_has_the_clone_columns(tmp_path: Path) -> None:
+    assert SCHEMA_VERSION == 4
     path = tmp_path / "nuevo.sqlite"
     CatalogStore.create(path).close()
     assert "cloned_from" in table_columns(path, "catalogs")
     assert set(PROFILE_COLUMNS) <= set(table_columns(path, "profile_revisions"))
 
 
-def test_a_v2_file_migrates_to_v3_keeping_every_value_and_verifying(tmp_path: Path) -> None:
+def test_a_v2_file_migrates_to_v4_keeping_every_value_and_verifying(tmp_path: Path) -> None:
     """v1 → v2 con la migración real de T-022 y después v2 → v3 al abrirlo con el almacén actual."""
     path = tmp_path / "v2.sqlite"
     catalog_id = v1_file(path)
@@ -85,7 +85,7 @@ def test_a_v2_file_migrates_to_v3_keeping_every_value_and_verifying(tmp_path: Pa
     assert "cloned_from" not in table_columns(path, "catalogs")
 
     with CatalogStore.open(path) as store:
-        assert store.version == 3
+        assert store.version == 4
         (profile,) = store.list_profiles(catalog_id)
         assert profile.designation == "OLD"
         assert store.clone_source(catalog_id) is None

@@ -79,6 +79,8 @@ def make_data(  # noqa: PLR0913 (campos opcionales por nombre, para variar un ca
     torsion: float | None = None,
     family: ProfileFamily = ProfileFamily.I,
     warnings: tuple[str, ...] = (),
+    manufacturer: str | None = None,
+    compatible_materials: tuple[str, ...] = (),
 ) -> ProfileData:
     return ProfileData(
         series=series,
@@ -88,6 +90,8 @@ def make_data(  # noqa: PLR0913 (campos opcionales por nombre, para variar un ca
         properties=make_properties(area=area, torsion=torsion),
         provenance=PROVENANCE,
         warnings=warnings,
+        manufacturer=manufacturer,
+        compatible_materials=compatible_materials,
     )
 
 

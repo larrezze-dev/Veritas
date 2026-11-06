@@ -19,6 +19,7 @@ Reglas (decisiones D2–D6 del plan):
 
 import math
 import re
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -190,6 +191,12 @@ class Criteria:
     designation: str | None = None
     family: ProfileFamily | None = None
     ranges: tuple[tuple[str, Range], ...] = ()
+    manufacturer: str | None = None
+    """Fabricante exacto, sin distinguir mayúsculas ni acentos (T-028, D5)."""
+    material: str | None = None
+    """Familia de material que el perfil debe declarar compatible (T-028, D5)."""
+    include_undeclared: bool = False
+    """Con ``material``: incluye también los perfiles que no declaran materiales."""
 
 
 @dataclass(frozen=True)
@@ -204,6 +211,25 @@ class SearchResult:
     matches: tuple[Entry, ...]
     excluded_missing: int
     missing: tuple[tuple[str, int], ...]
+
+
+def _fold(text: str) -> str:
+    """Texto comparable: sin acentos, sin mayúsculas y sin espacios en los extremos."""
+    decomposed = unicodedata.normalize("NFKD", text.strip())
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+
+def _commercial_matches(profile: CatalogProfile, criteria: Criteria) -> bool:
+    data = profile.data
+    if criteria.manufacturer is not None and (
+        data.manufacturer is None or _fold(data.manufacturer) != _fold(criteria.manufacturer)
+    ):
+        return False
+    if criteria.material is not None:
+        if not data.compatible_materials:
+            return criteria.include_undeclared
+        return criteria.material in data.compatible_materials
+    return True
 
 
 def _text_matches(needle: str | None, haystack: str) -> bool:
@@ -221,6 +247,7 @@ def search(entries: Sequence[Entry], criteria: Criteria) -> SearchResult:
             not _text_matches(criteria.series, profile.series)
             or not _text_matches(criteria.designation, profile.designation)
             or (criteria.family is not None and profile.family is not criteria.family)
+            or not _commercial_matches(profile, criteria)
         ):
             continue
         outside = False

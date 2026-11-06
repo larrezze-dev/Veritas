@@ -77,7 +77,7 @@ def test_clone_of_a_protected_catalog_is_editable_traceable_and_leaves_the_origi
     listing = run(capsys, "list", "--db", DB)[1]
     assert re.search(r"^Copia\s+100\s+no\s", listing, flags=re.MULTILINE)
     assert re.search(r"^Sint\s+100\s+sí\s", listing, flags=re.MULTILINE)
-    assert "esquema v3" in run(capsys, "verify", "--db", DB)[1]
+    assert "esquema v4" in run(capsys, "verify", "--db", DB)[1]
 
 
 def test_show_and_ficha_state_that_a_revision_was_copied_by_a_clone(

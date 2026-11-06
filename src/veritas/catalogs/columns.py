@@ -25,6 +25,7 @@ from typing import Final
 
 from veritas.catalogs.errors import CatalogError, catalog_error
 from veritas.catalogs.model import (
+    COMPATIBLE_MATERIALS,
     PROPERTY_DIMENSIONS,
     ProfileFamily,
     canonical_json,
@@ -39,7 +40,7 @@ DEFAULT_METHOD: Final = "Importación de archivo con mapeo de columnas"
 NATIVE_METHOD: Final = "Importación de archivo en formato nativo (columnas por nombre de campo, SI)"
 
 DIMENSION_PREFIX: Final = "dim_"
-TEXT_FIELDS: Final = ("series", "designation", "family")
+TEXT_FIELDS: Final = ("series", "designation", "family", "manufacturer", "compatible_materials")
 PROPERTY_FIELDS: Final = tuple(PROPERTY_DIMENSIONS)
 REQUIRED_PROPERTIES: Final = ("area", "iy", "iz")
 """Propiedades obligatorias en cada fila (A, Iy, Iz). J y la masa lineal son opcionales."""
@@ -57,7 +58,16 @@ SI_UNIT: Final[Mapping[str, str]] = {
 _DIMENSION_FIELD: Final = re.compile(r"dim_[a-z][a-z0-9_]*")
 _NUMBER: Final = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 _MAPPING_KEYS: Final = frozenset(
-    {"format", "columns", "default_series", "default_family", "family_aliases", "steel", "method"}
+    {
+        "format",
+        "columns",
+        "default_series",
+        "default_family",
+        "family_aliases",
+        "material_aliases",
+        "steel",
+        "method",
+    }
 )
 
 
@@ -80,6 +90,8 @@ class ColumnMapping:
     family_aliases: tuple[tuple[str, ProfileFamily], ...]
     steel: bool
     method: str
+    material_aliases: tuple[tuple[str, str], ...] = ()
+    """Texto (sin distinguir mayúsculas) → familia de material (T-028; ADR-012)."""
 
     @property
     def document(self) -> str:
@@ -98,6 +110,8 @@ class ColumnMapping:
             "steel": self.steel,
             "method": self.method,
         }
+        if self.material_aliases:  # T-028: solo si hay alias, para no cambiar hashes existentes.
+            body["material_aliases"] = dict(self.material_aliases)
         return canonical_json(body)
 
     @property
@@ -193,6 +207,7 @@ def parse_mapping(text: str) -> ColumnMapping:
         family_aliases=_parse_aliases(document.get("family_aliases", {})),
         steel=_parse_bool(document.get("steel", False), "steel"),
         method=_parse_method(document.get("method", DEFAULT_METHOD)),
+        material_aliases=_parse_material_aliases(document.get("material_aliases", {})),
     )
     _check_required(mapping)
     return mapping
@@ -287,6 +302,28 @@ def _parse_aliases(value: object) -> tuple[tuple[str, ProfileFamily], ...]:
                 {"field": "family_aliases", "first": key, "second": text},
             )
         aliases[key] = parsed
+    return tuple(sorted(aliases.items()))
+
+
+def _parse_material_aliases(value: object) -> tuple[tuple[str, str], ...]:
+    if not isinstance(value, dict):
+        raise _structure("material_aliases", "un objeto texto → familia de material")
+    aliases: dict[str, str] = {}
+    for text, family in value.items():
+        key = text.strip().casefold()
+        if not key or family not in COMPATIBLE_MATERIALS:
+            raise catalog_error(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                "catalog.mapping_material",
+                {"path": f"material_aliases/{text}", "value": str(family)},
+            )
+        if key in aliases:
+            raise catalog_error(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                "catalog.mapping_field_repeated",
+                {"field": "material_aliases", "first": key, "second": text},
+            )
+        aliases[key] = family
     return tuple(sorted(aliases.items()))
 
 
@@ -408,3 +445,25 @@ def resolve_family(text: str, mapping: ColumnMapping) -> ProfileFamily | None:
         if family.value.casefold() == key:
             return family
     return dict(mapping.family_aliases).get(key)
+
+
+MATERIAL_SEPARATORS: Final = re.compile(r"[;,]")
+
+
+def resolve_materials(text: str, mapping: ColumnMapping) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Materiales de una celda (separados por ``;`` o ``,``): (familias, términos desconocidos).
+
+    Cada término es una familia (sin distinguir mayúsculas) o un alias del mapeo. Un término
+    desconocido no se ignora: el importador rechaza la fila (T-028, D3).
+    """
+    aliases = dict(mapping.material_aliases)
+    found: list[str] = []
+    unknown: list[str] = []
+    for part in MATERIAL_SEPARATORS.split(text):
+        term = part.strip()
+        if not term:
+            continue
+        key = term.casefold()
+        family = next((m for m in COMPATIBLE_MATERIALS if m.casefold() == key), aliases.get(key))
+        (found if family is not None else unknown).append(family or term)
+    return tuple(found), tuple(unknown)

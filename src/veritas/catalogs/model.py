@@ -33,6 +33,7 @@ from uuid import UUID
 from veritas.catalogs.errors import CatalogError, catalog_error
 from veritas.core import units as u
 from veritas.core.diagnostics import DiagnosticCode, Location
+from veritas.core.materials.material import MaterialFamily
 from veritas.core.references import check_identity
 from veritas.core.sections.properties import PropertyStatus, SectionProperty
 from veritas.core.units import Dimension, get_unit
@@ -43,6 +44,9 @@ DOCUMENT_FORMAT: Final = "veritas-catalog-profile/1"
 
 _DIMENSION_NAME: Final = re.compile(r"[a-z][a-z0-9_]*")
 _WARNING_KEY: Final = re.compile(r"[a-z]+\.[a-z_]+")
+
+COMPATIBLE_MATERIALS: Final = tuple(family.value for family in MaterialFamily)
+"""Familias de material admitidas en ``compatible_materials`` (T-028; ADR-012)."""
 
 CATALOG_STATUSES: Final = frozenset(
     {PropertyStatus.NO_DISPONIBLE, PropertyStatus.IMPORTADO_SIN_VERIFICAR}
@@ -150,8 +154,11 @@ class ProfileData:
     properties: ProfileProperties
     provenance: Provenance
     warnings: tuple[str, ...] = ()
+    manufacturer: str | None = None
+    compatible_materials: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        self._check_commercial()
         object.__setattr__(self, "series", _key_text(self.series, "series"))
         object.__setattr__(self, "designation", _key_text(self.designation, "designation"))
         if not isinstance(self.family, ProfileFamily):
@@ -177,6 +184,31 @@ class ProfileData:
             self, "dimensions", tuple(sorted(self.dimensions, key=lambda item: item.name))
         )
         self._check_warnings()
+
+    def _check_commercial(self) -> None:
+        """Fabricante (texto no vacío o ausente) y materiales compatibles (T-028; ADR-012)."""
+        if self.manufacturer is not None:
+            if not isinstance(self.manufacturer, str) or not self.manufacturer.strip():
+                raise catalog_error(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "catalog.invalid_manufacturer",
+                    {"value": str(self.manufacturer)},
+                )
+            object.__setattr__(self, "manufacturer", self.manufacturer.strip())
+        if not isinstance(self.compatible_materials, tuple):
+            raise invalid_type("compatible_materials", "tupla de textos", self.compatible_materials)
+        for name in self.compatible_materials:
+            if name not in COMPATIBLE_MATERIALS:
+                raise catalog_error(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "catalog.invalid_material",
+                    {"value": str(name), "allowed": ", ".join(COMPATIBLE_MATERIALS)},
+                )
+        object.__setattr__(
+            self,
+            "compatible_materials",
+            tuple(sorted(set(self.compatible_materials), key=COMPATIBLE_MATERIALS.index)),
+        )
 
     def _check_warnings(self) -> None:
         if not isinstance(self.warnings, tuple):
@@ -369,7 +401,7 @@ def _property_document(prop: SectionProperty) -> dict[str, object]:
 
 def data_document(data: ProfileData) -> dict[str, object]:
     """Estructura JSON del contenido (sin identidad): base de la comparación de D8."""
-    return {
+    document: dict[str, object] = {
         "series": data.series,
         "designation": data.designation,
         "family": data.family.value,
@@ -385,6 +417,12 @@ def data_document(data: ProfileData) -> dict[str, object]:
         },
         "warnings": list(data.warnings),
     }
+    # T-028: solo si hay dato, de modo que los hashes de los perfiles existentes no cambian.
+    if data.manufacturer is not None:
+        document["manufacturer"] = data.manufacturer
+    if data.compatible_materials:
+        document["compatible_materials"] = list(data.compatible_materials)
+    return document
 
 
 def profile_document(profile: CatalogProfile) -> dict[str, object]:
@@ -466,7 +504,15 @@ def _decode_data(value: object) -> ProfileData:
     keys = frozenset(
         {"series", "designation", "family", "dimensions", "properties", "provenance", "warnings"}
     )
-    obj = _expect_object(value, keys, "data")
+    optional = frozenset({"manufacturer", "compatible_materials"})
+    present = optional & set(value) if isinstance(value, dict) else frozenset()
+    obj = _expect_object(value, keys | present, "data")
+    manufacturer = (
+        _as_text(obj["manufacturer"], "data/manufacturer") if "manufacturer" in obj else None
+    )
+    materials = obj.get("compatible_materials", [])
+    if not isinstance(materials, list) or ("compatible_materials" in obj and not materials):
+        raise invalid_type("data/compatible_materials", "lista no vacía", materials)
     props = _expect_object(obj["properties"], frozenset(PROPERTY_DIMENSIONS), "data/properties")
     prov = _expect_object(
         obj["provenance"], frozenset({"source", "license", "edition", "method"}), "data/provenance"
@@ -496,6 +542,8 @@ def _decode_data(value: object) -> ProfileData:
             **{key: _as_text(prov[key], f"data/provenance/{key}") for key in prov}
         ),
         warnings=tuple(_as_text(item, "data/warnings") for item in warnings),
+        manufacturer=manufacturer,
+        compatible_materials=tuple(_as_text(m, "data/compatible_materials") for m in materials),
     )
 
 

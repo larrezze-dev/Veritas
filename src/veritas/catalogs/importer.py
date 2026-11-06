@@ -45,10 +45,12 @@ from veritas.catalogs.columns import (
     native_mapping,
     parse_number,
     resolve_family,
+    resolve_materials,
     to_si,
 )
 from veritas.catalogs.errors import CatalogFileError, file_error
 from veritas.catalogs.model import (
+    COMPATIBLE_MATERIALS,
     CatalogInfo,
     ImportSource,
     ProfileData,
@@ -381,10 +383,11 @@ def _validate_row(
         if field not in values and not _issue_for(issues, field):
             issues.append(_issue(row.line, "catalog.row_required", field, {"field": field}))
     family = _family(row.line, mapping, texts, issues)
+    materials = _materials(row.line, mapping, texts, issues)
     if issues or family is None:
         return RowResult(row.line, key, None, tuple(issues))
     try:
-        data = _build(mapping, provenance, texts, values, family)
+        data = _build(mapping, provenance, texts, values, family, materials)
     except DiagnosticError as error:
         detail = render_message(error.diagnostic)
         issues.append(_issue(row.line, "catalog.row_invalid", None, {"detail": detail}))
@@ -406,6 +409,7 @@ _ROW_CODES: Final = {
     "catalog.row_not_positive": DiagnosticCode.INPUT_OUT_OF_RANGE,
     "catalog.row_unrepresentable": DiagnosticCode.UNITS_UNREPRESENTABLE,
     "catalog.row_family_unknown": DiagnosticCode.INPUT_OUT_OF_RANGE,
+    "catalog.row_material_unknown": DiagnosticCode.INPUT_OUT_OF_RANGE,
     "catalog.row_invalid": DiagnosticCode.INPUT_OUT_OF_RANGE,
     "catalog.row_value_type": DiagnosticCode.INPUT_INVALID_TYPE,
 }
@@ -495,12 +499,33 @@ def _family(
     return family
 
 
-def _build(
+def _materials(
+    line: int, mapping: ColumnMapping, texts: Mapping[str, str], issues: list[RowIssue]
+) -> tuple[str, ...]:
+    """Materiales compatibles de la fila; un término desconocido rechaza la fila (T-028, D3)."""
+    found, unknown = resolve_materials(texts.get("compatible_materials", ""), mapping)
+    if unknown:
+        issues.append(
+            _issue(
+                line,
+                "catalog.row_material_unknown",
+                "compatible_materials",
+                {
+                    "value": _shown(", ".join(unknown)),
+                    "known": ", ".join((*COMPATIBLE_MATERIALS, *dict(mapping.material_aliases))),
+                },
+            )
+        )
+    return found
+
+
+def _build(  # noqa: PLR0913, PLR0917 (fila ya resuelta: se pasa por partes)
     mapping: ColumnMapping,
     provenance: Provenance,
     texts: Mapping[str, str],
     values: Mapping[str, float],
     family: ProfileFamily,
+    materials: tuple[str, ...] = (),
 ) -> ProfileData:
     origin = provenance.source
     props: dict[str, SectionProperty] = {}
@@ -538,6 +563,8 @@ def _build(
             mass=values.get("linear_mass"),
             steel=mapping.steel,
         ),
+        manufacturer=texts.get("manufacturer") or None,
+        compatible_materials=materials,
     )
 
 
