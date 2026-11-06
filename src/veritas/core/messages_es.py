@@ -473,6 +473,10 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Control de equilibrio de los resultados normalizados no superado ({where}: residuo de "
         "fuerza {force}, de momento {moment}; error interno). No hay resultados."
     ),
+    "fem.results_end_aux_missing": (
+        "La salida bruta no trae el desplazamiento del extremo {end} de la barra {member}; no se "
+        "puede acotar el redondeo del equilibrio (error interno). No hay resultados."
+    ),
     "fem.results_unsupported_load": (
         "Carga {load} de un tipo que la normalización no admite (error interno)."
     ),

@@ -16,7 +16,6 @@ TESTS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TESTS))
 
 from test_fem3d_end_penalty import P, grid_frame, translate  # noqa: E402
-
 from veritas.fem.results.run import RunStatus  # noqa: E402
 from veritas.fem.spatial import analyze_spatial, normalize_spatial  # noqa: E402
 from veritas.fem.spatial.config import SpatialAnalysisConfiguration  # noqa: E402

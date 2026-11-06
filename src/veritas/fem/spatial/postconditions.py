@@ -119,8 +119,8 @@ def element_displacement(
     request: SpatialRequest, beam: SpatialBeam, displacement: Displacements
 ) -> list[float]:
     """u global 12 del elemento: el del aux en un extremo que lo tenga (E2-a), como
-    ``element_displacement`` del plano. Si ``displacement`` no tiene el aux (normalización,
-    que no publica los aux; E2.5-f), el del maestro."""
+    ``element_displacement`` del plano. Si ``displacement`` no tiene el aux, el del maestro
+    (la normalización ya lo aporta desde ``raw.end_aux``: T-027)."""
     values: list[float] = []
     for end, node in (("I", beam.node_i), ("J", beam.node_j)):
         values += displacement.get(request.element_node(beam, end), displacement[node])
@@ -198,7 +198,7 @@ def _spring_rounding(
     request: SpatialRequest, displacement: Displacements
 ) -> Iterator[tuple[int, int, float]]:
     """(nudo, terna, k·‖u de la terna‖) por resorte, incluidos los de penalización; en los
-    de extremo, k·‖u_aux − u_N‖ en el maestro (se omite sin el u del aux: normalización).
+    de extremo, k·‖u_aux − u_N‖ en el maestro (se omite sin el u del aux).
 
     Sin término |λ_s| de la penalización iterada: donde λ cuenta (equilibrio global y del
     normalizador), la reacción es del orden de λ y tol_equilibrium·Σ|R| ≫ c·eps·|λ|."""

@@ -271,6 +271,7 @@ def _check_finite(raw: RawSpatialResults) -> None:
     values = [v for n in raw.nodes for v in (*n.displacement, *(n.reaction or ()))]
     values += [v for g in raw.grounds for v in g.reaction]
     values += [v for m in raw.members for v in m.local_force]
+    values += [v for a in raw.end_aux for v in a.displacement]  # T-027: acotan el redondeo
     if not all(math.isfinite(v) for v in values):
         raise _postcondition("fem.nonfinite_result", {})
 
@@ -549,8 +550,26 @@ class _Normalizer:
             )
 
     def _bounds(self) -> dict[UUID, tuple[float, float]]:
-        """Cota c·eps·Σ|k_ij·u_j| por nudo de dominio (la de los controles de 5a)."""
+        """Cota c·eps·Σ|k_ij·u_j| por nudo de dominio (la de los controles de 5a).
+
+        Con el u de los aux de extremo de ``raw.end_aux`` (T-027, TK-004): las filas de la barra
+        usan el desplazamiento real del extremo y el resorte de extremo aporta k·‖u_aux − u_N‖,
+        como en los controles de la respuesta cruda (estimación de redondeo con el mismo criterio,
+        no un majorante estricto). Si falta un aux, error explícito: no se vuelve al u del
+        maestro.
+        """
         displacement = {self.tag_of[n.node_id]: n.displacement for n in self.raw.nodes}
+        beam_id = {beam.tag: UUID(beam.entity_id) for beam in self.request.beams}
+        published = {(item.member_id, item.end): item.displacement for item in self.raw.end_aux}
+        for aux in self.request.aux_nodes:
+            member_id = beam_id[aux.beam]
+            if (member_id, aux.end) not in published:
+                raise _postcondition(
+                    "fem.results_end_aux_missing",
+                    {"end": aux.end, "member": str(member_id)},
+                    Location(entity_id=member_id),
+                )
+            displacement[aux.tag] = published[(member_id, aux.end)]
         node_of = {tag: node_id for node_id, tag in self.tag_of.items()}
         bounds = rounding_bounds(self.request, displacement)
         return {node_of[tag]: (f, m) for tag, (f, m) in bounds.items()}
