@@ -1,0 +1,222 @@
+{
+ "app_version": "0.0.1",
+ "canon_version": "veritas-canon/1",
+ "content": {
+  "model": {
+   "load_cases": [],
+   "loads": [],
+   "materials": [
+    {
+     "density": 7850.0,
+     "elastic_modulus": 210000000000.0,
+     "family": "STEEL",
+     "id": "d20ff64a-f7ee-4d61-ab38-40046f80c571",
+     "name": "Acero",
+     "poisson_ratio": 0.3,
+     "revision": 1,
+     "shear_modulus": 81000000000.0,
+     "source": "CTE DB-SE-A",
+     "specific_weight": 78500.0,
+     "standard_edition": "2019"
+    }
+   ],
+   "members": [
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "96a71ffd-3a17-4284-a330-0daed1a8029c",
+     "label": "B1",
+     "material": {
+      "id": "d20ff64a-f7ee-4d61-ab38-40046f80c571",
+      "revision": 1
+     },
+     "node_i": "7adb7856-0d01-4715-af47-ab245ea640fb",
+     "node_j": "9f110b6d-68a2-46aa-a491-ae0eb744c2a1",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "00000000-0000-4000-8000-0000000000a1",
+      "revision": 1
+     }
+    }
+   ],
+   "model_revision": 3,
+   "nodes": [
+    {
+     "id": "7adb7856-0d01-4715-af47-ab245ea640fb",
+     "label": "N1",
+     "position": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "9f110b6d-68a2-46aa-a491-ae0eb744c2a1",
+     "label": "N2",
+     "position": [
+      3.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    }
+   ],
+   "sections": [
+    {
+     "family": "FREEFORM",
+     "id": "00000000-0000-4000-8000-0000000000a1",
+     "name": "U300",
+     "parameters": {
+      "holes": [],
+      "outer": [
+       [
+        0.0,
+        0.0
+       ],
+       [
+        0.1,
+        0.0
+       ],
+       [
+        0.1,
+        0.012
+       ],
+       [
+        0.008,
+        0.012
+       ],
+       [
+        0.008,
+        0.288
+       ],
+       [
+        0.1,
+        0.288
+       ],
+       [
+        0.1,
+        0.3
+       ],
+       [
+        0.0,
+        0.3
+       ]
+      ]
+     },
+     "properties": {
+      "area": {
+       "method": "polygon-green/1",
+       "origin": "calculado a partir de los vértices de esta revisión (croquis libre)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.004608000000000001
+      },
+      "centroid_y": {
+       "method": "polygon-green/1",
+       "origin": "calculado a partir de los vértices de esta revisión (croquis libre)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.027958333333333342
+      },
+      "centroid_z": {
+       "method": "polygon-green/1",
+       "origin": "calculado a partir de los vértices de esta revisión (croquis libre)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.15
+      },
+      "iy": {
+       "method": "polygon-green/1",
+       "origin": "calculado a partir de los vértices de esta revisión (croquis libre)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 6.381158400000004e-05
+      },
+      "iyz": {
+       "method": "polygon-green/1",
+       "origin": "calculado a partir de los vértices de esta revisión (croquis libre)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 1.1293772630057337e-21
+      },
+      "iz": {
+       "method": "polygon-green/1",
+       "origin": "calculado a partir de los vértices de esta revisión (croquis libre)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 4.445176000000002e-06
+      },
+      "torsion_constant": {
+       "method": "sin-solucion-exacta-validada/1",
+       "origin": "sin método validado de la constante de torsión de Saint-Venant para un croquis libre (DEC-005; TK-028)",
+       "status": "NO_DISPONIBLE",
+       "unit": "m⁴",
+       "value": null
+      }
+     },
+     "revision": 1
+    }
+   ],
+   "supports": []
+  },
+  "norms": {
+   "selected": null,
+   "user": []
+  },
+  "runs": [],
+  "settings": {
+   "user_profiles": []
+  }
+ },
+ "format": "veritas-project",
+ "integrity": {
+  "algorithm": "sha256",
+  "digest": "52d734d1027d302e349755887ae1bcb8840147259543b998fe9e8ca021e7570f"
+ },
+ "model_hash": "e80373d39fae2783ea53e13c8c54991db6637e46b4b625da38b9db5b6879d564",
+ "schema_version": 7
+}

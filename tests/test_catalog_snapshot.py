@@ -272,7 +272,7 @@ def test_round_trip_is_exact_and_needs_no_catalog(tmp_path: Path) -> None:
     opened = open_project(path)  # no existe ningún archivo SQLite: el proyecto es autocontenido
     assert not list(tmp_path.glob("*.sqlite"))
     assert not list(tmp_path.glob("*.db"))
-    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 7
+    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 8
     assert opened.model_hash == saved.model_hash
     assert opened.integrity == saved.integrity
     member = opened.model.member(member_id)
@@ -406,7 +406,7 @@ def test_migration_3_to_4_keeps_rectangular_content() -> None:
     assert migrated == content
     assert migrated is not content
     assert 3 in MIGRATIONS
-    assert CURRENT_SCHEMA_VERSION == 7
+    assert CURRENT_SCHEMA_VERSION == 8
 
 
 def test_migration_3_to_4_rejects_a_foreign_family() -> None:

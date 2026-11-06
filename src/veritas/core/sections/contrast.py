@@ -129,7 +129,13 @@ def _notes(section: SectionRevision, snapshot: CatalogSnapshot) -> tuple[str, ..
         if has_fillet != any(n in listed for n in _FILLET_NAMES):
             notes.append("editor.compare_fillet_differs")
     elif isinstance(parameters, FreeformParameters):
-        pass  # Un croquis libre no declara forma: el aviso de forma no aplica (T-029 E2).
+        if parameters.shape is None:
+            notes.append("editor.compare_shape_undeclared")
+        else:
+            if parameters.shape != snapshot.shape:
+                notes.append("editor.compare_shape_differs")
+            if any(d.name in _FILLET_NAMES for d in snapshot.dimensions):
+                notes.append("editor.compare_fillet_differs")  # el croquis no tiene acuerdos
     elif snapshot.shape != "RECT":
         notes.append("editor.compare_shape_differs")
     return tuple(notes)

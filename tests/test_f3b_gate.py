@@ -42,7 +42,7 @@ def test_sketch_reports_centroid_product_of_inertia_axes_and_the_missing_j(
 ) -> None:
     assert main(["section", "sketch", "--exterior", HOLE_OUTER, "--hueco", HOLE]) == 0
     out = capsys.readouterr().out
-    assert "polygon-green/1" in out
+    assert "polygon-green/2" in out
     assert "yc" in out
     assert "Iyz" in out
     assert "Ejes principales" in out
@@ -85,7 +85,7 @@ def test_templates_print_their_properties_without_a_shear_area(
     ):
         assert main(["section", shape, "--dim", *dims, "--unidad", "mm"]) == 0
         out = capsys.readouterr().out
-        assert "polygon-green/1" in out
+        assert "polygon-green/2" in out
         assert "Ejes principales" in out
         assert "Área de cortante" not in out
 

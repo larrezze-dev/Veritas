@@ -15,7 +15,7 @@ from typing import Final
 from veritas.core.diagnostics import DiagnosticCode
 from veritas.persistence.errors import format_error, value_error
 
-CURRENT_SCHEMA_VERSION: Final = 7
+CURRENT_SCHEMA_VERSION: Final = 8
 
 type Migration = Callable[[dict[str, object]], dict[str, object]]
 
@@ -122,6 +122,31 @@ def _v6_to_v7(content: dict[str, object]) -> dict[str, object]:
     return dict(content)
 
 
+def _v7_to_v8(content: dict[str, object]) -> dict[str, object]:
+    """v8 (T-031, TK-032) admite ``shape`` (forma declarada) en los parámetros de ``FREEFORM``.
+
+    Solo VERIFICA: un archivo v7 no puede traer esa clave (no se reinterpreta en silencio) y su
+    forma, y por tanto el hash del modelo, no cambia: «sin declarar» es lo que significa su
+    ausencia.
+    """
+    model = content.get("model")
+    sections = model.get("sections") if isinstance(model, dict) else None
+    if isinstance(sections, list):
+        for index, section in enumerate(sections):
+            params = section.get("parameters") if isinstance(section, dict) else None
+            if (
+                isinstance(params, dict)
+                and section.get("family") == "FREEFORM"
+                and "shape" in params
+            ):
+                raise format_error(
+                    "project.unknown_fields",
+                    {"fields": "shape"},
+                    path=f"content.model.sections[{index}].parameters",
+                )
+    return dict(content)
+
+
 MIGRATIONS: Final[dict[int, Migration]] = {
     1: _v1_to_v2,
     2: _v2_to_v3,
@@ -129,6 +154,7 @@ MIGRATIONS: Final[dict[int, Migration]] = {
     4: _v4_to_v5,
     5: _v5_to_v6,
     6: _v6_to_v7,
+    7: _v7_to_v8,
 }
 """Migraciones reales registradas, ``N -> N+1``."""
 

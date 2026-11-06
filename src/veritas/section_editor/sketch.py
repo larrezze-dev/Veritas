@@ -23,7 +23,7 @@ from veritas.core.diagnostics import (
     InputValueError,
     Location,
 )
-from veritas.core.sections.polygon import Contour, sketch_diagnostics
+from veritas.core.sections.polygon import Contour, shape_diagnostic, sketch_diagnostics
 from veritas.core.sections.section import SectionRevision, build_freeform_section
 from veritas.core.units import LENGTH, Quantity
 from veritas.core.validation import invalid_type, out_of_range
@@ -48,6 +48,8 @@ class SketchDraft:
 
     outer: SketchContour
     holes: tuple[SketchContour, ...] = ()
+    shape: str | None = None
+    """Forma declarada (una de ``PROFILE_SHAPES``); ``None`` = sin declarar (T-031)."""
 
     def __post_init__(self) -> None:
         if not isinstance(self.outer, SketchContour):
@@ -67,13 +69,20 @@ class SketchDraft:
                 tuple((Quantity(y, LENGTH), Quantity(z, LENGTH)) for y, z in points)
             )
 
-        return cls(contour(parameters.outer), tuple(contour(h) for h in parameters.holes))
+        return cls(
+            contour(parameters.outer),
+            tuple(contour(h) for h in parameters.holes),
+            parameters.shape,
+        )
 
     def diagnostics(self) -> tuple[Diagnostic, ...]:
         """Todas las violaciones de EDT-004; vacía si el borrador es válido."""
         found: list[Diagnostic] = []
         outer = _to_si(self.outer, "outer", found)
         holes = [_to_si(h, f"hole[{i}]", found) for i, h in enumerate(self.holes)]
+        problem = shape_diagnostic(self.shape)
+        if problem is not None:
+            found.append(problem)
         if found or outer is None or any(h is None for h in holes):
             return tuple(found)
         if not outer:
@@ -96,6 +105,7 @@ class SketchDraft:
             outer=self.outer.points,
             holes=[h.points for h in self.holes],
             name=name,
+            shape=self.shape,
         )
 
 

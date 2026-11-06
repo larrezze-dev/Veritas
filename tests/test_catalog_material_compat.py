@@ -109,7 +109,7 @@ def test_v6_round_trip_keeps_manufacturer_and_materials(tmp_path: Path) -> None:
     assert parameters["manufacturer"] == "Acme"
     assert parameters["compatible_materials"] == ["STEEL", "TIMBER"]
     opened = open_project(path)
-    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 7
+    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 8
     restored = [
         s.parameters
         for s in opened.model.snapshot().sections
@@ -154,7 +154,7 @@ def test_a_real_v5_project_opens_under_v6_with_identical_hash_and_undeclared() -
 def test_resaving_the_v5_project_as_v6_keeps_the_hash(tmp_path: Path) -> None:
     opened = open_project(REFERENCE_V5)
     saved = save_project(tmp_path / "v6.json", opened.model, opened.user_profiles, runs=opened.runs)
-    assert saved.schema_version == 7
+    assert saved.schema_version == 8
     assert open_project(tmp_path / "v6.json").model_hash == REFERENCE_V5_HASH
 
 

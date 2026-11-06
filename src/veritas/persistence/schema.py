@@ -469,6 +469,8 @@ def _enc_section(s: SectionRevision) -> Json:
             "outer": [[y, z] for y, z in s.parameters.outer],
             "holes": [[[y, z] for y, z in hole] for hole in s.parameters.holes],
         }
+        if s.parameters.shape is not None:  # Esquema v8 (T-031): solo si hay forma declarada.
+            parameters["shape"] = s.parameters.shape
     else:
         parameters = {"b": s.parameters.b, "h": s.parameters.h}
     encoded: Json = {
@@ -579,6 +581,7 @@ def _dec_parametric(data: object, path: str) -> ParametricParameters:
 
 
 _FREEFORM: Final = ("outer", "holes")
+_FREEFORM_OPTIONAL: Final = ("shape",)  # Esquema v8 (T-031).
 
 
 def _dec_contour(data: object, path: str) -> tuple[tuple[float, float], ...]:
@@ -594,12 +597,13 @@ def _dec_contour(data: object, path: str) -> tuple[tuple[float, float], ...]:
 
 
 def _dec_freeform(data: object, path: str) -> FreeformParameters:
-    r = Reader(data, path, _FREEFORM)
+    r = Reader(data, path, _FREEFORM, _FREEFORM_OPTIONAL)
     outer = _dec_contour(r.raw("outer"), r.at("outer"))
     holes = tuple(
         _dec_contour(item, f"{r.at('holes')}[{i}]") for i, item in enumerate(r.items("holes"))
     )
-    return _build(path, lambda: FreeformParameters(outer, holes))
+    shape = r.text("shape") if r.has("shape") else None
+    return _build(path, lambda: FreeformParameters(outer, holes, shape))
 
 
 def _dec_parameters(family: SectionFamily, r: Reader) -> SectionParameters:

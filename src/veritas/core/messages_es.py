@@ -166,6 +166,17 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "editor.cli_sketch_usage": (
         "El croquis necesita --exterior con al menos un vértice; --hueco se repite por hueco."
     ),
+    "section.sketch_shape_invalid": (
+        "Forma declarada «{shape}» no válida para el croquis: use una de {allowed}."
+    ),
+    "section.replace_freeform_shape_undeclared": (
+        "La barra {member} es de madera y el croquis libre no declara forma: no se puede "
+        "comprobar si es un perfil metálico (declare la forma con --forma)."
+    ),
+    "editor.compare_shape_undeclared": (
+        "El croquis libre no declara forma: la comparación de forma con el perfil de catálogo "
+        "no se puede comprobar."
+    ),
     "section.template_rule": "Plantilla {shape}: se exige {rule}.",
     "editor.cli_contrast_usage": "--contrastar y --db se indican juntos (el catálogo se lee solo).",
     "editor.cli_rect_dimensions": "El rectángulo se define con --dim b=… h=… y nada más.",

@@ -1,7 +1,8 @@
 """Plantillas U, L y T del croquis (EDT-001; TK-027; plan T-029 E2, E2-D2 = A).
 
 Una plantilla solo GENERA el polígono desde sus medidas: la sección resultante es ``FREEFORM`` y
-no recuerda de qué plantilla vino (se guarda el polígono, no las medidas). Sin acuerdos ni radios.
+no recuerda las medidas (se guarda el polígono), pero sí la FORMA declarada («U», «L» o «T»;
+T-031, TK-032), que rige la regla forma/material. Sin acuerdos ni radios.
 Las propiedades salen de la vía general del polígono; las fórmulas cerradas de U, L y T solo
 existen en las pruebas, como referencia independiente. La J de estas formas es ``NO_DISPONIBLE``
 (E2-D1 = A).
@@ -136,7 +137,7 @@ def template_draft(shape: str, dimensions: Mapping[str, Quantity]) -> SketchDraf
     points = tuple(
         (Quantity(y, LENGTH), Quantity(z, LENGTH)) for y, z in template_polygon(shape, values)
     )
-    draft = SketchDraft(SketchContour(points))
+    draft = SketchDraft(SketchContour(points), shape=shape.upper())
     # Medidas casi degeneradas (p. ej. 2·tf = h − ε con ε bajo la tolerancia geométrica): el
     # polígono resultante no es válido y se rechaza aquí, no más tarde al construir.
     problems = draft.diagnostics()

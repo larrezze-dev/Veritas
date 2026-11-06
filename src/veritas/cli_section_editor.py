@@ -108,6 +108,13 @@ def _sketch_arguments(parser: argparse.ArgumentParser) -> None:
         help="Vértices de un hueco; se repite por hueco.",
     )
     parser.add_argument(
+        "--forma",
+        type=str.upper,
+        default=None,
+        metavar="FORMA",
+        help="Forma declarada del croquis (I, U, L, T, RHS, SHS, CHS, RECT, ROUND, OTRO…).",
+    )
+    parser.add_argument(
         "--unidad", "--unit", dest="unidad", default="m", help="Unidad de longitud (m, cm, mm)."
     )
 
@@ -216,6 +223,7 @@ def _sketch_draft(args: argparse.Namespace) -> SketchDraft:
     return SketchDraft(
         _parse_contour(args.exterior, args.unidad),
         tuple(_parse_contour(h, args.unidad) for h in args.hueco),
+        args.forma,
     )
 
 
@@ -305,6 +313,9 @@ def _properties_report(section: SectionRevision, title: str) -> str:
         "Iy, Iz, Iyz centroidales (ADR-001 §1)."
     )
     lines = [title, reference, _table(("Propiedad", "Valor", "Estado", "Método"), rows)]
+    if freeform:
+        declared = section.require_freeform().shape
+        lines.append(f"Forma declarada: {declared or 'sin declarar'}.")
     if freeform:
         lines.extend(_freeform_notes(section))
     if section.shear is not None:

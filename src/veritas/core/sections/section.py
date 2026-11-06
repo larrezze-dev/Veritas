@@ -22,7 +22,12 @@ from veritas.core.sections.catalog import (
 )
 from veritas.core.sections.parametric import ParametricParameters, ParametricShape
 from veritas.core.sections.parametric_properties import parametric_properties
-from veritas.core.sections.polygon import FreeformParameters, freeform_properties
+from veritas.core.sections.polygon import (
+    METHOD_POLYGON,
+    METHOD_POLYGON_V1,
+    FreeformParameters,
+    freeform_properties,
+)
 from veritas.core.sections.properties import PropertyStatus, SectionProperties, SectionProperty
 from veritas.core.sections.rectangular import (
     METHOD_CLOSED_FORM,
@@ -280,10 +285,14 @@ def _check_freeform_properties(
     iy, iz, iyz = properties.iy.value, properties.iz.value, properties.iyz.value
     if iy is not None and iz is not None and iyz is not None and iyz * iyz > iy * iz:
         raise error("section.properties_mismatch", "iyz")
-    expected = freeform_properties(parameters)
+    references = {
+        METHOD_POLYGON: freeform_properties(parameters),
+        METHOD_POLYGON_V1: freeform_properties(parameters, snap=False),
+    }
     for name in _PROPERTY_UNITS:
-        stored, computed = getattr(properties, name), getattr(expected, name)
-        if stored.method == computed.method and not _same_property(stored, computed):
+        stored = getattr(properties, name)
+        reference = references.get(stored.method)
+        if reference is not None and not _same_property(stored, getattr(reference, name)):
             raise error("section.properties_mismatch", "properties")
 
 
@@ -480,13 +489,14 @@ def build_parametric_section(
     )
 
 
-def build_freeform_section(
+def build_freeform_section(  # noqa: PLR0913 (identidad, geometría y forma, por nombre)
     entity_id: UUID,
     revision: int,
     *,
     outer: Sequence[tuple[Quantity, Quantity]],
     holes: Sequence[Sequence[tuple[Quantity, Quantity]]] = (),
     name: str = "",
+    shape: str | None = None,
 ) -> SectionRevision:
     """Crea una revisión de croquis libre (exterior y huecos poligonales) con sus propiedades.
 
@@ -513,7 +523,9 @@ def build_freeform_section(
         return tuple(result)
 
     parameters = FreeformParameters(
-        contour(outer, "outer"), tuple(contour(h, f"hole[{i}]") for i, h in enumerate(holes))
+        contour(outer, "outer"),
+        tuple(contour(h, f"hole[{i}]") for i, h in enumerate(holes)),
+        shape,
     )
     return SectionRevision(
         id=entity_id,

@@ -96,7 +96,7 @@ def test_round_trip_is_exact_for_every_shape(tmp_path: Path) -> None:
     path = tmp_path / "p.json"
     saved = save_project(path, model)
     opened = open_project(path)
-    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 7
+    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 8
     assert repr(opened.model.snapshot()) == repr(model.snapshot())
     assert opened.model_hash == saved.model_hash == model_hash(model.snapshot())
     families = {s.family for s in opened.model.snapshot().sections}

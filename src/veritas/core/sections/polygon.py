@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError, Location
+from veritas.core.sections.catalog import PROFILE_SHAPES
 from veritas.core.sections.properties import PropertyStatus, SectionProperties, SectionProperty
 from veritas.core.validation import invalid_type, require_real
 
@@ -36,7 +37,12 @@ TOLERANCE_RELATIVE: Final = 1e-9
 """Tolerancia geométrica relativa a la diagonal de la caja del contorno exterior."""
 AREA_RELATIVE_MINIMUM: Final = 1e-12
 """Área mínima de un contorno, relativa al cuadrado de la diagonal."""
-METHOD_POLYGON: Final = "polygon-green/1"
+METHOD_POLYGON_V1: Final = "polygon-green/1"
+"""Método de T-029 E1/E2: el Iyz es el de la fórmula de Green, sin ajuste (proyectos v7)."""
+METHOD_POLYGON: Final = "polygon-green/2"
+"""Método actual (T-031, TK-033): como /1, con el Iyz de ruido fijado a +0.0."""
+IYZ_NOISE_RELATIVE: Final = 1e-12
+"""|Iyz| ≤ 1e-12·√(Iy·Iz) es redondeo de la integración, no acoplamiento real (ADR-013)."""
 METHOD_TORSION_FREEFORM: Final = "sin-solucion-exacta-validada/1"
 _ORIGIN: Final = "calculado a partir de los vértices de esta revisión (croquis libre)"
 _TORSION_MOTIVE: Final = (
@@ -199,6 +205,17 @@ def sketch_diagnostics(outer: Contour, holes: Sequence[Contour]) -> tuple[Diagno
     return tuple(found)
 
 
+def shape_diagnostic(shape: object) -> Diagnostic | None:
+    """Diagnóstico de una forma declarada no válida (``None`` si es válida o está sin declarar)."""
+    if shape is None or (isinstance(shape, str) and shape in PROFILE_SHAPES):
+        return None
+    return _issue(
+        "section.sketch_shape_invalid",
+        "shape",
+        {"shape": str(shape), "allowed": ", ".join(sorted(PROFILE_SHAPES))},
+    )
+
+
 def _canonical(contour: Contour, *, counterclockwise: bool) -> Contour:
     points = list(contour)
     if (signed_area(points) > 0.0) != counterclockwise:
@@ -227,8 +244,13 @@ class FreeformParameters:
 
     outer: Contour
     holes: tuple[Contour, ...] = ()
+    shape: str | None = None
+    """Forma declarada (una de ``PROFILE_SHAPES``) o ``None`` = sin declarar (T-031, TK-032)."""
 
     def __post_init__(self) -> None:
+        problem = shape_diagnostic(self.shape)
+        if problem is not None:
+            raise InputValueError(problem)
         outer = _contour(self.outer, "outer")
         if not isinstance(self.holes, tuple | list):
             raise invalid_type("holes", "lista de contornos", self.holes)
@@ -313,12 +335,21 @@ def polygon_geometry(parameters: FreeformParameters) -> PolygonGeometry:
     )
 
 
-def freeform_properties(parameters: FreeformParameters) -> SectionProperties:
-    """Propiedades CALCULADO de un croquis libre; J ``NO_DISPONIBLE`` con motivo."""
+def freeform_properties(parameters: FreeformParameters, *, snap: bool = True) -> SectionProperties:
+    """Propiedades CALCULADO de un croquis libre; J ``NO_DISPONIBLE`` con motivo.
+
+    ``snap=True`` (método ``polygon-green/2``) fija a +0.0 el Iyz que es ruido de redondeo
+    (|Iyz| ≤ ``IYZ_NOISE_RELATIVE``·√(Iy·Iz)); ``snap=False`` reproduce el método ``/1`` de los
+    proyectos v7 ya guardados, para poder seguir contrastándolos (antimanipulación).
+    """
     geometry = polygon_geometry(parameters)
+    method = METHOD_POLYGON if snap else METHOD_POLYGON_V1
+    iyz = geometry.iyz
+    if snap and abs(iyz) <= IYZ_NOISE_RELATIVE * math.sqrt(geometry.iy * geometry.iz):
+        iyz = 0.0
 
     def calc(value: float, unit: str) -> SectionProperty:
-        return SectionProperty(value + 0.0, unit, _ORIGIN, METHOD_POLYGON, PropertyStatus.CALCULADO)
+        return SectionProperty(value + 0.0, unit, _ORIGIN, method, PropertyStatus.CALCULADO)
 
     return SectionProperties(
         area=calc(geometry.area, "m²"),
@@ -326,7 +357,7 @@ def freeform_properties(parameters: FreeformParameters) -> SectionProperties:
         centroid_z=calc(geometry.centroid_z, "m"),
         iy=calc(geometry.iy, "m⁴"),
         iz=calc(geometry.iz, "m⁴"),
-        iyz=calc(geometry.iyz, "m⁴"),
+        iyz=calc(iyz, "m⁴"),
         torsion_constant=SectionProperty(
             None, "m⁴", _TORSION_MOTIVE, METHOD_TORSION_FREEFORM, PropertyStatus.NO_DISPONIBLE
         ),

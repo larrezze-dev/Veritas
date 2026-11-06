@@ -15,6 +15,7 @@ from veritas.core.materials.material import MaterialFamily, MaterialRevision
 from veritas.core.references import RevisionRef
 from veritas.core.sections.catalog import CatalogSnapshot
 from veritas.core.sections.parametric import ParametricParameters
+from veritas.core.sections.polygon import FreeformParameters
 from veritas.core.sections.readiness import assess_section
 from veritas.core.sections.section import SectionRevision
 
@@ -91,9 +92,13 @@ def compatibility_errors(
     """
     params = section.parameters
     # Los perfiles paramétricos (I, RHS, SHS, CHS; T-025) son todos de forma metálica.
-    shape = (
-        str(params.shape) if isinstance(params, CatalogSnapshot | ParametricParameters) else None
-    )
+    shape: str | None
+    if isinstance(params, CatalogSnapshot | ParametricParameters):
+        shape = str(params.shape)
+    elif isinstance(params, FreeformParameters):
+        shape = params.shape  # forma declarada del croquis (T-031, TK-032); None = sin declarar
+    else:
+        shape = None
     errors: list[Diagnostic] = []
     if shape in METAL_SHAPES and material.family is MaterialFamily.TIMBER:
         errors.append(
@@ -129,7 +134,10 @@ def _warning(key: str, **params: str) -> Diagnostic:
 
 
 def replacement_warnings(
-    old: SectionRevision, new: SectionRevision, member: str
+    old: SectionRevision,
+    new: SectionRevision,
+    member: str,
+    material: MaterialRevision | None = None,
 ) -> tuple[tuple[Diagnostic, ...], float | None]:
     """Avisos (no bloquean) de una sustitución y la variación relativa de masa lineal.
 
@@ -145,6 +153,13 @@ def replacement_warnings(
         warnings.append(
             _warning("section.replace_mass_change", member=member, change=f"{change * 100:+.1f} %")
         )
+    if (
+        material is not None
+        and material.family is MaterialFamily.TIMBER
+        and isinstance(new.parameters, FreeformParameters)
+        and new.parameters.shape is None
+    ):
+        warnings.append(_warning("section.replace_freeform_shape_undeclared", member=member))
     missing = assess_section(new).fem_missing
     if missing:
         warnings.append(

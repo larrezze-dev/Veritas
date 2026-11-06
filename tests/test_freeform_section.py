@@ -438,12 +438,12 @@ def model_with(section: SectionRevision) -> StructuralModel:
     return model
 
 
-def test_v7_round_trip_is_exact_and_hash_is_stable(tmp_path: Path) -> None:
+def test_current_schema_round_trip_is_exact_and_hash_is_stable(tmp_path: Path) -> None:
     section = build(rect(0.1, 0.2, 0.7, 0.9), [rect(0.2, 0.3, 0.4, 0.5)])
     model = model_with(section)
     saved = save_project(tmp_path / "a.json", model)
     opened = open_project(tmp_path / "a.json")
-    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 7
+    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 8
     assert opened.model_hash == saved.model_hash
     loaded = [s for s in opened.model.snapshot().sections if s.family is SectionFamily.FREEFORM]
     assert loaded == [section]
