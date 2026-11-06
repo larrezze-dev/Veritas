@@ -147,3 +147,5 @@ Estas reglas son contratos de diseño: geometría, entidades, adaptador, persist
 - Tests GUI con fixtures pequeños y runs reproducibles.
 - No fusionar nuevas formulaciones estructurales sin caso de referencia independiente.
 - Comprobación automática de que `core` no importa PySide6, PyVista ni OpenSeesPy.
+
+**Fabricante y materiales compatibles en el proyecto (T-028 E2, plan [T-028](../plans/T-028.md), [ADR-012](adr/ADR-012-fabricante-material-compatible.md)).** `CatalogSnapshot` lleva `manufacturer` y `compatible_materials` opcionales; el esquema de proyecto pasa a **v6** (claves solo si hay dato; migración 5 → 6 que solo verifica; el hash de los modelos sin dato no cambia). `compatibility_errors` (`core/geometry/replacement.py`) acumula la regla de forma y la de material declarado (`section.replace_material_not_declared`); sin declarar no se infiere nada.

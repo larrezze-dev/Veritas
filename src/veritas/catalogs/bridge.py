@@ -66,6 +66,8 @@ def snapshot_from_profile(profile: CatalogProfile, catalog: CatalogInfo) -> Cata
         torsion_constant=props.torsion_constant,
         linear_mass=props.linear_mass,
         warnings=profile.data.warnings,
+        manufacturer=profile.data.manufacturer,
+        compatible_materials=profile.data.compatible_materials,
     )
 
 

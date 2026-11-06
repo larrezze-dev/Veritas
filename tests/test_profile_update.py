@@ -163,3 +163,45 @@ def test_stored_runs_report_is_present_on_apply(
     assert code == 0
     assert "ejecuciones: 0 CURRENT, 0 STALE" in out
     assert "model_revision" in out
+
+
+# --- T-028 E2: la revisión nueva declara materiales ------------------------------------------
+
+
+def new_declared_revision(ws: Path, *materials: str, manufacturer: str | None = None) -> None:
+    with CatalogStore.open(ws / "cat.sqlite") as store:
+        info = store.catalog_by_name("CAT")
+        latest = store.latest(info.id, "SINT-I", "IPE-SINT")
+        store.put_profile(
+            info.id,
+            replace(latest.data, manufacturer=manufacturer, compatible_materials=materials),
+        )
+
+
+def test_update_lists_the_manufacturer_and_materials_that_change(
+    workspace: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assign(capsys, "A")
+    new_declared_revision(workspace, "STEEL", "ALUMINIUM", manufacturer="Acme")
+    code, out, _ = run(capsys, "update-profile", "p.json", "--todas", *DB)
+    assert code == 0
+    assert "fabricante: sin declarar → Acme" in out
+    assert "materiales compatibles: sin declarar → STEEL, ALUMINIUM" in out
+
+
+def test_update_is_blocked_when_the_new_revision_excludes_the_bar_material(
+    workspace: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assign(capsys, "A", "B")
+    new_declared_revision(workspace, "ALUMINIUM")
+    before = (workspace / "p.json").read_bytes()
+    for extra in ((), ("--parcial",)):
+        code, out, _ = run(capsys, "update-profile", "p.json", "A", "B", "--aplicar", *extra, *DB)
+        assert code == 2
+        assert "ALUMINIUM" in out
+        assert "BLOQUEADA" in out
+        assert (workspace / "p.json").read_bytes() == before  # nada aplicable: no se escribe
+    assert sections_of(workspace) == {
+        "A": "CAT/SINT-I/IPE-SINT@1",
+        "B": "CAT/SINT-I/IPE-SINT@1",
+    }

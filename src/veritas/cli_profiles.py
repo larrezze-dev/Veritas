@@ -238,11 +238,20 @@ def _rejection(reason: str) -> str:
     return "Sustitución rechazada: ninguna barra es compatible; no se ha escrito el archivo."
 
 
+def _commercial_line(snapshot: CatalogSnapshot) -> str:
+    """Fabricante y materiales declarados (solo si hay dato; el informe anterior no cambia)."""
+    if snapshot.manufacturer is None and not snapshot.compatible_materials:
+        return ""
+    maker = snapshot.manufacturer or "sin declarar"
+    return f"Fabricante: {maker} · materiales compatibles: {_declared(snapshot)}\n"
+
+
 def _report_header(snapshot: CatalogSnapshot, report: ReplacementReport) -> str:
     mode = "parcial" if report.partial else "estricto (todo o nada)"
     return (
         f"Perfil {snapshot.label} · {snapshot.shape} · procedencia: {snapshot.provenance.source}, "
         f"licencia {snapshot.provenance.license}, edición {snapshot.provenance.edition}\n"
+        f"{_commercial_line(snapshot)}"
         f"Sustitución en modo {mode}: {len(report.members)} barra(s) seleccionada(s)"
     )
 
@@ -286,6 +295,10 @@ def _value_text(value: float | None, unit: str) -> str:
     return "no disponible" if value is None else f"{value:.6g} {unit}"
 
 
+def _declared(snapshot: CatalogSnapshot) -> str:
+    return ", ".join(snapshot.compatible_materials) or "sin declarar"
+
+
 def _change_lines(old: CatalogSnapshot, new: CatalogSnapshot) -> list[str]:
     lines: list[str] = []
     for name, text, unit in _UPDATE_PROPERTIES:
@@ -307,6 +320,13 @@ def _change_lines(old: CatalogSnapshot, new: CatalogSnapshot) -> list[str]:
                 f"    dimensión {name}: {_value_text(old_dims.get(name), 'm')} → "
                 f"{_value_text(new_dims.get(name), 'm')}"
             )
+    if old.manufacturer != new.manufacturer:
+        lines.append(
+            f"    fabricante: {old.manufacturer or 'sin declarar'} → "
+            f"{new.manufacturer or 'sin declarar'}"
+        )
+    if old.compatible_materials != new.compatible_materials:
+        lines.append(f"    materiales compatibles: {_declared(old)} → {_declared(new)}")
     return lines or ["    (sin diferencias en propiedades ni dimensiones; cambia el contenido)"]
 
 
@@ -427,6 +447,10 @@ def _sections(args: argparse.Namespace, project: Project) -> str:
             f"{section.family} · usada por {used} barra(s)"
         )
         lines.extend(_verdict_lines(section))
+        if isinstance(section.parameters, CatalogSnapshot):
+            commercial = _commercial_line(section.parameters).rstrip("\n")
+            if commercial:
+                lines.append(f"    {commercial}")
         if section.family is not SectionFamily.CATALOGO and (
             section.family is SectionFamily.PARAMETRICA
             or section.shear is not None

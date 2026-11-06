@@ -80,25 +80,46 @@ class ReplacementReport:
 def compatibility_errors(
     section: SectionRevision, material: MaterialRevision, member: str
 ) -> tuple[Diagnostic, ...]:
-    """Bloqueos de asignar ``section`` a una barra de ``material`` (D5-A).
+    """Bloqueos de asignar ``section`` a una barra de ``material`` (D5-A; T-028, ADR-012).
 
-    El catálogo no trae el material compatible (TK-023): la regla usa solo la forma. Un perfil
-    metálico (I, U, L, T, SHS, RHS, CHS) con un material de madera se bloquea; el resto, no.
+    Dos reglas independientes que se acumulan (R3):
+
+    - Forma: un perfil metálico (I, U, L, T, SHS, RHS, CHS) con un material de madera se bloquea.
+    - Material declarado (R1): si el perfil de catálogo declara ``compatible_materials`` y la
+      familia del material de la barra no figura, se bloquea con la lista declarada. Sin
+      declarar (vacío, o snapshot de un proyecto anterior) no se infiere nada (R2/R5).
     """
     params = section.parameters
     # Los perfiles paramétricos (I, RHS, SHS, CHS; T-025) son todos de forma metálica.
     shape = (
         str(params.shape) if isinstance(params, CatalogSnapshot | ParametricParameters) else None
     )
+    errors: list[Diagnostic] = []
     if shape in METAL_SHAPES and material.family is MaterialFamily.TIMBER:
-        return (
+        errors.append(
             Diagnostic.create(
                 DiagnosticCode.UNSUPPORTED_CONFIGURATION,
                 "section.replace_incompatible_material",
                 {"member": member, "shape": str(shape), "family": str(material.family)},
-            ),
+            )
         )
-    return ()
+    if (
+        isinstance(params, CatalogSnapshot)
+        and params.compatible_materials
+        and str(material.family) not in params.compatible_materials
+    ):
+        errors.append(
+            Diagnostic.create(
+                DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+                "section.replace_material_not_declared",
+                {
+                    "member": member,
+                    "declared": ", ".join(params.compatible_materials),
+                    "family": str(material.family),
+                },
+            )
+        )
+    return tuple(errors)
 
 
 def _warning(key: str, **params: str) -> Diagnostic:

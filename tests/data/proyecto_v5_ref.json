@@ -1,0 +1,1315 @@
+{
+ "app_version": "0.0.1",
+ "canon_version": "veritas-canon/1",
+ "content": {
+  "model": {
+   "load_cases": [],
+   "loads": [],
+   "materials": [
+    {
+     "density": 7850.0,
+     "elastic_modulus": 210000000000.0,
+     "family": "STEEL",
+     "id": "573da7af-756f-4cca-9541-891cfcf1bd57",
+     "name": "Acero",
+     "poisson_ratio": null,
+     "revision": 1,
+     "shear_modulus": 81000000000.0,
+     "source": "test",
+     "specific_weight": null,
+     "standard_edition": null
+    }
+   ],
+   "members": [
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "c1faf7ac-bc8d-49de-ab4e-ab0c821bbd2b",
+     "label": "",
+     "material": {
+      "id": "573da7af-756f-4cca-9541-891cfcf1bd57",
+      "revision": 1
+     },
+     "node_i": "94e635c9-97bc-468e-88c0-d198952140e7",
+     "node_j": "7406e3e6-5110-472a-bcd1-7fa377d513b0",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "3516c5fe-05d9-4f34-a2f3-f8e77cbedfa4",
+      "revision": 1
+     }
+    },
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "1fd2499a-7f87-4994-be1b-d86682ac92c7",
+     "label": "",
+     "material": {
+      "id": "573da7af-756f-4cca-9541-891cfcf1bd57",
+      "revision": 1
+     },
+     "node_i": "94e635c9-97bc-468e-88c0-d198952140e7",
+     "node_j": "a8fa4ae8-6993-4d2d-862d-754c28e98aca",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "d344050d-1271-4736-80bf-207aa58bdfc1",
+      "revision": 1
+     }
+    },
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "d65f8b3a-fe74-4158-96a1-ae4077df05e8",
+     "label": "",
+     "material": {
+      "id": "573da7af-756f-4cca-9541-891cfcf1bd57",
+      "revision": 1
+     },
+     "node_i": "94e635c9-97bc-468e-88c0-d198952140e7",
+     "node_j": "4b7ad2c3-1202-4697-aedb-8d121481d6c6",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "e0d43f18-d5f4-4035-bffa-ae1b2b4dd1ad",
+      "revision": 1
+     }
+    },
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "b988923f-95da-4d7f-85df-84673ddf8e6e",
+     "label": "",
+     "material": {
+      "id": "573da7af-756f-4cca-9541-891cfcf1bd57",
+      "revision": 1
+     },
+     "node_i": "94e635c9-97bc-468e-88c0-d198952140e7",
+     "node_j": "4c1bf2d8-ef96-4ef0-9593-3650c1cec6ff",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "29b2ee5d-c282-40b7-9355-5dd9c17d9bf8",
+      "revision": 1
+     }
+    },
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "b1e129c2-1de8-498f-a39e-ca4fcc9aa73f",
+     "label": "",
+     "material": {
+      "id": "573da7af-756f-4cca-9541-891cfcf1bd57",
+      "revision": 1
+     },
+     "node_i": "94e635c9-97bc-468e-88c0-d198952140e7",
+     "node_j": "daa18834-2c4c-4643-b684-56f2ac6dc99e",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "9bafbaa5-912f-436f-8662-bbad0ca2f248",
+      "revision": 1
+     }
+    },
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "baf847c7-c77c-4ef4-8b35-df50a9e4a5b3",
+     "label": "",
+     "material": {
+      "id": "573da7af-756f-4cca-9541-891cfcf1bd57",
+      "revision": 1
+     },
+     "node_i": "94e635c9-97bc-468e-88c0-d198952140e7",
+     "node_j": "730190f1-ec7b-4cca-882d-3b3ef5f00564",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "00000000-0000-4000-8000-000000000063",
+      "revision": 1
+     }
+    },
+    {
+     "end_i": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "end_j": {
+      "states": [
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID",
+       "RIGID"
+      ],
+      "stiffness": [
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     },
+     "id": "0bd32f09-6c69-42c9-8638-b6157fe5a642",
+     "label": "",
+     "material": {
+      "id": "573da7af-756f-4cca-9541-891cfcf1bd57",
+      "revision": 1
+     },
+     "node_i": "94e635c9-97bc-468e-88c0-d198952140e7",
+     "node_j": "b5ed5b02-3d28-4311-85b6-d37df379245d",
+     "orientation": {
+      "alpha": 0.0,
+      "reference": [
+       0.0,
+       0.0,
+       1.0
+      ],
+      "source": "DEFAULT_Z"
+     },
+     "revision": 1,
+     "section": {
+      "id": "3516c5fe-05d9-4f34-a2f3-f8e77cbedfa4",
+      "revision": 2
+     }
+    }
+   ],
+   "model_revision": 15,
+   "nodes": [
+    {
+     "id": "94e635c9-97bc-468e-88c0-d198952140e7",
+     "label": "",
+     "position": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "7406e3e6-5110-472a-bcd1-7fa377d513b0",
+     "label": "",
+     "position": [
+      1.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "a8fa4ae8-6993-4d2d-862d-754c28e98aca",
+     "label": "",
+     "position": [
+      2.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "4b7ad2c3-1202-4697-aedb-8d121481d6c6",
+     "label": "",
+     "position": [
+      3.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "4c1bf2d8-ef96-4ef0-9593-3650c1cec6ff",
+     "label": "",
+     "position": [
+      4.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "daa18834-2c4c-4643-b684-56f2ac6dc99e",
+     "label": "",
+     "position": [
+      5.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "730190f1-ec7b-4cca-882d-3b3ef5f00564",
+     "label": "",
+     "position": [
+      6.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    },
+    {
+     "id": "b5ed5b02-3d28-4311-85b6-d37df379245d",
+     "label": "",
+     "position": [
+      7.0,
+      0.0,
+      0.0
+     ],
+     "revision": 1
+    }
+   ],
+   "sections": [
+    {
+     "family": "PARAMETRICA",
+     "id": "3516c5fe-05d9-4f34-a2f3-f8e77cbedfa4",
+     "name": "I 300 con r",
+     "parameters": {
+      "dimensions": [
+       {
+        "name": "h",
+        "value": 0.3
+       },
+       {
+        "name": "b",
+        "value": 0.15
+       },
+       {
+        "name": "tw",
+        "value": 0.0070999999999999995
+       },
+       {
+        "name": "tf",
+        "value": 0.0107
+       },
+       {
+        "name": "r",
+        "value": 0.015
+       }
+      ],
+      "shape": "I"
+     },
+     "properties": {
+      "area": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.005381201652942296
+      },
+      "centroid_y": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 8.356109185847975e-05
+      },
+      "iyz": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 6.037784243992914e-06
+      },
+      "torsion_constant": {
+       "method": "sin-solucion-exacta-validada/1",
+       "origin": "sin solución exacta validada de la constante de torsión de Saint-Venant para esta forma (DEC-005; TK-028)",
+       "status": "NO_DISPONIBLE",
+       "unit": "m⁴",
+       "value": null
+      }
+     },
+     "revision": 1,
+     "shear": {
+      "shear_y": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "sin forma cerrada validada con radios de acuerdo: el área de cortante energética solo se define para aristas vivas",
+       "status": "NO_DISPONIBLE",
+       "unit": "m²",
+       "value": null
+      },
+      "shear_z": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "sin forma cerrada validada con radios de acuerdo: el área de cortante energética solo se define para aristas vivas",
+       "status": "NO_DISPONIBLE",
+       "unit": "m²",
+       "value": null
+      }
+     }
+    },
+    {
+     "family": "PARAMETRICA",
+     "id": "3516c5fe-05d9-4f34-a2f3-f8e77cbedfa4",
+     "name": "I 300 con r",
+     "parameters": {
+      "dimensions": [
+       {
+        "name": "h",
+        "value": 0.3
+       },
+       {
+        "name": "b",
+        "value": 0.15
+       },
+       {
+        "name": "tw",
+        "value": 0.0070999999999999995
+       },
+       {
+        "name": "tf",
+        "value": 0.012
+       },
+       {
+        "name": "r",
+        "value": 0.015
+       }
+      ],
+      "shape": "I"
+     },
+     "properties": {
+      "area": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.005752741652942296
+      },
+      "centroid_y": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 9.063562008534198e-05
+      },
+      "iyz": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 6.768956696609582e-06
+      },
+      "torsion_constant": {
+       "method": "sin-solucion-exacta-validada/1",
+       "origin": "sin solución exacta validada de la constante de torsión de Saint-Venant para esta forma (DEC-005; TK-028)",
+       "status": "NO_DISPONIBLE",
+       "unit": "m⁴",
+       "value": null
+      }
+     },
+     "revision": 2,
+     "shear": {
+      "shear_y": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "sin forma cerrada validada con radios de acuerdo: el área de cortante energética solo se define para aristas vivas",
+       "status": "NO_DISPONIBLE",
+       "unit": "m²",
+       "value": null
+      },
+      "shear_z": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "sin forma cerrada validada con radios de acuerdo: el área de cortante energética solo se define para aristas vivas",
+       "status": "NO_DISPONIBLE",
+       "unit": "m²",
+       "value": null
+      }
+     }
+    },
+    {
+     "family": "PARAMETRICA",
+     "id": "d344050d-1271-4736-80bf-207aa58bdfc1",
+     "name": "I 300 viva",
+     "parameters": {
+      "dimensions": [
+       {
+        "name": "h",
+        "value": 0.3
+       },
+       {
+        "name": "b",
+        "value": 0.15
+       },
+       {
+        "name": "tw",
+        "value": 0.0070999999999999995
+       },
+       {
+        "name": "tf",
+        "value": 0.0107
+       },
+       {
+        "name": "r",
+        "value": 0.0
+       }
+      ],
+      "shape": "I"
+     },
+     "properties": {
+      "area": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.0051880599999999995
+      },
+      "centroid_y": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 7.998986946313332e-05
+      },
+      "iyz": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "i-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma I)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 6.027059500383333e-06
+      },
+      "torsion_constant": {
+       "method": "sin-solucion-exacta-validada/1",
+       "origin": "sin solución exacta validada de la constante de torsión de Saint-Venant para esta forma (DEC-005; TK-028)",
+       "status": "NO_DISPONIBLE",
+       "unit": "m⁴",
+       "value": null
+      }
+     },
+     "revision": 1,
+     "shear": {
+      "shear_y": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "el corte recto y = cte no es defendible en la I: el cortante según y lo transmiten las alas con flujo horizontal",
+       "status": "NO_DISPONIBLE",
+       "unit": "m²",
+       "value": null
+      },
+      "shear_z": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "calculado de los parámetros de esta revisión: energía de cortante de Jourawski con cortes rectos z = cte (Vz)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.0020953245883500574
+      }
+     }
+    },
+    {
+     "family": "PARAMETRICA",
+     "id": "e0d43f18-d5f4-4035-bffa-ae1b2b4dd1ad",
+     "name": "RHS",
+     "parameters": {
+      "dimensions": [
+       {
+        "name": "h",
+        "value": 0.3
+       },
+       {
+        "name": "b",
+        "value": 0.2
+       },
+       {
+        "name": "t",
+        "value": 0.01
+       },
+       {
+        "name": "ro",
+        "value": 0.015
+       }
+      ],
+      "shape": "RHS"
+     },
+     "properties": {
+      "area": {
+       "method": "rhs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma RHS)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.009428318530717957
+      },
+      "centroid_y": {
+       "method": "rhs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma RHS)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "rhs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma RHS)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "rhs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma RHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.000116978708463838
+      },
+      "iyz": {
+       "method": "rhs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma RHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "rhs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma RHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 6.228387129260715e-05
+      },
+      "torsion_constant": {
+       "method": "sin-solucion-exacta-validada/1",
+       "origin": "sin solución exacta validada de la constante de torsión de Saint-Venant para esta forma (DEC-005; TK-028)",
+       "status": "NO_DISPONIBLE",
+       "unit": "m⁴",
+       "value": null
+      }
+     },
+     "revision": 1,
+     "shear": {
+      "shear_y": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "sin forma cerrada validada con radios de acuerdo: el área de cortante energética solo se define para aristas vivas",
+       "status": "NO_DISPONIBLE",
+       "unit": "m²",
+       "value": null
+      },
+      "shear_z": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "sin forma cerrada validada con radios de acuerdo: el área de cortante energética solo se define para aristas vivas",
+       "status": "NO_DISPONIBLE",
+       "unit": "m²",
+       "value": null
+      }
+     }
+    },
+    {
+     "family": "PARAMETRICA",
+     "id": "29b2ee5d-c282-40b7-9355-5dd9c17d9bf8",
+     "name": "SHS",
+     "parameters": {
+      "dimensions": [
+       {
+        "name": "b",
+        "value": 0.1
+       },
+       {
+        "name": "t",
+        "value": 0.005
+       },
+       {
+        "name": "ro",
+        "value": 0.0
+       }
+      ],
+      "shape": "SHS"
+     },
+     "properties": {
+      "area": {
+       "method": "shs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma SHS)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.0019
+      },
+      "centroid_y": {
+       "method": "shs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma SHS)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "shs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma SHS)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "shs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma SHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 2.865833333333334e-06
+      },
+      "iyz": {
+       "method": "shs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma SHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "shs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma SHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 2.865833333333334e-06
+      },
+      "torsion_constant": {
+       "method": "sin-solucion-exacta-validada/1",
+       "origin": "sin solución exacta validada de la constante de torsión de Saint-Venant para esta forma (DEC-005; TK-028)",
+       "status": "NO_DISPONIBLE",
+       "unit": "m⁴",
+       "value": null
+      }
+     },
+     "revision": 1,
+     "shear": {
+      "shear_y": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "calculado de los parámetros de esta revisión: energía de cortante de Jourawski con cortes rectos y = cte (Vy)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.0009692497901766877
+      },
+      "shear_z": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "calculado de los parámetros de esta revisión: energía de cortante de Jourawski con cortes rectos z = cte (Vz)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.0009692497901766877
+      }
+     }
+    },
+    {
+     "family": "PARAMETRICA",
+     "id": "9bafbaa5-912f-436f-8662-bbad0ca2f248",
+     "name": "CHS",
+     "parameters": {
+      "dimensions": [
+       {
+        "name": "d",
+        "value": 0.1
+       },
+       {
+        "name": "t",
+        "value": 0.005
+       }
+      ],
+      "shape": "CHS"
+     },
+     "properties": {
+      "area": {
+       "method": "chs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma CHS)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.0014922565104551519
+      },
+      "centroid_y": {
+       "method": "chs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma CHS)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "chs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma CHS)",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "chs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma CHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 1.688115177452391e-06
+      },
+      "iyz": {
+       "method": "chs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma CHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "chs-closed-form/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma CHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 1.688115177452391e-06
+      },
+      "torsion_constant": {
+       "method": "annulus-torsion-exact/1",
+       "origin": "calculado a partir de los parámetros de esta revisión (forma CHS)",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 3.376230354904782e-06
+      }
+     },
+     "revision": 1,
+     "shear": {
+      "shear_y": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "calculado de los parámetros de esta revisión: energía de cortante de Jourawski con cortes rectos y = cte (Vy)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.0009999499674039109
+      },
+      "shear_z": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "calculado de los parámetros de esta revisión: energía de cortante de Jourawski con cortes rectos z = cte (Vz)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.0009999499674039109
+      }
+     }
+    },
+    {
+     "family": "RECTANGULAR",
+     "id": "00000000-0000-4000-8000-000000000063",
+     "name": "",
+     "parameters": {
+      "b": 0.2,
+      "h": 0.4
+     },
+     "properties": {
+      "area": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.08000000000000002
+      },
+      "centroid_y": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.001066666666666667
+      },
+      "iyz": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "rect-closed-form/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.00026666666666666673
+      },
+      "torsion_constant": {
+       "method": "saint-venant-series/1",
+       "origin": "calculado a partir de los parámetros b, h de esta revisión",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0007317813667826264
+      }
+     },
+     "revision": 1,
+     "shear": {
+      "shear_y": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "calculado de los parámetros de esta revisión: energía de cortante de Jourawski con cortes rectos y = cte (Vy)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.06666666666666668
+      },
+      "shear_z": {
+       "method": "shear-energy-straight-cut/1",
+       "origin": "calculado de los parámetros de esta revisión: energía de cortante de Jourawski con cortes rectos z = cte (Vz)",
+       "status": "CALCULADO",
+       "unit": "m²",
+       "value": 0.06666666666666668
+      }
+     }
+    },
+    {
+     "family": "CATALOGO",
+     "id": "8e608ab7-6a7c-4855-9d02-7484eeba2e36",
+     "name": "CATALOGO-SINTETICO/SERIE-A/P-100@1",
+     "parameters": {
+      "area": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m²",
+       "value": 0.001
+      },
+      "catalog": {
+       "edition": "2026",
+       "id": "00000000-0000-4000-8000-000000000384",
+       "license": "Sin valor comercial",
+       "name": "CATALOGO-SINTETICO",
+       "source": "SINTÉTICO (prueba)"
+      },
+      "dimensions": [
+       {
+        "name": "b",
+        "value": 0.05
+       },
+       {
+        "name": "h",
+        "value": 0.1
+       }
+      ],
+      "iy": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 2e-06
+      },
+      "iz": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 3e-07
+      },
+      "linear_mass": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "kg/m",
+       "value": 7.85
+      },
+      "profile": {
+       "designation": "P-100",
+       "id": "00000000-0000-4000-8000-0000000002bc",
+       "revision": 1,
+       "series": "SERIE-A",
+       "shape": "I",
+       "source_sha256": "ccc3de0000269c7eef697bbe5c35ea85e44f31888522f026787a9031fc0d8c6d"
+      },
+      "provenance": {
+       "edition": "2026",
+       "license": "Sin valor comercial",
+       "method": "Generado en la prueba",
+       "source": "SINTÉTICO (prueba)"
+      },
+      "torsion_constant": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 4e-08
+      },
+      "warnings": []
+     },
+     "properties": {
+      "area": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m²",
+       "value": 0.001
+      },
+      "centroid_y": {
+       "method": "deducido de la doble simetría de la forma declarada (no importado)",
+       "origin": "simetría de la familia",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "centroid_z": {
+       "method": "deducido de la doble simetría de la forma declarada (no importado)",
+       "origin": "simetría de la familia",
+       "status": "CALCULADO",
+       "unit": "m",
+       "value": 0.0
+      },
+      "iy": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 2e-06
+      },
+      "iyz": {
+       "method": "deducido de la doble simetría de la forma declarada (no importado)",
+       "origin": "simetría de la familia",
+       "status": "CALCULADO",
+       "unit": "m⁴",
+       "value": 0.0
+      },
+      "iz": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 3e-07
+      },
+      "torsion_constant": {
+       "method": "importado",
+       "origin": "SINTÉTICO",
+       "status": "IMPORTADO_SIN_VERIFICAR",
+       "unit": "m⁴",
+       "value": 4e-08
+      }
+     },
+     "revision": 1
+    }
+   ],
+   "supports": []
+  },
+  "norms": {
+   "selected": null,
+   "user": []
+  },
+  "runs": [],
+  "settings": {
+   "user_profiles": []
+  }
+ },
+ "format": "veritas-project",
+ "integrity": {
+  "algorithm": "sha256",
+  "digest": "a92623091b13d429e37d8e5e89dc88d7dc7a86aa580542309ab655c38a91d98f"
+ },
+ "model_hash": "d059a420697346091d65ebb9ed0e22b2920a642e4703e103406d9f4561abec16",
+ "schema_version": 5
+}

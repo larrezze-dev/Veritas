@@ -96,7 +96,7 @@ def test_round_trip_is_exact_for_every_shape(tmp_path: Path) -> None:
     path = tmp_path / "p.json"
     saved = save_project(path, model)
     opened = open_project(path)
-    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 5
+    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 6
     assert repr(opened.model.snapshot()) == repr(model.snapshot())
     assert opened.model_hash == saved.model_hash == model_hash(model.snapshot())
     families = {s.family for s in opened.model.snapshot().sections}
@@ -167,9 +167,9 @@ def test_resaving_the_v4_project_as_v5_keeps_hash_and_runs(tmp_path: Path) -> No
     opened = open_project(REFERENCE_V4)
     target = tmp_path / "v5.json"
     saved = save_project(target, opened.model, opened.user_profiles, runs=opened.runs)
-    assert saved.schema_version == 5
+    assert saved.schema_version == CURRENT_SCHEMA_VERSION
     again = open_project(target)
-    assert again.schema_version == 5
+    assert again.schema_version == CURRENT_SCHEMA_VERSION
     assert again.model_hash == REFERENCE_V4_HASH
     assert validity(again.runs[0], again.model) is Validity.CURRENT
     assert repr(again.model.snapshot()) == repr(opened.model.snapshot())
@@ -323,7 +323,7 @@ def test_migration_4_to_5_only_verifies() -> None:
     assert migrated == content
     assert migrated is not content
     assert 4 in MIGRATIONS
-    assert migrate(content, 5) is content  # ya está en la versión vigente
+    assert migrate(content, CURRENT_SCHEMA_VERSION) is content  # ya está en la vigente
 
 
 @pytest.mark.parametrize(

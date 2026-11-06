@@ -118,6 +118,10 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "El hash de origen del perfil de catálogo debe ser un SHA-256 hexadecimal en minúsculas."
     ),
     "section.catalog_duplicate_dimension": "Dimensión de perfil repetida: «{name}».",
+    "section.catalog_invalid_manufacturer": "Fabricante del perfil no válido (texto vacío).",
+    "section.catalog_invalid_material": (
+        "Familia de material compatible desconocida en el perfil: «{material}»."
+    ),
     "section.catalog_invalid_warning": "Clave de aviso de perfil no válida o repetida: «{key}».",
     "section.catalog_invalid_status": (
         "Estado {status} no admitido en {field}: un perfil de catálogo solo puede ser "
@@ -205,6 +209,10 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "section.replace_incompatible_material": (
         "Barra «{member}»: un perfil de forma {shape} (metálico) no es compatible con un "
         "material de la familia {family}."
+    ),
+    "section.replace_material_not_declared": (
+        "Barra «{member}»: el perfil declara como materiales compatibles {declared} y la "
+        "familia {family} no figura."
     ),
     "section.replace_mass_change": "Barra «{member}»: la masa lineal cambia {change}.",
     "section.replace_mass_unknown": (

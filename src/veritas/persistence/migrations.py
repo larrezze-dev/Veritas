@@ -4,7 +4,8 @@ Cada migración transforma el CONTENIDO (``content``) de la versión N a la N+1 
 después de verificar la integridad del archivo tal como se guardó y antes de validarlo. El
 esquema inicial fue la v1; la v2 (T-012 E2) añade las ejecuciones guardadas y la v3 (T-014 E2), las
 normativas de usuario y la seleccionada; la v4 (T-024) admite secciones de catálogo y la v5 (T-025),
-perfiles paramétricos y el grupo de cortante. El registro es un argumento para poder probar la
+perfiles paramétricos y el grupo de cortante y la v6 (T-028), el fabricante y los materiales
+compatibles del snapshot de catálogo. El registro es un argumento para poder probar la
 cadena con migraciones sintéticas.
 """
 
@@ -14,7 +15,7 @@ from typing import Final
 from veritas.core.diagnostics import DiagnosticCode
 from veritas.persistence.errors import format_error, value_error
 
-CURRENT_SCHEMA_VERSION: Final = 5
+CURRENT_SCHEMA_VERSION: Final = 6
 
 type Migration = Callable[[dict[str, object]], dict[str, object]]
 
@@ -78,11 +79,36 @@ def _v4_to_v5(content: dict[str, object]) -> dict[str, object]:
     return dict(content)
 
 
+def _v5_to_v6(content: dict[str, object]) -> dict[str, object]:
+    """v6 (T-028, ADR-012) admite ``manufacturer`` y ``compatible_materials`` en el snapshot.
+
+    Solo VERIFICA: un archivo v5 no puede traer esas claves (no se reinterpretan en silencio) y
+    su forma, y por tanto el hash del modelo, no cambia: «sin declarar» es lo que significa su
+    ausencia.
+    """
+    model = content.get("model")
+    sections = model.get("sections") if isinstance(model, dict) else None
+    if isinstance(sections, list):
+        for index, section in enumerate(sections):
+            params = section.get("parameters") if isinstance(section, dict) else None
+            if not isinstance(params, dict) or section.get("family") != "CATALOGO":
+                continue
+            found = [k for k in ("manufacturer", "compatible_materials") if k in params]
+            if found:
+                raise format_error(
+                    "project.unknown_fields",
+                    {"fields": ", ".join(found)},
+                    path=f"content.model.sections[{index}].parameters",
+                )
+    return dict(content)
+
+
 MIGRATIONS: Final[dict[int, Migration]] = {
     1: _v1_to_v2,
     2: _v2_to_v3,
     3: _v3_to_v4,
     4: _v4_to_v5,
+    5: _v5_to_v6,
 }
 """Migraciones reales registradas, ``N -> N+1``."""
 

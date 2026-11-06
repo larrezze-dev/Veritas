@@ -408,6 +408,7 @@ _CATALOG_PARAMETERS: Final = (
     *SNAPSHOT_PROPERTY_DIMENSIONS,
     "warnings",
 )
+_CATALOG_OPTIONAL: Final = ("manufacturer", "compatible_materials")  # Esquema v6 (T-028).
 _CATALOG_REF: Final = ("id", "name", "source", "license", "edition")
 _PROFILE_REF: Final = ("id", "revision", "series", "designation", "shape", "source_sha256")
 _SNAPSHOT_DIMENSION: Final = ("name", "value")
@@ -415,7 +416,7 @@ _PROVENANCE: Final = ("source", "license", "edition", "method")
 
 
 def _enc_snapshot(s: CatalogSnapshot) -> Json:
-    return {
+    encoded: Json = {
         "catalog": {
             "id": str(s.catalog_id),
             "name": s.catalog_name,
@@ -441,6 +442,12 @@ def _enc_snapshot(s: CatalogSnapshot) -> Json:
         **{name: _enc_property(getattr(s, name)) for name in SNAPSHOT_PROPERTY_DIMENSIONS},
         "warnings": list(s.warnings),
     }
+    # Esquema v6 (T-028, ADR-012): solo si hay dato, de modo que el hash de v1–v5 no cambia.
+    if s.manufacturer is not None:
+        encoded["manufacturer"] = s.manufacturer
+    if s.compatible_materials:
+        encoded["compatible_materials"] = list(s.compatible_materials)
+    return encoded
 
 
 def _enc_section(s: SectionRevision) -> Json:
@@ -498,7 +505,7 @@ def _dec_snapshot_dimension(data: object, path: str) -> SnapshotDimension:
 
 
 def _dec_snapshot(data: object, path: str) -> CatalogSnapshot:
-    r = Reader(data, path, _CATALOG_PARAMETERS)
+    r = Reader(data, path, _CATALOG_PARAMETERS, _CATALOG_OPTIONAL)
     catalog = r.obj("catalog", _CATALOG_REF)
     profile = r.obj("profile", _PROFILE_REF)
     prov = r.obj("provenance", _PROVENANCE)
@@ -508,6 +515,21 @@ def _dec_snapshot(data: object, path: str) -> CatalogSnapshot:
     )
     props = {name: _dec_property(r.raw(name), r.at(name)) for name in SNAPSHOT_PROPERTY_DIMENSIONS}
     warnings = tuple(_text_item(item, r.at("warnings")) for item in r.items("warnings"))
+    manufacturer = r.text("manufacturer") if r.has("manufacturer") else None
+    materials = (
+        tuple(
+            _text_item(item, r.at("compatible_materials"))
+            for item in r.items("compatible_materials")
+        )
+        if r.has("compatible_materials")
+        else ()
+    )
+    if r.has("compatible_materials") and not materials:  # Ausente = sin declarar; [] no se escribe.
+        raise format_error(
+            "project.invalid_field",
+            {"expected": "lista no vacía (o ausente)"},
+            path=r.at("compatible_materials"),
+        )
     return _build(
         path,
         lambda: CatalogSnapshot(
@@ -527,6 +549,8 @@ def _dec_snapshot(data: object, path: str) -> CatalogSnapshot:
                 prov.text("source"), prov.text("license"), prov.text("edition"), prov.text("method")
             ),
             warnings=warnings,
+            manufacturer=manufacturer,
+            compatible_materials=materials,
             **props,
         ),
     )
@@ -550,8 +574,9 @@ def _dec_parametric(data: object, path: str) -> ParametricParameters:
 def _dec_parameters(family: SectionFamily, r: Reader) -> SectionParameters:
     """Decodifica ``parameters`` según ``family``, con una rama explícita por familia.
 
-    Esquema v4 (ADR-010): catálogo; esquema v5 (ADR-011): perfil paramétrico. Ninguna familia
-    cae por defecto en el rectángulo.
+    Esquema v4 (ADR-010): catálogo; esquema v5 (ADR-011): perfil paramétrico; esquema v6
+    (ADR-012): el snapshot de catálogo admite fabricante y materiales.
+    Ninguna familia cae por defecto en el rectángulo.
     """
     if family is SectionFamily.CATALOGO:
         return _dec_snapshot(r.raw("parameters"), r.at("parameters"))

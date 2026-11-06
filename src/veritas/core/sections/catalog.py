@@ -24,6 +24,7 @@ from uuid import UUID
 
 from veritas.core import units as u
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError, Location
+from veritas.core.materials.material import MaterialFamily
 from veritas.core.references import check_identity
 from veritas.core.sections.properties import PropertyStatus, SectionProperty
 from veritas.core.units import get_unit
@@ -55,6 +56,9 @@ SNAPSHOT_PROPERTY_DIMENSIONS: Final = {
     "linear_mass": u.LINEAR_MASS,
 }
 """Propiedades que el snapshot copia del catálogo, en orden, y la dimensión de su unidad SI."""
+
+COMPATIBLE_MATERIALS: Final = tuple(family.value for family in MaterialFamily)
+"""Familias de material admitidas en ``compatible_materials`` (T-028; ADR-012), en orden."""
 
 _DIMENSION_NAME: Final = re.compile(r"[a-z][a-z0-9_]*")
 _WARNING_KEY: Final = re.compile(r"[a-z]+\.[a-z_]+")
@@ -122,6 +126,8 @@ class CatalogSnapshot:
     torsion_constant: SectionProperty
     linear_mass: SectionProperty
     warnings: tuple[str, ...] = ()
+    manufacturer: str | None = None
+    compatible_materials: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         check_identity(self.catalog_id, 1, "CatalogSnapshot.catalog_id")
@@ -142,6 +148,32 @@ class CatalogSnapshot:
         for name in SNAPSHOT_PROPERTY_DIMENSIONS:
             check_snapshot_property(name, getattr(self, name))
         self._check_warnings()
+        self._check_commercial()
+
+    def _check_commercial(self) -> None:
+        """Fabricante y materiales compatibles declarados por el catálogo (T-028; ADR-012).
+
+        Vacío / ``None`` significa «sin declarar»: no se infiere nada. Los materiales se
+        normalizan al orden de ``MaterialFamily`` y sin duplicados, como en el catálogo.
+        """
+        if self.manufacturer is not None:
+            if not isinstance(self.manufacturer, str) or not self.manufacturer.strip():
+                raise _invalid("section.catalog_invalid_manufacturer", "manufacturer")
+            object.__setattr__(self, "manufacturer", self.manufacturer.strip())
+        if not isinstance(self.compatible_materials, tuple):
+            raise invalid_type("compatible_materials", "tupla de textos", self.compatible_materials)
+        for name in self.compatible_materials:
+            if name not in COMPATIBLE_MATERIALS:
+                raise _invalid(
+                    "section.catalog_invalid_material",
+                    "compatible_materials",
+                    {"material": str(name)},
+                )
+        object.__setattr__(
+            self,
+            "compatible_materials",
+            tuple(sorted(set(self.compatible_materials), key=COMPATIBLE_MATERIALS.index)),
+        )
 
     def _check_dimensions(self) -> None:
         if not isinstance(self.dimensions, tuple):
