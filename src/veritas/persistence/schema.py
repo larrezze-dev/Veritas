@@ -50,6 +50,7 @@ from veritas.core.sections.parametric import (
     ParametricParameters,
     ParametricShape,
 )
+from veritas.core.sections.polygon import FreeformParameters
 from veritas.core.sections.properties import PropertyStatus, SectionProperties, SectionProperty
 from veritas.core.sections.section import (
     RectangularParameters,
@@ -462,6 +463,12 @@ def _enc_section(s: SectionRevision) -> Json:
             "shape": str(s.parameters.shape),
             "dimensions": [{"name": d.name, "value": d.value} for d in s.parameters.dimensions],
         }
+    elif isinstance(s.parameters, FreeformParameters):
+        # Esquema v7 (T-029, ADR-013): vértices (y, z) en m, forma canónica, precisión completa.
+        parameters = {
+            "outer": [[y, z] for y, z in s.parameters.outer],
+            "holes": [[[y, z] for y, z in hole] for hole in s.parameters.holes],
+        }
     else:
         parameters = {"b": s.parameters.b, "h": s.parameters.h}
     encoded: Json = {
@@ -571,17 +578,44 @@ def _dec_parametric(data: object, path: str) -> ParametricParameters:
     return _build(path, lambda: ParametricParameters(shape, dimensions))
 
 
+_FREEFORM: Final = ("outer", "holes")
+
+
+def _dec_contour(data: object, path: str) -> tuple[tuple[float, float], ...]:
+    if not isinstance(data, list):
+        raise format_error("project.invalid_field", {"expected": "lista de vértices"}, path=path)
+    points: list[tuple[float, float]] = []
+    for i, item in enumerate(data):
+        at = f"{path}[{i}]"
+        if not (isinstance(item, list) and len(item) == 2):  # noqa: PLR2004 (par y, z)
+            raise format_error("project.invalid_field", {"expected": "par [y, z]"}, path=at)
+        points.append((_real(item[0], f"{at}[0]"), _real(item[1], f"{at}[1]")))
+    return tuple(points)
+
+
+def _dec_freeform(data: object, path: str) -> FreeformParameters:
+    r = Reader(data, path, _FREEFORM)
+    outer = _dec_contour(r.raw("outer"), r.at("outer"))
+    holes = tuple(
+        _dec_contour(item, f"{r.at('holes')}[{i}]") for i, item in enumerate(r.items("holes"))
+    )
+    return _build(path, lambda: FreeformParameters(outer, holes))
+
+
 def _dec_parameters(family: SectionFamily, r: Reader) -> SectionParameters:
     """Decodifica ``parameters`` según ``family``, con una rama explícita por familia.
 
     Esquema v4 (ADR-010): catálogo; esquema v5 (ADR-011): perfil paramétrico; esquema v6
-    (ADR-012): el snapshot de catálogo admite fabricante y materiales.
+    (ADR-012): el snapshot de catálogo admite fabricante y materiales; esquema v7 (ADR-013): croquis
+    libre.
     Ninguna familia cae por defecto en el rectángulo.
     """
     if family is SectionFamily.CATALOGO:
         return _dec_snapshot(r.raw("parameters"), r.at("parameters"))
     if family is SectionFamily.PARAMETRICA:
         return _dec_parametric(r.raw("parameters"), r.at("parameters"))
+    if family is SectionFamily.FREEFORM:
+        return _dec_freeform(r.raw("parameters"), r.at("parameters"))
     if family is SectionFamily.RECTANGULAR:
         p = r.obj("parameters", ("b", "h"))
         return _build(p.path, lambda: RectangularParameters(p.real("b"), p.real("h")))

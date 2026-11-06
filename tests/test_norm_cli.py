@@ -405,5 +405,5 @@ def test_file_written_by_cli_is_valid_json_with_v4(
 ) -> None:
     new(capsys, project)
     data = json.loads(project.read_text(encoding="utf-8"))
-    assert data["schema_version"] == 6
+    assert data["schema_version"] == 7
     assert len(data["content"]["norms"]["user"]) == 1

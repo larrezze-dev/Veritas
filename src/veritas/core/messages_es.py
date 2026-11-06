@@ -171,6 +171,40 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "section.not_parametric": (
         "La sección es de la familia {family}: no tiene parámetros de un perfil paramétrico."
     ),
+    "section.not_freeform": (
+        "La sección es de la familia {family}: no tiene los parámetros de un croquis libre."
+    ),
+    "section.freeform_torsion_not_available": (
+        "La constante J de un croquis libre no tiene método validado: debe ser NO_DISPONIBLE."
+    ),
+    "section.freeform_invalid_status": (
+        "La propiedad «{field}» de un croquis libre solo puede ser CALCULADO o CONTRASTADO."
+    ),
+    "section.principal_axes_invalid": (
+        "Tensor de inercia no admisible para los ejes principales: se exige Iy, Iz > 0 e "
+        "Iyz² ≤ Iy·Iz."
+    ),
+    "section.sketch_too_few_vertices": (
+        "El contorno «{field}» tiene {count:g} vértice(s): se exigen al menos 3."
+    ),
+    "section.sketch_duplicate_vertex": (
+        "El contorno «{field}» repite o junta el vértice {index:g} con el siguiente."
+    ),
+    "section.sketch_zero_area": "El contorno «{field}» encierra un área nula.",
+    "section.sketch_spike": (
+        "El contorno «{field}» retrocede o solapa sobre sí mismo en el vértice {index:g}."
+    ),
+    "section.sketch_self_intersection": (
+        "El contorno «{field}» se autointersecta o se toca: aristas {edge_a:g} y {edge_b:g}."
+    ),
+    "section.sketch_open_contour": (
+        "El contorno «{field}» está abierto: el último vértice no cierra con el primero."
+    ),
+    "section.sketch_hole_touches_outer": ("El hueco «{field}» toca o cruza el contorno exterior."),
+    "section.sketch_hole_outside": "El hueco «{field}» queda fuera del contorno exterior.",
+    "section.sketch_holes_overlap": (
+        "El hueco «{field}» toca, solapa o contiene al hueco {other:g}."
+    ),
     "section.geometry_dimensions": (
         "Dimensiones no válidas para la forma {shape}: se esperaban {expected} y se recibió "
         "{found}."

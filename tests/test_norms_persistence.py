@@ -162,7 +162,7 @@ def test_round_trip_is_exact_with_all_revisions(path: Path) -> None:
     reg.select(RevisionRef(reg.user_configurations()[0].id, 2))
     saved = save_project(path, rich_model(), norms=state_of(reg))
     opened = open_project(path)
-    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 6
+    assert opened.schema_version == CURRENT_SCHEMA_VERSION == 7
     assert repr(opened.norms.user) == repr(reg.user_revisions())
     assert opened.norms.selected == reg.selected
     assert saved.norms == opened.norms

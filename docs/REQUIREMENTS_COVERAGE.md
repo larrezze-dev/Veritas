@@ -67,10 +67,10 @@ Matriz de trazabilidad de la SRS v1.1.0 ([references/Structural3D_SRS_v1.1.0.md]
 | SEC-013 | P1 | Separar sección apta para FEM de sección cubierta por una norma de diseño. | T-024 E2 (`core/sections/readiness.py`, `veritas project sections`) | IMPLEMENTADO en T-024 E2 (aceptado 2026-11-05): dos dictámenes independientes; `fem_ready` (A, Iy, Iz, J, centroide, Iyz) con un diagnóstico por ausente y `code_coverage` = NO_COMPROBADO siempre (sin verificación normativa validada) |
 | SEC-014 | P2 | Catálogos adicionales de proveedores mediante adaptadores importables. | — | NO INICIADO |
 | EDT-001 | P0 | Editor paramétrico de rectángulo, círculo, anillo, I, U, L, RHS, SHS y CHS. | — | NO INICIADO |
-| EDT-002 | P1 | Editor 2D con líneas, arcos, polígonos cerrados, huecos, cotas y snapping. | — | NO INICIADO |
+| EDT-002 | P1 | Editor 2D con líneas, arcos, polígonos cerrados, huecos, cotas y snapping. | T-029 E1: polígonos con huecos por coordenadas (`FreeformParameters`); `tests/test_freeform_section.py` | PARCIAL — E1 aceptada 2026-11-06. Sin arcos, cotas ni snapping (F4) |
 | EDT-003 | P1 | Operaciones geométricas unión/sustracción de regiones homogéneas. | — | NO INICIADO |
-| EDT-004 | P0 | Rechazar autointersecciones, contornos abiertos, espesores negativos y huecos inválidos. | — | NO INICIADO |
-| EDT-005 | P0 | Calcular área, centroide, inercias Iy/Iz/Iyz y ejes principales. | — | NO INICIADO |
+| EDT-004 | P0 | Rechazar autointersecciones, contornos abiertos, espesores negativos y huecos inválidos. | T-025 (paramétricas) y T-029 E1 (autointersección, pico, área nula, hueco fuera/tocando/solapado; contorno abierto en el borrador de E2); `tests/test_freeform_section.py` | PARCIAL — E1 aceptada 2026-11-06 |
+| EDT-005 | P0 | Calcular área, centroide, inercias Iy/Iz/Iyz y ejes principales. | T-029 E1: Green exacto y `principal_axes`; `tests/test_freeform_section.py` | PARCIAL — E1 aceptada 2026-11-06 |
 | EDT-006 | P1 | Dibujar centroide, ejes, contornos, cotas y tabla de propiedades. | — | NO INICIADO |
 | EDT-007 | P1 | Tratar arcos analíticamente o con discretización de error controlado. | — | NO INICIADO |
 | EDT-008 | P1 | Calcular J/módulos plásticos solo con algoritmo específico y contrastado, indicando no soportado cuando proceda. | — | NO INICIADO |

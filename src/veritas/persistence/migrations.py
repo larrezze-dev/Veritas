@@ -15,7 +15,7 @@ from typing import Final
 from veritas.core.diagnostics import DiagnosticCode
 from veritas.persistence.errors import format_error, value_error
 
-CURRENT_SCHEMA_VERSION: Final = 6
+CURRENT_SCHEMA_VERSION: Final = 7
 
 type Migration = Callable[[dict[str, object]], dict[str, object]]
 
@@ -103,12 +103,32 @@ def _v5_to_v6(content: dict[str, object]) -> dict[str, object]:
     return dict(content)
 
 
+def _v6_to_v7(content: dict[str, object]) -> dict[str, object]:
+    """v7 (T-029, ADR-013) admite la familia ``FREEFORM`` (croquis libre poligonal).
+
+    Solo VERIFICA: un archivo v6 no puede traer esa familia (no se reinterpreta en silencio) y su
+    forma, y por tanto el hash del modelo, no cambia.
+    """
+    model = content.get("model")
+    sections = model.get("sections") if isinstance(model, dict) else None
+    if isinstance(sections, list):
+        for index, section in enumerate(sections):
+            if isinstance(section, dict) and section.get("family") == "FREEFORM":
+                raise format_error(
+                    "project.invalid_field",
+                    {"expected": "RECTANGULAR, CATALOGO o PARAMETRICA (esquema v6)"},
+                    path=f"content.model.sections[{index}].family",
+                )
+    return dict(content)
+
+
 MIGRATIONS: Final[dict[int, Migration]] = {
     1: _v1_to_v2,
     2: _v2_to_v3,
     3: _v3_to_v4,
     4: _v4_to_v5,
     5: _v5_to_v6,
+    6: _v6_to_v7,
 }
 """Migraciones reales registradas, ``N -> N+1``."""
 

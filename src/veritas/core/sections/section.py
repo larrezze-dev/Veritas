@@ -6,7 +6,7 @@ conoce el material: la masa lineal se calcula al combinarlos (``sections.mass``)
 """
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
@@ -22,6 +22,7 @@ from veritas.core.sections.catalog import (
 )
 from veritas.core.sections.parametric import ParametricParameters, ParametricShape
 from veritas.core.sections.parametric_properties import parametric_properties
+from veritas.core.sections.polygon import FreeformParameters, freeform_properties
 from veritas.core.sections.properties import PropertyStatus, SectionProperties, SectionProperty
 from veritas.core.sections.rectangular import (
     METHOD_CLOSED_FORM,
@@ -60,11 +61,13 @@ MATCH_RELATIVE_TOLERANCE: Final = 1e-12
 
 class SectionFamily(StrEnum):
     """Familia de sección: el rectángulo macizo (T-004), el perfil de catálogo (T-024, ADR-010)
-    y los perfiles paramétricos I, RHS, SHS y CHS (T-025, ADR-011)."""
+    los perfiles paramétricos I, RHS, SHS y CHS (T-025, ADR-011) y el croquis libre poligonal
+    (T-029, ADR-013)."""
 
     RECTANGULAR = "RECTANGULAR"
     CATALOGO = "CATALOGO"
     PARAMETRICA = "PARAMETRICA"
+    FREEFORM = "FREEFORM"
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +82,9 @@ class RectangularParameters:
         object.__setattr__(self, "h", positive_float(self.h, "h"))
 
 
-type SectionParameters = RectangularParameters | ParametricParameters | CatalogSnapshot
+type SectionParameters = (
+    RectangularParameters | ParametricParameters | CatalogSnapshot | FreeformParameters
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,11 +108,12 @@ class SectionRevision:
         if not isinstance(self.family, SectionFamily):
             raise invalid_type("family", "SectionFamily", self.family, location)
         if not isinstance(
-            self.parameters, RectangularParameters | ParametricParameters | CatalogSnapshot
+            self.parameters,
+            RectangularParameters | ParametricParameters | CatalogSnapshot | FreeformParameters,
         ):
             raise invalid_type(
                 "parameters",
-                "RectangularParameters, ParametricParameters o CatalogSnapshot",
+                "RectangularParameters, ParametricParameters, CatalogSnapshot o FreeformParameters",
                 self.parameters,
                 location,
             )
@@ -161,11 +167,25 @@ class SectionRevision:
             )
         return self.parameters
 
+    def require_freeform(self) -> FreeformParameters:
+        """Parámetros de un croquis libre, o un error explícito si es de otra familia."""
+        if not isinstance(self.parameters, FreeformParameters):
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.UNSUPPORTED_CONFIGURATION,
+                    "section.not_freeform",
+                    {"family": str(self.family)},
+                    location=Location(entity_id=self.id, revision=self.revision),
+                )
+            )
+        return self.parameters
+
 
 _PARAMETERS_OF: Final = {
     SectionFamily.RECTANGULAR: RectangularParameters,
     SectionFamily.CATALOGO: CatalogSnapshot,
     SectionFamily.PARAMETRICA: ParametricParameters,
+    SectionFamily.FREEFORM: FreeformParameters,
 }
 
 
@@ -192,7 +212,11 @@ def _check_properties(
             continue  # NO_DISPONIBLE (value None) ya lo valida SectionProperty.
         if name in _STRICTLY_POSITIVE:
             checked_positive(value, name, at)
-        elif name in _EXACT_ZERO and (value != 0.0 or math.copysign(1.0, value) < 0.0):
+        elif (
+            name in _EXACT_ZERO
+            and not isinstance(parameters, FreeformParameters)  # el croquis no está centrado
+            and (value != 0.0 or math.copysign(1.0, value) < 0.0)
+        ):
             raise out_of_range(name, value, "+0.0", at)
     if isinstance(parameters, CatalogSnapshot):
         _check_catalog_properties(parameters, properties, entity_id, revision)
@@ -202,6 +226,9 @@ def _check_properties(
         expected = parametric_properties(parameters)
         recomputed = methods <= {getattr(expected, name).method for name in _PROPERTY_UNITS}
         match = recomputed and _matches(properties, expected)
+    elif isinstance(parameters, FreeformParameters):
+        _check_freeform_properties(parameters, properties, entity_id, revision)
+        return
     else:
         recomputed = methods <= _RECTANGLE_METHODS
         match = recomputed and _matches(
@@ -215,6 +242,49 @@ def _check_properties(
                 location=Location(entity_id=entity_id, revision=revision, field="properties"),
             )
         )
+
+
+def _check_freeform_properties(
+    parameters: FreeformParameters,
+    properties: SectionProperties,
+    entity_id: UUID,
+    revision: int,
+) -> None:
+    """Invariantes del croquis libre que NO dependen del método declarado (T-029, ADR-013).
+
+    - J es siempre ``NO_DISPONIBLE`` (D6-A): no hay método validado, así que ningún valor de J
+      puede entrar a mano ni por archivo.
+    - Los estados son ``CALCULADO`` o ``CONTRASTADO``; el tensor de inercia es admisible
+      (Iyz² ≤ Iy·Iz).
+    - Cada propiedad cuyo método sea el actual debe coincidir con el recálculo, una a una: un
+      método de otra versión solo exime a esa propiedad (O3), nunca a las demás.
+    """
+
+    def error(key: str, name: str) -> InputValueError:
+        return InputValueError(
+            Diagnostic.create(
+                DiagnosticCode.INPUT_OUT_OF_RANGE,
+                key,
+                {"field": name},
+                location=Location(entity_id=entity_id, revision=revision, field=name),
+            )
+        )
+
+    if properties.torsion_constant.status is not PropertyStatus.NO_DISPONIBLE:
+        raise error("section.freeform_torsion_not_available", "torsion_constant")
+    for name in _PROPERTY_UNITS:
+        if getattr(properties, name).status not in _FREEFORM_STATUSES | {
+            PropertyStatus.NO_DISPONIBLE
+        }:
+            raise error("section.freeform_invalid_status", name)
+    iy, iz, iyz = properties.iy.value, properties.iz.value, properties.iyz.value
+    if iy is not None and iz is not None and iyz is not None and iyz * iyz > iy * iz:
+        raise error("section.properties_mismatch", "iyz")
+    expected = freeform_properties(parameters)
+    for name in _PROPERTY_UNITS:
+        stored, computed = getattr(properties, name), getattr(expected, name)
+        if stored.method == computed.method and not _same_property(stored, computed):
+            raise error("section.properties_mismatch", "properties")
 
 
 def _check_catalog_properties(
@@ -282,6 +352,7 @@ def _matches(stored: SectionProperties, computed: SectionProperties) -> bool:
     )
 
 
+_FREEFORM_STATUSES: Final = frozenset({PropertyStatus.CALCULADO, PropertyStatus.CONTRASTADO})
 _SHEAR_STATUSES: Final = frozenset({PropertyStatus.CALCULADO, PropertyStatus.NO_DISPONIBLE})
 _SHEAR_NAMES: Final = ("shear_y", "shear_z")
 
@@ -313,7 +384,7 @@ def _check_shear(
 
     if shear is None:
         return
-    if isinstance(parameters, CatalogSnapshot):
+    if isinstance(parameters, CatalogSnapshot | FreeformParameters):
         raise error("section.shear_not_derivable", "shear")
     for name in _SHEAR_NAMES:
         prop: SectionProperty = getattr(shear, name)
@@ -406,4 +477,49 @@ def build_parametric_section(
             parameters, Location(entity_id=entity_id, revision=revision)
         ),
         shear=parametric_shear(parameters),
+    )
+
+
+def build_freeform_section(
+    entity_id: UUID,
+    revision: int,
+    *,
+    outer: Sequence[tuple[Quantity, Quantity]],
+    holes: Sequence[Sequence[tuple[Quantity, Quantity]]] = (),
+    name: str = "",
+) -> SectionRevision:
+    """Crea una revisión de croquis libre (exterior y huecos poligonales) con sus propiedades.
+
+    Los vértices son pares (y, z) de longitudes. Una geometría inválida (EDT-004:
+    autointersección, hueco fuera o tocando, área nula…) se rechaza con su diagnóstico: no existe
+    revisión inválida. La sección no lleva áreas de cortante (no hay método para un croquis).
+    """
+    check_identity(entity_id, revision, "SectionRevision")
+    if name:
+        require_text(name, "name", Location(entity_id=entity_id, revision=revision, field="name"))
+
+    def contour(
+        points: Sequence[tuple[Quantity, Quantity]], field: str
+    ) -> tuple[tuple[float, float], ...]:
+        result: list[tuple[float, float]] = []
+        for i, pair in enumerate(points):
+            at = Location(entity_id=entity_id, revision=revision, field=f"{field}[{i}]")
+            if not (isinstance(pair, tuple | list) and len(pair) == 2):  # noqa: PLR2004 (par y, z)
+                raise invalid_type(f"{field}[{i}]", "par (y, z) de Quantity", pair, at)
+            for item in pair:
+                if not isinstance(item, Quantity):
+                    raise invalid_type(f"{field}[{i}]", "Quantity", item, at)
+            result.append((pair[0].require(LENGTH).si_value, pair[1].require(LENGTH).si_value))
+        return tuple(result)
+
+    parameters = FreeformParameters(
+        contour(outer, "outer"), tuple(contour(h, f"hole[{i}]") for i, h in enumerate(holes))
+    )
+    return SectionRevision(
+        id=entity_id,
+        revision=revision,
+        name=name,
+        family=SectionFamily.FREEFORM,
+        parameters=parameters,
+        properties=freeform_properties(parameters),
     )
