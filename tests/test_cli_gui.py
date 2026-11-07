@@ -9,7 +9,7 @@ import pytest
 
 from gui_support import frame_model
 from veritas import cli, cli_gui
-from veritas.core.geometry.snapshot import ModelSnapshot
+from veritas.gui.session import EditSession
 from veritas.persistence.project import save_project
 
 
@@ -36,12 +36,12 @@ def test_the_rest_of_the_cli_does_not_import_qt_or_pyvista() -> None:
     assert result.returncode == 0, result.stderr.decode()
 
 
-def _fake_app(monkeypatch: pytest.MonkeyPatch) -> list[tuple[ModelSnapshot, str]]:
-    calls: list[tuple[ModelSnapshot, str]] = []
+def _fake_app(monkeypatch: pytest.MonkeyPatch) -> list[EditSession]:
+    calls: list[EditSession] = []
     module = types.ModuleType("veritas.gui.app")
 
-    def run_gui(snapshot: ModelSnapshot, source: str) -> int:
-        calls.append((snapshot, source))
+    def run_gui(session: EditSession) -> int:
+        calls.append(session)
         return 0
 
     module.run_gui = run_gui  # type: ignore[attr-defined]
@@ -50,16 +50,34 @@ def _fake_app(monkeypatch: pytest.MonkeyPatch) -> list[tuple[ModelSnapshot, str]
     return calls
 
 
-def test_without_a_file_it_opens_the_demo_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_without_a_file_it_opens_an_empty_editable_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls = _fake_app(monkeypatch)
     assert cli.main(["gui"]) == cli_gui.EXIT_OK
     assert len(calls) == 1
-    snapshot, source = calls[0]
-    assert len(snapshot.members) > 0
-    assert "demostración" in source
+    assert calls[0].path is None
+    assert len(calls[0].model.snapshot().nodes) == 0
+    assert not calls[0].dirty
 
 
-def test_with_a_project_file_it_opens_its_model(
+def test_demo_opens_the_demo_model_without_a_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _fake_app(monkeypatch)
+    assert cli.main(["gui", "--demo"]) == cli_gui.EXIT_OK
+    assert len(calls[0].model.snapshot().members) > 0
+    assert calls[0].path is None
+    assert not calls[0].dirty
+
+
+def test_demo_and_a_file_are_mutually_exclusive(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _fake_app(monkeypatch)
+    assert cli.main(["gui", "--demo", str(tmp_path / "x.veritas")]) != cli_gui.EXIT_OK
+    assert calls == []
+
+
+def test_with_a_project_file_it_opens_its_model_and_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     calls = _fake_app(monkeypatch)
@@ -68,9 +86,9 @@ def test_with_a_project_file_it_opens_its_model(
     save_project(path, model)
     assert cli.main(["gui", str(path)]) == cli_gui.EXIT_OK
     assert len(calls) == 1
-    snapshot, source = calls[0]
-    assert [n.label for n in snapshot.nodes] == ["N1", "N2", "N3", "N4"]
-    assert source == str(path)
+    assert [n.label for n in calls[0].model.snapshot().nodes] == ["N1", "N2", "N3", "N4"]
+    assert calls[0].path == path
+    assert not calls[0].dirty
 
 
 def test_a_tampered_project_is_refused_before_opening_the_window(

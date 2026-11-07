@@ -30,7 +30,7 @@ una vez completada la operación (que ya no se revierte); en un fallo prevalece 
 """
 
 from collections import deque
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Final
@@ -46,7 +46,10 @@ from veritas.core.geometry.entities import Member, Node
 from veritas.core.geometry.model import Direction, StructuralModel
 from veritas.core.geometry.replacement import compatibility_errors
 from veritas.core.geometry.snapshot import ModelSnapshot
+from veritas.core.materials.material import MaterialFamily, MaterialRevision
 from veritas.core.references import RevisionRef
+from veritas.core.sections.parametric import ParametricShape
+from veritas.core.sections.section import SectionRevision
 from veritas.core.units import Quantity
 
 DEFAULT_HISTORY_LIMIT: Final = 100
@@ -499,3 +502,50 @@ class ModelEditor:
             return tuple(model.assign_section(member_id, section) for member_id in ids)
 
         return self.execute("Asignar sección", action)
+
+    # --- Comandos con nombre (materiales y secciones, T-030 E2b-2) ---------------------------
+
+    def add_material(  # noqa: PLR0913 (campos de MAT-002, por nombre)
+        self,
+        *,
+        name: str,
+        family: MaterialFamily,
+        source: str,
+        elastic_modulus: Quantity,
+        shear_modulus: Quantity,
+        density: Quantity,
+        poisson_ratio: Quantity | float | None = None,
+        standard_edition: str | None = None,
+        specific_weight: Quantity | None = None,
+    ) -> MaterialRevision:
+        """Crea un material (revisión 1) en un paso deshacible."""
+        return self.execute(
+            "Crear material",
+            lambda m: m.add_material(
+                name=name,
+                family=family,
+                source=source,
+                elastic_modulus=elastic_modulus,
+                shear_modulus=shear_modulus,
+                density=density,
+                poisson_ratio=poisson_ratio,
+                standard_edition=standard_edition,
+                specific_weight=specific_weight,
+            ),
+        )
+
+    def add_rectangular_section(
+        self, *, b: Quantity, h: Quantity, name: str = ""
+    ) -> SectionRevision:
+        """Crea una sección rectangular maciza (revisión 1) en un paso deshacible."""
+        return self.execute(
+            "Crear sección", lambda m: m.add_rectangular_section(b=b, h=h, name=name)
+        )
+
+    def add_parametric_section(
+        self, shape: ParametricShape, dimensions: Mapping[str, Quantity], *, name: str = ""
+    ) -> SectionRevision:
+        """Crea un perfil paramétrico I, RHS, SHS o CHS (revisión 1) en un paso deshacible."""
+        return self.execute(
+            "Crear sección", lambda m: m.add_parametric_section(shape, dimensions, name=name)
+        )

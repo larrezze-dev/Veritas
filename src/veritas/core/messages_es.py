@@ -228,6 +228,17 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "editing.not_subscribed": "Esa función no está suscrita a los avisos del editor.",
     "editing.invalid_name": "El nombre del comando debe ser un texto no vacío.",
     "editing.invalid_limit": "El límite del historial debe ser un entero ≥ 1 (recibido: {limit}).",
+    "session.no_path": "El proyecto no tiene archivo todavía: use «Guardar como».",
+    "forms.empty_value": "El campo «{field}» está vacío.",
+    "forms.invalid_number": "«{text}» no es un número válido en el campo «{field}».",
+    "forms.wrong_unit": "La unidad «{unit}» no corresponde a {kind} (campo «{field}»).",
+    "forms.invalid_vector": (
+        "El campo «{field}» necesita tres componentes numéricas separadas por «;» o por espacios "
+        "(recibido: «{text}»)."
+    ),
+    "forms.zero_vector": "El campo «{field}» no puede ser el vector nulo.",
+    "forms.no_choice": "Elija {what} (campo «{field}»).",
+    "forms.same_nodes": "La barra necesita dos nudos distintos (campo «{field}»).",
     "section.sketch_too_few_vertices": (
         "El contorno «{field}» tiene {count:g} vértice(s): se exigen al menos 3."
     ),

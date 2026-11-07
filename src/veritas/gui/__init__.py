@@ -1,8 +1,10 @@
-"""Interfaz gráfica PySide6 y visor PyVista: solo lectura sobre el dominio (plan T-011).
+"""Interfaz gráfica PySide6 y visor PyVista (plan T-011; editable desde T-030 E2b).
 
 - Sin Qt ni PyVista (se prueban en toda la suite): ``scene`` (escena derivada, E1), ``selection``,
-  ``picking`` y ``tables`` (E2).
-- Con el extra opcional ``gui``: ``viewport`` (PyVista), ``main_window`` (PySide6) y ``app``.
+  ``picking`` y ``tables`` (E2); ``session``, ``forms`` y ``deletion`` (T-030 E2b: sesión de
+  edición, formularios y borrado con vista previa).
+- Con el extra opcional ``gui``: ``viewport`` (PyVista), ``main_window`` y ``dialogs`` (PySide6)
+  y ``app``.
   ``veritas gui`` los importa solo al abrir la ventana (ADR-008 §4).
 """
 

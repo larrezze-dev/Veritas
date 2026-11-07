@@ -14,12 +14,14 @@ from gui_support import frame_model, require_gui
 
 require_gui()
 
-from PySide6.QtWidgets import QAbstractItemView, QApplication  # noqa: E402
+from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from veritas.core.geometry.model import StructuralModel  # noqa: E402
 from veritas.gui.main_window import MainWindow  # noqa: E402
 from veritas.gui.scene import build_scene  # noqa: E402
 from veritas.gui.selection import Selection, SelectionKind  # noqa: E402
+from veritas.gui.session import EditSession  # noqa: E402
 
 pytestmark = pytest.mark.gui
 
@@ -34,11 +36,17 @@ def qapp() -> QApplication:
 @pytest.fixture
 def window(qapp: QApplication) -> Iterator[MainWindow]:
     model, _ = frame_model()
-    win = MainWindow(model.snapshot(), "prueba")
+    win = MainWindow(EditSession(model=model))
     win.show()
     qapp.processEvents()
     yield win
     win.close()
+
+
+def _flags(table: object, row: int, column: int) -> Qt.ItemFlag:
+    item = table.item(row, column)  # type: ignore[attr-defined]
+    assert item is not None
+    return item.flags()  # type: ignore[no-any-return]
 
 
 def _member(window: MainWindow, index: int) -> Selection:
@@ -63,14 +71,18 @@ def _text(window: MainWindow, table: str, row: int, column: int) -> str:
     return str(item.text())
 
 
-def test_window_shows_the_model_in_two_read_only_tables(window: MainWindow) -> None:
+def test_window_shows_the_model_in_two_tables_with_editable_node_cells(
+    window: MainWindow,
+) -> None:
     assert window.members_table.rowCount() == 3
     assert window.nodes_table.rowCount() == 4
     assert _text(window, "members", 1, 0) == "D"
     assert _text(window, "nodes", 3, 4) == "3 traslaciones y 0 giros fijos"
-    for table in (window.members_table, window.nodes_table):
-        assert table.editTriggers() == QAbstractItemView.EditTrigger.NoEditTriggers
-    assert "solo lectura" in window.statusBar().currentMessage()
+    assert not _flags(window.members_table, 0, 0) & Qt.ItemFlag.ItemIsEditable
+    for column in (0, 1, 2, 3):
+        assert _flags(window.nodes_table, 0, column) & Qt.ItemFlag.ItemIsEditable
+    assert not _flags(window.nodes_table, 0, 4) & Qt.ItemFlag.ItemIsEditable
+    assert "experimental" in window.statusBar().currentMessage()
     assert window.selection is None
 
 
@@ -118,7 +130,7 @@ def test_a_new_scene_drops_a_selection_that_no_longer_exists(window: MainWindow)
 
 
 def test_an_empty_model_opens_without_error(qapp: QApplication) -> None:
-    win = MainWindow(StructuralModel().snapshot(), "vacío")
+    win = MainWindow(EditSession())
     win.show()
     qapp.processEvents()
     assert win.members_table.rowCount() == 0

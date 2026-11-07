@@ -1,7 +1,7 @@
 """Visor 3D PyVista dentro de un widget Qt (plan T-011, E2; ADR-008).
 
 Dibuja una ``Scene`` (nudos, barras, apoyos y, de la barra seleccionada, sus ejes locales x/y/z
-rojo/verde/azul) y resuelve la selección simple por clic. Es una vista de solo lectura: no
+rojo/verde/azul) y resuelve la selección (múltiple con Ctrl o Mayús) por clic. No
 modifica el dominio ni conserva geometría propia; ``set_scene`` redibuja desde la escena.
 Requiere el extra opcional ``gui``; no debe importarse sin él.
 """
@@ -15,8 +15,8 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from pyvistaqt import QtInteractor
 
 from veritas.gui.picking import Pixel, pick_nearest
-from veritas.gui.scene import Point, Scene
-from veritas.gui.selection import Selection, SelectionKind
+from veritas.gui.scene import Point, Scene, SceneMember
+from veritas.gui.selection import Selection, SelectionKind, SelectionSet
 from veritas.gui.tables import entity_name, is_fully_fixed
 
 CLICK_TOLERANCE: Final = 4.0
@@ -36,6 +36,7 @@ class Viewport(QWidget):
     """Widget con el visor PyVista; emite ``selection_changed`` (``Selection`` o ``None``)."""
 
     selection_changed = Signal(object)
+    selection_set_changed = Signal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -44,7 +45,7 @@ class Viewport(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._plotter.interactor)
         self._scene: Scene | None = None
-        self._selection: Selection | None = None
+        self._selection: SelectionSet = SelectionSet()
         self._overlay: list[str] = []
         self._press: Pixel | None = None
         self._plotter.set_background("white")
@@ -56,11 +57,19 @@ class Viewport(QWidget):
 
     @property
     def selection(self) -> Selection | None:
-        """Selección actual (la última fijada por ``select`` o por un clic)."""
+        """La entidad seleccionada si es exactamente una; si hay varias o ninguna, ``None``."""
+        return self._selection.single
+
+    @property
+    def selection_set(self) -> SelectionSet:
+        """Selección múltiple actual (la última fijada por ``select_set`` o por un clic)."""
         return self._selection
 
-    def set_scene(self, scene: Scene) -> None:
-        """Redibuja desde ``scene``; conserva la selección si su entidad sigue existiendo."""
+    def set_scene(self, scene: Scene, *, reset_camera: bool = True) -> None:
+        """Redibuja desde ``scene``; conserva lo seleccionado que sigue existiendo.
+
+        ``reset_camera=False`` mantiene el encuadre (ediciones); abrir un proyecto lo reencuadra.
+        """
         plotter = self._plotter
         for name in (*_SCENE_ACTORS, *self._overlay):
             plotter.remove_actor(name, render=False)
@@ -68,11 +77,11 @@ class Viewport(QWidget):
         self._scene = scene
         if scene.nodes:
             self._draw_scene(scene)
-        if self._selection is not None and self._resolve(self._selection) is None:
-            self._selection = None
+        self._selection = self._existing(self._selection)
         self._draw_selection()
-        plotter.view_isometric()
-        plotter.reset_camera()
+        if reset_camera:
+            plotter.view_isometric()
+            plotter.reset_camera()
         plotter.render()
 
     def _draw_scene(self, scene: Scene) -> None:
@@ -152,12 +161,17 @@ class Viewport(QWidget):
     # --------------------------------------------------------------- selección
 
     def select(self, selection: Selection | None) -> None:
-        """Fija la selección y la resalta. No emite ``selection_changed``."""
-        if selection is not None and self._resolve(selection) is None:
-            selection = None
-        self._selection = selection
+        """Fija una selección de una sola entidad y la resalta. No emite señales."""
+        self.select_set(SelectionSet.from_selection(selection))
+
+    def select_set(self, selection: SelectionSet) -> None:
+        """Fija la selección múltiple (lo que no existe en la escena se descarta) y la resalta."""
+        self._selection = self._existing(selection)
         self._draw_selection()
         self._plotter.render()
+
+    def _existing(self, selection: SelectionSet) -> SelectionSet:
+        return SelectionSet.of(i for i in selection.items() if self._resolve(i) is not None)
 
     def _resolve(self, selection: Selection) -> int | None:
         """Índice de la entidad en la escena actual, o ``None`` si ya no existe."""
@@ -175,20 +189,29 @@ class Viewport(QWidget):
         for name in self._overlay:
             plotter.remove_actor(name, render=False)
         self._overlay = []
-        scene, selection = self._scene, self._selection
-        if scene is None or selection is None:
+        scene = self._scene
+        if scene is None:
             return
-        index = self._resolve(selection)
-        if index is None:
-            return
-        if selection.kind is SelectionKind.NODE:
-            position = scene.nodes[index].position
-            self._add_overlay(pv.Sphere(radius=0.08 * scene.glyph_length, center=position), "sel")
-            return
-        member = scene.members[index]
-        start = scene.nodes[member.node_i].position
-        end = scene.nodes[member.node_j].position
-        self._add_overlay(pv.Line(start, end), "sel", line_width=8)
+        members: list[SceneMember] = []
+        for number, selection in enumerate(self._selection.items()):
+            index = self._resolve(selection)
+            if index is None:
+                continue
+            if selection.kind is SelectionKind.NODE:
+                position = scene.nodes[index].position
+                radius = 0.08 * scene.glyph_length
+                self._add_overlay(pv.Sphere(radius=radius, center=position), f"sel-node-{number}")
+            else:
+                member = scene.members[index]
+                start = scene.nodes[member.node_i].position
+                end = scene.nodes[member.node_j].position
+                self._add_overlay(pv.Line(start, end), f"sel-member-{number}", line_width=8)
+                members.append(member)
+        if len(members) == 1 and len(self._selection) == 1:
+            self._draw_axes(scene, members[0])
+
+    def _draw_axes(self, scene: Scene, member: SceneMember) -> None:
+        plotter = self._plotter
         origin, *axes = scene.axes_of(member.id)
         tips: list[Point] = []
         for (name, color), vector in zip(AXIS_COLORS, axes, strict=True):
@@ -243,11 +266,20 @@ class Viewport(QWidget):
         entity = scene.nodes[index] if kind is SelectionKind.NODE else scene.members[index]
         return Selection(kind, entity.id)
 
-    def click_at(self, pixel: Pixel) -> None:
-        """Procesa un clic: selecciona lo que haya bajo ``pixel`` (o limpia) y emite la señal."""
-        selection = self.pick_at(pixel)
-        self.select(selection)
-        self.selection_changed.emit(selection)
+    def click_at(self, pixel: Pixel, *, additive: bool = False) -> None:
+        """Procesa un clic: selecciona lo que haya bajo ``pixel`` (o limpia) y emite las señales.
+
+        Con ``additive`` (Ctrl o Mayús) alterna la entidad en la selección; un clic en vacío no
+        la modifica.
+        """
+        hit = self.pick_at(pixel)
+        if additive:
+            new = self._selection.toggle(hit) if hit is not None else self._selection
+        else:
+            new = SelectionSet.from_selection(hit)
+        self.select_set(new)
+        self.selection_set_changed.emit(self._selection)
+        self.selection_changed.emit(self._selection.single)
 
     def _event_pixel(self) -> Pixel:
         x, y = self._plotter.iren.interactor.GetEventPosition()
@@ -264,7 +296,9 @@ class Viewport(QWidget):
         if abs(release[0] - press[0]) <= CLICK_TOLERANCE and (
             abs(release[1] - press[1]) <= CLICK_TOLERANCE
         ):
-            self.click_at(release)
+            interactor = self._plotter.iren.interactor
+            additive = bool(interactor.GetControlKey() or interactor.GetShiftKey())
+            self.click_at(release, additive=additive)
 
     def close_viewport(self) -> None:
         """Libera los recursos de VTK; debe llamarse antes de destruir la ventana."""
