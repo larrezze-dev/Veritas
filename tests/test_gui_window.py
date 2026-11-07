@@ -6,6 +6,7 @@ ejecuta con la plataforma nativa (``QT_QPA_PLATFORM=windows uv run pytest -m gui
 """
 
 from collections.abc import Iterator
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -43,10 +44,10 @@ def window(qapp: QApplication) -> Iterator[MainWindow]:
     win.close()
 
 
-def _flags(table: object, row: int, column: int) -> Qt.ItemFlag:
-    item = table.item(row, column)  # type: ignore[attr-defined]
+def _editable(table: Any, row: int, column: int) -> bool:
+    item = table.item(row, column)
     assert item is not None
-    return item.flags()  # type: ignore[no-any-return]
+    return bool(item.flags() & Qt.ItemFlag.ItemIsEditable)
 
 
 def _member(window: MainWindow, index: int) -> Selection:
@@ -78,10 +79,10 @@ def test_window_shows_the_model_in_two_tables_with_editable_node_cells(
     assert window.nodes_table.rowCount() == 4
     assert _text(window, "members", 1, 0) == "D"
     assert _text(window, "nodes", 3, 4) == "3 traslaciones y 0 giros fijos"
-    assert not _flags(window.members_table, 0, 0) & Qt.ItemFlag.ItemIsEditable
+    assert not _editable(window.members_table, 0, 0)
     for column in (0, 1, 2, 3):
-        assert _flags(window.nodes_table, 0, column) & Qt.ItemFlag.ItemIsEditable
-    assert not _flags(window.nodes_table, 0, 4) & Qt.ItemFlag.ItemIsEditable
+        assert _editable(window.nodes_table, 0, column)
+    assert not _editable(window.nodes_table, 0, 4)
     assert "experimental" in window.statusBar().currentMessage()
     assert window.selection is None
 

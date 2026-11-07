@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
     # --- Puntos sustituibles (diálogos y selectores) ------------------------------------------
 
     def _exec(self, dialog: FormDialog) -> bool:
-        return dialog.exec() == QDialog.DialogCode.Accepted
+        return bool(dialog.exec() == QDialog.DialogCode.Accepted)
 
     def _choose_open_path(self) -> Path | None:
         name, _ = QFileDialog.getOpenFileName(self, "Abrir proyecto", "", PROJECT_FILTER)
