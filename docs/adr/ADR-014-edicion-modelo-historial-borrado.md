@@ -29,7 +29,7 @@ F4 (modelador) necesita crear, mover, borrar y reasignar entidades con deshacer/
 - Memoria: una instantánea por paso (hasta 100 × dos); aceptable para modelos de este tamaño. Si crece, el cambio a comandos inversos (D2-B) es local al editor.
 - No se guarda la historia de revisiones anteriores de nudos y barras (TK-011 sigue abierto en esa parte; D2-C).
 - No hay copiar, dividir, trasladar, rotar ni reflejar (E6), grupos ni capas (D8), ventana (E2…), ni comando de CLI nuevo.
-- El editor no valida la regla forma/material al asignar (TK-036): sigue siendo solo de `replace_sections`.
+- El editor valida la regla forma/material al asignar (enmienda E2a); `StructuralModel.assign_*` no la aplica (TK-036 abierto).
 - **Exclusiones del peso propio:** al borrar una barra se **limpian** (no cuentan como dependiente que bloquee); es la lectura de TK-009 («limpiar o rechazar») que implementa E1; **confirmada por el usuario el 2026-11-06**.
 - `_MEMBER_LOAD_TYPES` es una lista mantenida a mano; una prueba comprueba que contiene todos los tipos de carga con `member_id`, de modo que un tipo nuevo no pase desapercibido.
 - Un archivo no cambia: el historial no se persiste.
@@ -38,3 +38,5 @@ F4 (modelador) necesita crear, mover, borrar y reasignar entidades con deshacer/
 
 - 2026-11-06: propuesto con E1 de T-030.
 - 2026-11-06: ACCEPTED al aceptar el usuario T-030 E1.
+- 2026-11-07: enmienda de E2a (R2-D2…D5, aprobada): (a) `generation` y `subscribe`/`unsubscribe`: el entero sube tras cada comando que cambia el modelo, deshacer, rehacer o fallo con restauración; los avisos se emiten después de terminar la operación, uno por paso (una transacción, uno al cerrar), no pueden mutar el editor (`editing.reentrant`) y, si uno lanza, se avisa a todos y se propaga la primera excepción tras confirmar la operación; (b) `preview_remove_members`/`preview_remove_node` devuelven un `CascadePreview` inmutable calculado con las mismas funciones del borrado sobre una copia, con `error` si el estado final no sería válido; (c) `add_member`, `set_member_orientation`, `assign_material` y `assign_section` (uno o varios ids, un paso); (d) `add_member`/`assign_*` aplican `compatibility_errors` (regla de `replace_sections`) antes de asignar. Sin cambio de esquema, hash ni `StructuralModel`.
+- 2026-11-07: enmienda de E2a aceptada por el usuario.

@@ -529,7 +529,7 @@ class StructuralModel:
         Rechaza con ``model.remove_member_dependents`` si quedan cargas de barra (D4-A): el
         dominio nunca deja referencias colgantes. Si el peso propio la excluía, la exclusión se
         limpia (revisión n+1 del peso propio; TK-009); si tras borrarla todas las barras que
-        quedan estuvieran excluidas, rechaza con ``load.self_weight_all_excluded``.
+        quedan estuvieran excluidas, rechaza con ``model.remove_member_all_excluded``.
         """
         member = self.member(member_id)
         loads = self.member_dependents(member_id)

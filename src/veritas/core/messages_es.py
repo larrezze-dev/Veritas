@@ -218,12 +218,14 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "excluidas del peso propio. Incluya alguna en el peso propio antes de borrarla."
     ),
     "editing.reentrant": (
-        "El editor no es reentrante: una acción no puede llamar al editor (execute, transaction, "
-        "undo o redo)."
+        "El editor no es reentrante: una acción o un aviso no puede llamar al editor (execute, "
+        "transaction, undo o redo)."
     ),
     "editing.nothing_to_undo": "No hay ningún paso que deshacer.",
     "editing.nothing_to_redo": "No hay ningún paso que rehacer.",
     "editing.in_transaction": "No se puede deshacer ni rehacer dentro de una transacción.",
+    "editing.invalid_callback": "El aviso del editor debe ser una función sin argumentos.",
+    "editing.not_subscribed": "Esa función no está suscrita a los avisos del editor.",
     "editing.invalid_name": "El nombre del comando debe ser un texto no vacío.",
     "editing.invalid_limit": "El límite del historial debe ser un entero ≥ 1 (recibido: {limit}).",
     "section.sketch_too_few_vertices": (

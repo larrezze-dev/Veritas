@@ -1,24 +1,24 @@
-"""Selección simple del visor (plan T-011, E2): un nudo o una barra, o nada.
+"""Selección del visor (plan T-011 E2; múltiple en T-030 R2-D6).
 
-Sin Qt ni PyVista. La selección referencia entidades por su identidad estable (UUID) y nunca
-es fuente de verdad: si el modelo cambia, se vuelve a resolver contra la escena nueva.
+La lógica vive en ``veritas.core.geometry.selection_logic`` (sin Qt, importable sin el extra
+``gui``); este módulo la reexporta. La selección nunca es fuente de verdad: si el modelo cambia,
+se vuelve a resolver contra la escena nueva.
 """
 
-from dataclasses import dataclass
-from enum import StrEnum
-from uuid import UUID
+from veritas.core.geometry.selection_logic import (
+    Selection,
+    SelectionKind,
+    SelectionSet,
+    members_at_node,
+    members_by_material,
+    members_by_section,
+)
 
-
-class SelectionKind(StrEnum):
-    """Tipo de entidad seleccionable."""
-
-    NODE = "NODE"
-    MEMBER = "MEMBER"
-
-
-@dataclass(frozen=True, slots=True)
-class Selection:
-    """Entidad seleccionada: tipo e identidad."""
-
-    kind: SelectionKind
-    id: UUID
+__all__ = [
+    "Selection",
+    "SelectionKind",
+    "SelectionSet",
+    "members_at_node",
+    "members_by_material",
+    "members_by_section",
+]
