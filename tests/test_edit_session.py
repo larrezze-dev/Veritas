@@ -223,12 +223,19 @@ def test_new_and_current_files_do_not_warn(tmp_path: Path) -> None:
     assert not EditSession(open_project(target), target).upgrades_on_save
 
 
-def test_an_unreadable_file_version_is_treated_as_old_not_current(
+def test_file_version_comes_from_the_opened_project_without_rereading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """R9: si la versión del archivo no se puede releer, se avisa en vez de callar."""
-    target = tmp_path / "a.veritas"
-    saved_frame(target)
-    project = open_project(target)
-    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(OSError("x")))
-    assert EditSession(project, target).upgrades_on_save
+    """R9: la versión del archivo es ``Project.schema_version``; no se relee ni falla en abierto."""
+    old = tmp_path / "viejo.veritas"
+    old.write_bytes((Path(__file__).parent / "data" / "proyecto_v7_ref.json").read_bytes())
+    current = tmp_path / "a.veritas"
+    saved_frame(current)
+    old_project, current_project = open_project(old), open_project(current)
+
+    def refuse(self: Path) -> bytes:
+        raise OSError("bloqueado")
+
+    monkeypatch.setattr(Path, "read_bytes", refuse)
+    assert EditSession(old_project, old).upgrades_on_save
+    assert not EditSession(current_project, current).upgrades_on_save

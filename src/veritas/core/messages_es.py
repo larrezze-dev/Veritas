@@ -257,6 +257,9 @@ MESSAGES_ES: Final[dict[str, str]] = {
     "capture.entry_components": (
         "Escriba una longitud, «x; y; z» o «@x; y; z» (recibido: «{text}»)."
     ),
+    "gestures.duplicate_node": (
+        "Ya existe un nudo («{node}») en ese punto; no se crea ni se mueve otro encima."
+    ),
     "forms.same_nodes": "La barra necesita dos nudos distintos (campo «{field}»).",
     "section.sketch_too_few_vertices": (
         "El contorno «{field}» tiene {count:g} vértice(s): se exigen al menos 3."

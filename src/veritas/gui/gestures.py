@@ -26,12 +26,17 @@ from veritas.core import units as u
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError
 from veritas.core.geometry.editing import ModelEditor
 from veritas.core.geometry.entities import Member, Node
+from veritas.core.geometry.local_axes import MIN_MEMBER_LENGTH
 from veritas.core.references import RevisionRef
 from veritas.gui import capture, forms
 from veritas.gui.capture import Dimensions, Point, SnapResult
 
 CLICK_PIXELS: Final = 4.0
 """Desplazamiento máximo (píxeles) pulsar→soltar para que cuente como clic (como el visor)."""
+
+GESTURE_TOLERANCE: Final = MIN_MEMBER_LENGTH
+"""Dos puntos a menos de esta distancia (m) son el mismo para un gesto: es la longitud mínima de
+barra del dominio, así que el rechazo llega antes de consumir el primer punto."""
 
 type Pixel = tuple[float, float]
 
@@ -105,6 +110,7 @@ class GestureMachine:
         self._grab: UUID | None = None
         self._grab_origin: Point | None = None
         self._press: Pixel | None = None
+        self._ignore_release = False
 
     @property
     def mode(self) -> Mode:
@@ -127,9 +133,16 @@ class GestureMachine:
     def cancel(self) -> bool:
         """Esc: descarta el gesto en curso. ``True`` si había algo que descartar."""
         had = self._state is not GestureState.IDLE or self._press is not None
+        self._abandon_press()
         self._state = GestureState.IDLE
-        self._anchor = self._cursor = self._grab = self._grab_origin = self._press = None
+        self._anchor = self._cursor = self._grab = self._grab_origin = None
         return had
+
+    def _abandon_press(self) -> None:
+        """El botón sigue pulsado pero el gesto ya no cuenta: su ``release`` se ignora."""
+        if self._press is not None:
+            self._ignore_release = True
+        self._press = None
 
     # --- Ratón ---------------------------------------------------------------------------
 
@@ -141,6 +154,10 @@ class GestureMachine:
         selected_nodes: Collection[UUID] = (),
     ) -> None:
         """Pulsar el botón. En Seleccionar, sobre un nudo seleccionado, agarra el nudo."""
+        if self._state is GestureState.DRAGGING:  # arrastre caducado (release perdido)
+            self._state = GestureState.IDLE
+            self._grab = self._grab_origin = None
+        self._ignore_release = False
         self._press = pixel
         self._cursor = hit
         if (
@@ -161,7 +178,10 @@ class GestureMachine:
         """Soltar el botón. Devuelve la acción a aplicar si el gesto terminó."""
         press, self._press = self._press, None
         self._cursor = hit
-        clicked = press is None or (
+        if press is None:  # sin pulsación vigente (Esc, cambio de modo, teclado o suelto suelto)
+            self._ignore_release = False
+            return None
+        clicked = (
             abs(pixel[0] - press[0]) <= CLICK_PIXELS and abs(pixel[1] - press[1]) <= CLICK_PIXELS
         )
         if self._mode is Mode.SELECT:
@@ -198,6 +218,7 @@ class GestureMachine:
         cursor = self._cursor.point if self._cursor is not None else None
         point = capture.parse_entry(text, anchor=origin, cursor=cursor)
         typed = Capture(point)
+        self._abandon_press()  # el botón físico aún pulsado no debe crear nada al soltarse
         if self._state is GestureState.DRAGGING and self._grab is not None:
             action: Action = MoveNode(self._grab, point)
             self.cancel()
@@ -231,7 +252,7 @@ class GestureMachine:
 def _same(a: Capture, b: Capture) -> bool:
     if a.node_id is not None and a.node_id == b.node_id:
         return True
-    return capture.coincident_node(a.point, [b.point]) is not None
+    return capture.coincident_node(a.point, [b.point], GESTURE_TOLERANCE) is not None
 
 
 # --- Aplicar al modelo ---------------------------------------------------------------------
@@ -251,11 +272,29 @@ def _resolve(editor: ModelEditor, end: Capture) -> UUID:
         return end.node_id
     nodes = editor.model.nodes
     ids = list(nodes)
-    found = capture.coincident_node(end.point, [nodes[i].position.components() for i in ids])
+    found = capture.coincident_node(
+        end.point, [nodes[i].position.components() for i in ids], GESTURE_TOLERANCE
+    )
     if found is not None:
         return ids[found]
     x, y, z = _meters(end.point)
     return editor.add_node(x, y, z).id
+
+
+def _reject_duplicate(editor: ModelEditor, point: Point, *, ignore: UUID | None) -> None:
+    """El dominio no rechaza nudos coincidentes: el gesto sí (R3-D4, revisión de E3b-1)."""
+    nodes = {i: n for i, n in editor.model.nodes.items() if i != ignore}
+    ids = list(nodes)
+    found = capture.coincident_node(
+        point, [nodes[i].position.components() for i in ids], GESTURE_TOLERANCE
+    )
+    if found is not None:
+        label = nodes[ids[found]].label or str(ids[found])
+        raise InputValueError(
+            Diagnostic.create(
+                DiagnosticCode.GEOMETRY_ZERO_LENGTH, "gestures.duplicate_node", {"node": label}
+            )
+        )
 
 
 def apply(
@@ -271,9 +310,11 @@ def apply(
     rechaza con diagnóstico y no queda ningún nudo nuevo.
     """
     if isinstance(action, CreateNode):
+        _reject_duplicate(editor, action.point, ignore=None)
         x, y, z = _meters(action.point)
         return editor.add_node(x, y, z)
     if isinstance(action, MoveNode):
+        _reject_duplicate(editor, action.point, ignore=action.node_id)
         x, y, z = _meters(action.point)
         return editor.move_node(action.node_id, x, y, z)
     mat = forms.chosen(material, "un material", "Material")

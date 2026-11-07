@@ -39,7 +39,8 @@ DEFAULT_GRID_STEP: Final = 0.5
 MIN_GRID_STEP: Final = 1e-6
 """Paso de rejilla mínimo (m): por debajo, ``round`` desborda o el redondeo no tiene sentido."""
 COINCIDENCE_TOLERANCE: Final = 1e-9
-"""Distancia (m) bajo la cual dos puntos son el mismo nudo (la del dominio)."""
+"""Distancia (m) por defecto de ``coincident_node`` y de ``levels``. El dominio no rechaza nudos
+duplicados; la tolerancia de los GESTOS es ``gestures.GESTURE_TOLERANCE`` (longitud mínima)."""
 
 _PARALLEL: Final = 1e-12
 _ABSOLUTE_COMPONENTS: Final = 3

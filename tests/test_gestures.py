@@ -2,12 +2,14 @@
 Esc sin huella, nudos reutilizados, arrastre = un move_node, entrada numérica y R4/R6/R8/R12–R15."""
 
 import math
+from collections.abc import Callable
 
 import pytest
 
 from veritas.core import units as u
 from veritas.core.diagnostics import DiagnosticError
 from veritas.core.geometry.editing import ModelEditor
+from veritas.core.geometry.local_axes import MIN_MEMBER_LENGTH
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.materials.material import MaterialFamily
 from veritas.core.messages_es import render_message
@@ -434,3 +436,80 @@ def test_r15_snap_ties_resolve_to_the_lowest_index() -> None:
     )
     assert result is not None
     assert result.node == 0
+
+
+@pytest.mark.parametrize("mode", [Mode.NODE, Mode.MEMBER])
+def test_escape_or_mode_change_with_the_button_down_leaves_no_trace(mode: Mode) -> None:
+    hit = Capture((1.0, 0.0, 0.0))
+    abandons: list[Callable[[GestureMachine], object]] = [
+        lambda m: m.cancel(),
+        lambda m: m.set_mode(Mode.NODE),
+    ]
+    for abandon in abandons:
+        machine = GestureMachine(mode)
+        machine.press((5.0, 5.0), hit)
+        abandon(machine)
+        assert machine.release((5.0, 5.0), hit) is None
+        assert machine.anchor is None
+        assert state(machine) is GestureState.IDLE
+
+
+def test_mode_change_during_a_drag_does_not_anchor_or_create() -> None:
+    editor, _, _ = setup()
+    hit = origin_node(editor)
+    assert hit.node_id is not None
+    machine = GestureMachine()
+    machine.press((0.0, 0.0), hit, selected_nodes={hit.node_id})
+    machine.set_mode(Mode.MEMBER)
+    assert machine.release((0.0, 0.0), hit) is None
+    assert machine.anchor is None
+
+
+def test_typing_with_the_button_down_does_not_leave_a_phantom_anchor() -> None:
+    machine = GestureMachine(Mode.MEMBER)
+    click(machine, Capture((0.0, 0.0, 0.0)))
+    machine.press((9.0, 9.0), Capture((0.0, 5.0, 0.0)))
+    assert isinstance(machine.type_entry("@2; 0; 0"), CreateMember)
+    assert machine.release((9.0, 9.0), Capture((0.0, 5.0, 0.0))) is None
+    assert machine.anchor is None
+
+
+def test_a_lost_release_does_not_leave_a_stale_drag() -> None:
+    editor, _, _ = setup()
+    hit = origin_node(editor)
+    assert hit.node_id is not None
+    machine = GestureMachine()
+    machine.press((0.0, 0.0), hit, selected_nodes={hit.node_id})  # su release se pierde
+    machine.press((50.0, 50.0), Capture((3.0, 3.0, 0.0)))  # cae en vacío
+    assert state(machine) is GestureState.IDLE
+    assert machine.release((90.0, 90.0), Capture((4.0, 4.0, 0.0))) is None
+
+
+def test_release_without_press_does_nothing() -> None:
+    assert GestureMachine(Mode.NODE).release((0.0, 0.0), Capture((1.0, 1.0, 1.0))) is None
+
+
+def test_node_creation_and_move_onto_an_existing_node_are_rejected_without_trace() -> None:
+    editor, _, _ = setup()
+    a = origin_node(editor)
+    b = editor.add_node(M(2, "m"), M(0, "m"), M(0, "m"))
+    before = digest(editor)
+    for action in (
+        CreateNode((0.0, 0.0, 5e-7)),  # dentro de la longitud mínima de barra
+        MoveNode(b.id, (0.0, 0.0, 0.0)),
+    ):
+        with pytest.raises(DiagnosticError) as info:
+            gestures.apply(action, editor)
+        assert "Ya existe un nudo" in render_message(info.value.diagnostic)
+    assert digest(editor) == before
+    assert a.node_id is not None
+    gestures.apply(MoveNode(a.node_id, (0.0, 0.0, 0.0)), editor)  # sobre sí mismo: no es duplicado
+    gestures.apply(CreateNode((0.0, 0.0, 2e-6)), editor)  # fuera de la tolerancia
+
+
+def test_gesture_tolerance_is_the_domain_minimum_member_length() -> None:
+    assert gestures.GESTURE_TOLERANCE == MIN_MEMBER_LENGTH
+    machine = GestureMachine(Mode.MEMBER)
+    click(machine, Capture((0.0, 0.0, 0.0)))
+    assert click(machine, Capture((5e-7, 0.0, 0.0))) is None  # no gasta el primer punto
+    assert state(machine) is GestureState.ANCHORED

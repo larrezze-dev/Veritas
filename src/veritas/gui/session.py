@@ -15,7 +15,6 @@ ejecuciones ``runs`` y normativas ``norms`` que se conservan tal cual al guardar
   la rechaza; una excepción que no es de dominio se propaga (es un fallo del programa).
 """
 
-import json
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -81,8 +80,8 @@ class EditSession:
         self._runs = () if project is None else project.runs
         self._norms = NO_NORMS if project is None else project.norms
         self._path = path
-        self._file_version = None if project is None or path is None else _file_version(path)
-        # R9: una versión ilegible se trata como antigua (avisa) y no como «actual» en silencio.
+        # R9: versión declarada por el archivo, ya leída al abrirlo (sin releerlo).
+        self._file_version = None if project is None or path is None else project.schema_version
         self._saved = model.snapshot()
         with suppress(DiagnosticError):  # el editor inicial vacío nunca estuvo suscrito
             previous.unsubscribe(self._forward)  # el anterior queda inerte
@@ -192,12 +191,3 @@ class EditSession:
         self._saved = self.model.snapshot()
         self._profiles, self._runs, self._norms = saved.user_profiles, saved.runs, saved.norms
         self._forward()
-
-
-def _file_version(path: Path) -> int:
-    """Versión de esquema declarada por un archivo ya validado; 0 (antigua) si no se lee."""
-    try:
-        version = json.loads(path.read_bytes()).get("schema_version")
-    except (OSError, ValueError, AttributeError):
-        return 0
-    return version if isinstance(version, int) else 0
