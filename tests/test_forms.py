@@ -10,6 +10,7 @@ from gui_support import frame_model
 from veritas.core import units as u
 from veritas.core.diagnostics import DiagnosticCode, DiagnosticError
 from veritas.core.geometry.editing import ModelEditor
+from veritas.core.geometry.local_axes import ReferenceSource
 from veritas.core.materials.material import MaterialFamily
 from veritas.core.messages_es import render_message
 from veritas.core.presentation import QuantityKind
@@ -339,24 +340,90 @@ def test_orientation_defaults_prefill_the_current_values_when_common() -> None:
     """H1: el diálogo muestra la orientación actual si es común a toda la selección."""
     model, ids = frame_model()
     editor = ModelEditor(model)
-    assert forms.orientation_defaults(model, [ids["d"]]) == ("", "")  # referencia por defecto
+    assert forms.orientation_defaults(model, [ids["d"]]) == forms.OrientationDefaults()
     forms.set_orientation_from_text(editor, ids["d"], "0; 1; 0", "30")
-    reference, alpha = forms.orientation_defaults(model, [ids["d"]])
-    assert forms.parse_vector(reference, field="r") == pytest.approx((0.0, 1.0, 0.0))
-    assert float(alpha) == pytest.approx(30.0)
-    # reaplicar lo mostrado no cambia la orientación
-    again = model.member(ids["d"]).orientation
-    forms.set_orientation_from_text(editor, ids["d"], reference, alpha)
-    assert model.member(ids["d"]).orientation.alpha == pytest.approx(again.alpha)
+    shown = forms.orientation_defaults(model, [ids["d"]])
+    assert forms.parse_vector(shown.reference, field="r") == pytest.approx((0.0, 1.0, 0.0))
+    assert float(shown.alpha) == pytest.approx(30.0)
+    assert not (shown.reference_mixed)
+    assert not (shown.alpha_mixed)
 
 
-def test_orientation_defaults_stay_empty_when_the_selection_differs() -> None:
+def test_accepting_the_prefilled_dialog_changes_nothing_even_with_rounding_text() -> None:
+    """R1: reaplicar el texto redondeado no crea revisión ni paso de deshacer."""
     model, ids = frame_model()
     editor = ModelEditor(model)
-    forms.set_orientation_from_text(editor, ids["d"], "0; 1; 0", "30")
-    other = next(i for i in ids.values() if i != ids["d"] and _is_member(model, i))
-    assert forms.orientation_defaults(model, [ids["d"], other]) == ("", "")
-    assert forms.orientation_defaults(model, []) == ("", "")
+    forms.set_orientation_from_text(editor, ids["d"], "1; 2; 3", "21.2")
+    revision, steps = model.member(ids["d"]).revision, len(editor.undo_names)
+    shown = forms.orientation_defaults(model, [ids["d"]])
+    forms.orient_members(editor, [ids["d"]], shown.reference, shown.alpha, shown)
+    assert model.member(ids["d"]).revision == revision
+    assert len(editor.undo_names) == steps
+
+
+def test_mixed_selection_keeps_each_explicit_reference_when_only_alpha_changes() -> None:
+    """R2: con orientaciones distintas, vacío = conservar; cambiar solo el giro no resetea."""
+    model, ids = frame_model()
+    editor = ModelEditor(model)
+    members = [ids["d"], next(i for i in ids.values() if i != ids["d"] and _is_member(model, i))]
+    forms.set_orientation_from_text(editor, members[0], "0; 1; 0", "")
+    forms.set_orientation_from_text(editor, members[1], "1; 1; 0", "")
+    before = [model.member(m).orientation for m in members]
+    shown = forms.orientation_defaults(model, members)
+    assert shown.reference == ""
+    assert shown.reference_mixed
+    assert not shown.alpha_mixed
+    steps = len(editor.undo_names)
+    forms.orient_members(editor, members, "", "15", shown)
+    assert len(editor.undo_names) == steps + 1  # una sola transacción
+    for member, old in zip(members, before, strict=True):
+        new = model.member(member).orientation
+        assert new.alpha == pytest.approx(math.radians(15.0))
+        assert new.reference.x == pytest.approx(old.reference.x)
+        assert new.reference.y == pytest.approx(old.reference.y)
+        assert new.reference.z == pytest.approx(old.reference.z)
+        assert new.source is old.source
+    # alfa distinto con la misma referencia: la referencia sigue mostrándose
+    same = forms.orientation_defaults(model, [members[0]])
+    assert same.reference != ""
+    assert not same.reference_mixed
+    forms.set_orientation_from_text(editor, members[1], "0; 1; 0", "40")
+    both = forms.orientation_defaults(model, members)
+    assert both.alpha_mixed
+    assert not both.reference_mixed
+    assert both.reference != ""
+
+
+def test_clearing_a_prefilled_reference_resets_it_to_the_default() -> None:
+    model, ids = frame_model()
+    editor = ModelEditor(model)
+    forms.set_orientation_from_text(editor, ids["d"], "0; 1; 0", "")
+    shown = forms.orientation_defaults(model, [ids["d"]])
+    forms.orient_members(editor, [ids["d"]], "", "", shown)
+    assert model.member(ids["d"]).orientation.source is not ReferenceSource.EXPLICIT
+
+
+def test_invalid_orientation_text_changes_nothing() -> None:
+    model, ids = frame_model()
+    editor = ModelEditor(model)
+    before = model_hash(model.snapshot())
+    with pytest.raises(DiagnosticError):
+        forms.orient_members(editor, [ids["d"]], "no", "", forms.OrientationDefaults())
+    assert model_hash(model.snapshot()) == before
+
+
+@pytest.mark.parametrize("text", ["1.000", "2.500 mm", "1,000", "12.345", "-3.000"])
+def test_thousands_looking_numbers_are_rejected_as_ambiguous(text: str) -> None:
+    """R7: «1.000» puede ser mil o uno: se rechaza, igual que «1,000»."""
+    with pytest.raises(DiagnosticError):
+        forms.parse_length(text, field="X")
+
+
+@pytest.mark.parametrize(
+    ("text", "si"), [("0.125", 0.125), ("1.5", 1.5), ("1.50", 1.5), ("10.25", 10.25)]
+)
+def test_ordinary_decimals_are_still_accepted(text: str, si: float) -> None:
+    assert forms.parse_length(text, field="X").si_value == pytest.approx(si)
 
 
 def _is_member(model: object, ident: object) -> bool:

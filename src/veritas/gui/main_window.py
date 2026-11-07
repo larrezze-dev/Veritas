@@ -365,18 +365,12 @@ class MainWindow(QMainWindow):
         if not members:
             self.statusBar().showMessage("Seleccione al menos una barra para orientarla.")
             return
-        current_ref, current_alpha = forms.orientation_defaults(self.session.model, members)
-        dialog = OrientationDialog(self, reference=current_ref, alpha=current_alpha)
+        defaults = forms.orientation_defaults(self.session.model, members)
+        dialog = OrientationDialog(self, defaults=defaults)
         if not self._exec(dialog):
             return
         reference, alpha = dialog.result_input
-
-        def action(editor: Any) -> None:
-            with editor.transaction("Orientar barras"):
-                for member_id in members:
-                    forms.set_orientation_from_text(editor, member_id, reference, alpha)
-
-        self._run(action)
+        self._run(lambda editor: forms.orient_members(editor, members, reference, alpha, defaults))
 
     def assign_material(self) -> None:
         self._assign("Asignar material", "Material", forms.material_choices, "assign_material")

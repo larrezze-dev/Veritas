@@ -158,15 +158,22 @@ class OrientationDialog(FormDialog):
     def __init__(
         self,
         parent: QWidget | None = None,
-        *,
-        reference: str = "",
-        alpha: str = "",
+        defaults: forms.OrientationDefaults | None = None,
     ) -> None:
         super().__init__("Orientar barra", parent)
-        self.reference = QLineEdit(reference)
-        self.reference.setPlaceholderText("x; y; z (vacío = referencia por defecto)")
-        self.alpha = QLineEdit(alpha)
-        self.alpha.setPlaceholderText("grados (vacío = conservar el giro actual)")
+        initial = defaults or forms.OrientationDefaults()
+        self.reference = QLineEdit(initial.reference)
+        self.reference.setPlaceholderText(
+            "varios valores (vacío = se conservan)"
+            if initial.reference_mixed
+            else "x; y; z (vacío = referencia por defecto)"
+        )
+        self.alpha = QLineEdit(initial.alpha)
+        self.alpha.setPlaceholderText(
+            "varios valores (vacío = se conservan)"
+            if initial.alpha_mixed
+            else "grados (vacío = conservar el giro actual)"
+        )
         self.form.addRow("Referencia", self.reference)
         self.form.addRow("Giro alfa", self.alpha)
 

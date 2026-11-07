@@ -20,8 +20,9 @@ from veritas.core import units as u
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError
 from veritas.core.geometry.editing import ModelEditor
 from veritas.core.geometry.entities import Member, Node
-from veritas.core.geometry.local_axes import ReferenceSource
+from veritas.core.geometry.local_axes import Orientation, ReferenceSource
 from veritas.core.geometry.model import StructuralModel
+from veritas.core.geometry.vector import Vec3
 from veritas.core.materials.material import MaterialFamily, MaterialRevision
 from veritas.core.presentation import PROFILE_SI, PresentationProfile, QuantityKind
 from veritas.core.references import RevisionRef
@@ -35,8 +36,8 @@ from veritas.core.sections.section import SectionRevision
 _NUMBER: Final = re.compile(
     r"\s*([+-]?(?:\d+[.,]?\d*|[.,]\d+)(?:[eE][+-]?\d+)?)(?![\d.,])\s*(.*?)\s*"
 )
-_THOUSANDS: Final = re.compile(r"\s*[+-]?[1-9]\d{0,2},\d{3}(?!\d)")
-"""«1,000» es ambiguo (¿mil o uno?): se rechaza en lugar de leerlo como 1,0."""
+_THOUSANDS: Final = re.compile(r"\s*[+-]?[1-9]\d{0,2}[.,]\d{3}(?!\d)")
+"""«1,000» y «1.000» son ambiguos (¿mil o uno?): se rechazan en lugar de leerlos como 1,0."""
 DEFAULT_ANGLE_UNIT: Final = "deg"
 VECTOR_SIZE: Final = 3
 
@@ -209,22 +210,79 @@ def parse_orientation(reference: str, alpha: str) -> tuple[Vector3 | None, u.Qua
     return direction, angle
 
 
-def orientation_defaults(model: StructuralModel, member_ids: Iterable[UUID]) -> tuple[str, str]:
-    """Texto inicial del diálogo «Orientar barra» (H1): valores actuales si son comunes.
+@dataclass(frozen=True, slots=True)
+class OrientationDefaults:
+    """Texto inicial de «Orientar barra» (H1) y qué campos tienen varios valores (R2).
 
-    Referencia solo si es explícita en todas (si no, vacío = por defecto); giro en grados. Con
-    orientaciones distintas entre las barras, ambos campos quedan vacíos (no se inventa un valor).
+    Con ``*_mixed`` el campo queda vacío y significa «conservar cada barra como está»; un campo no
+    mixto vacío en la referencia significa «referencia por defecto» (como siempre).
+    """
+
+    reference: str = ""
+    alpha: str = ""
+    reference_mixed: bool = False
+    alpha_mixed: bool = False
+
+
+def orientation_defaults(model: StructuralModel, member_ids: Iterable[UUID]) -> OrientationDefaults:
+    """Valores actuales de la orientación de las barras, campo a campo.
+
+    Referencia: texto solo si es explícita y común (todas por defecto = vacío no mixto). Giro en
+    grados, común o no. Un campo con valores distintos es «mixto» (R2: no se inventa un valor).
     """
     orientations = [model.member(i).orientation for i in member_ids]
-    if not orientations or any(o != orientations[0] for o in orientations):
-        return "", ""
-    orientation = orientations[0]
+    if not orientations:
+        return OrientationDefaults()
+    first = orientations[0]
+
+    def reference_key(o: Orientation) -> object:
+        return None if o.source is not ReferenceSource.EXPLICIT else o.reference
+
+    reference_mixed = any(reference_key(o) != reference_key(first) for o in orientations)
+    alpha_mixed = any(o.alpha != first.alpha for o in orientations)
     reference = ""
-    if orientation.source is ReferenceSource.EXPLICIT:
-        r = orientation.reference
+    if not reference_mixed and first.source is ReferenceSource.EXPLICIT:
+        r = first.reference
         reference = f"{r.x:.12g}; {r.y:.12g}; {r.z:.12g}"
-    alpha = "" if orientation.alpha == 0.0 else f"{math.degrees(orientation.alpha):.12g}"
-    return reference, alpha
+    alpha = ""
+    if not alpha_mixed and first.alpha != 0.0:
+        alpha = f"{math.degrees(first.alpha):.12g}"
+    return OrientationDefaults(reference, alpha, reference_mixed, alpha_mixed)
+
+
+def orient_members(
+    editor: ModelEditor,
+    member_ids: Iterable[UUID],
+    reference: str,
+    alpha: str,
+    defaults: OrientationDefaults,
+) -> None:
+    """Orienta las barras sin tocar lo que el usuario no cambió (R1, R2).
+
+    Un campo igual a su texto inicial, o vacío cuando es mixto (giro: vacío siempre), se conserva
+    tal cual; si ambos se conservan no se emite ninguna orden (el texto redondeado no crea
+    revisiones). Todo en una transacción; texto inválido lanza antes de cambiar nada.
+    """
+    ids = tuple(member_ids)
+    reference_text, alpha_text = reference.strip(), alpha.strip()
+    keep_reference = reference_text == defaults.reference.strip() or (
+        defaults.reference_mixed and not reference_text
+    )
+    keep_alpha = not alpha_text or alpha_text == defaults.alpha.strip()
+    direction, angle = parse_orientation(
+        "" if keep_reference else reference, "" if keep_alpha else alpha
+    )
+    if keep_reference and keep_alpha:
+        return
+    with editor.transaction("Orientar barras"):
+        for member_id in ids:
+            kept: Vec3 | None = None
+            current = editor.model.member(member_id).orientation
+            if keep_reference and current.source is ReferenceSource.EXPLICIT:
+                kept = current.reference
+            editor.set_member_orientation(
+                member_id, reference=kept if keep_reference else direction, alpha=angle
+            )
 
 
 def set_orientation_from_text(
