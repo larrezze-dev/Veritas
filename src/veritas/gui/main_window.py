@@ -292,7 +292,22 @@ class MainWindow(QMainWindow):
         target = path if path is not None else self._choose_save_path()
         if target is None:
             return False
+        if (
+            self._same_file(target)
+            and self.session.upgrades_on_save
+            and not self._confirm_upgrade()
+        ):
+            return False  # R10: «Guardar como» sobre el mismo archivo antiguo también reescribe
         return self._write(lambda: self.session.save_as(target))
+
+    def _same_file(self, target: Path) -> bool:
+        current = self.session.path
+        if current is None:
+            return False
+        try:
+            return target.resolve() == current.resolve()
+        except OSError:
+            return target == current
 
     def _write(self, action: Callable[[], None]) -> bool:
         try:

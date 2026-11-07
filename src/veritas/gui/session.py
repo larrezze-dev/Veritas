@@ -82,6 +82,7 @@ class EditSession:
         self._norms = NO_NORMS if project is None else project.norms
         self._path = path
         self._file_version = None if project is None or path is None else _file_version(path)
+        # R9: una versión ilegible se trata como antigua (avisa) y no como «actual» en silencio.
         self._saved = model.snapshot()
         with suppress(DiagnosticError):  # el editor inicial vacío nunca estuvo suscrito
             previous.unsubscribe(self._forward)  # el anterior queda inerte
@@ -193,10 +194,10 @@ class EditSession:
         self._forward()
 
 
-def _file_version(path: Path) -> int | None:
-    """Versión de esquema declarada por un archivo ya validado; ``None`` si no se puede leer."""
+def _file_version(path: Path) -> int:
+    """Versión de esquema declarada por un archivo ya validado; 0 (antigua) si no se lee."""
     try:
         version = json.loads(path.read_bytes()).get("schema_version")
     except (OSError, ValueError, AttributeError):
-        return None
-    return version if isinstance(version, int) else None
+        return 0
+    return version if isinstance(version, int) else 0

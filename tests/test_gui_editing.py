@@ -496,3 +496,18 @@ def test_saving_an_old_schema_file_asks_first_and_can_be_declined(rig: Rig, tmp_
     assert target.read_bytes() != before
     assert rig.win.save()  # ya está en el esquema vigente: no vuelve a preguntar
     assert len(asked) == 2
+
+
+def test_save_as_over_the_same_old_file_also_asks(rig: Rig, tmp_path: Path) -> None:
+    """R10: «Guardar como» sobre la misma ruta antigua reescribe el archivo: también pregunta."""
+    target = tmp_path / "viejo.veritas"
+    target.write_bytes((Path(__file__).parent / "data" / "proyecto_v7_ref.json").read_bytes())
+    rig.win.session.open(target)
+    before = target.read_bytes()
+    answers = iter([False, True])
+    rig.win._confirm_upgrade = lambda: next(answers)  # type: ignore[method-assign]
+    assert not rig.win.save_as(target)
+    assert target.read_bytes() == before
+    other = tmp_path / "otro.veritas"
+    assert rig.win.save_as(other)  # otra ruta: no es reescribir el antiguo, no pregunta
+    assert next(answers)  # la respuesta «Sí» sigue sin consumir

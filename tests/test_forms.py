@@ -328,6 +328,7 @@ def test_session_forms_and_deletion_do_not_import_qt() -> None:
     code = "; ".join(
         (
             "import sys, veritas.gui.session, veritas.gui.forms, veritas.gui.deletion",
+            "import veritas.gui.capture, veritas.gui.gestures",
             "bad = [m for m in ('PySide6', 'pyvista', 'pyvistaqt', 'vtk') if m in sys.modules]",
             "sys.exit(1 if bad else 0)",
         )

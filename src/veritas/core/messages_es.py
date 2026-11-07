@@ -238,7 +238,16 @@ MESSAGES_ES: Final[dict[str, str]] = {
     ),
     "forms.zero_vector": "El campo «{field}» no puede ser el vector nulo.",
     "forms.no_choice": "Elija {what} (campo «{field}»).",
-    "capture.bad_step": "El paso de rejilla debe ser un número positivo (recibido: {step}).",
+    "capture.bad_step": (
+        "El paso de rejilla debe ser un número finito de al menos 1e-6 m (recibido: {step})."
+    ),
+    "capture.entry_separator": (
+        "Separe las componentes con «;» (por ejemplo «1; 2; 3»), no con espacios "
+        "(recibido: «{text}»)."
+    ),
+    "capture.entry_bad_length": (
+        "La longitud tecleada debe ser mayor que cero (recibido: «{text}»)."
+    ),
     "capture.entry_no_anchor": (
         "Para teclear una longitud o un incremento hace falta un primer punto ya fijado."
     ),

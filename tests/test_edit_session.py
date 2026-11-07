@@ -221,3 +221,14 @@ def test_new_and_current_files_do_not_warn(tmp_path: Path) -> None:
     target = tmp_path / "a.veritas"
     saved_frame(target)
     assert not EditSession(open_project(target), target).upgrades_on_save
+
+
+def test_an_unreadable_file_version_is_treated_as_old_not_current(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R9: si la versión del archivo no se puede releer, se avisa en vez de callar."""
+    target = tmp_path / "a.veritas"
+    saved_frame(target)
+    project = open_project(target)
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(OSError("x")))
+    assert EditSession(project, target).upgrades_on_save

@@ -13,15 +13,21 @@ Límites declarados:
   barra es E6.
 - Prioridad fija: NODE > MIDPOINT > ON_MEMBER > GRID > FREE; con empate de distancia gana el
   índice menor.
+- Importa ``forms`` (análisis de números y unidades), que a su vez importa el dominio de edición
+  (``ModelEditor``); sigue sin Qt ni PyVista.
+- Contrato del rayo: ``near`` y ``far`` son los puntos de mundo que corresponden a los puntos de
+  display z = 0 (cerca) y z = 1 (lejos) bajo el cursor.
 """
 
 import math
+import re
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError
+from veritas.core.presentation import PROFILE_SI, PresentationProfile
 from veritas.gui import forms
 from veritas.gui.picking import MEMBER_RADIUS, NODE_RADIUS, Pixel, distance_to_segment
 
@@ -30,8 +36,14 @@ type Point = tuple[float, float, float]
 DEFAULT_GRID_STEP: Final = 0.5
 """Paso de rejilla por defecto (m)."""
 
+MIN_GRID_STEP: Final = 1e-6
+"""Paso de rejilla mínimo (m): por debajo, ``round`` desborda o el redondeo no tiene sentido."""
+COINCIDENCE_TOLERANCE: Final = 1e-9
+"""Distancia (m) bajo la cual dos puntos son el mismo nudo (la del dominio)."""
+
 _PARALLEL: Final = 1e-12
 _ABSOLUTE_COMPONENTS: Final = 3
+_PLAIN_NUMBER: Final = re.compile(r"[+-]?(?:\d+[.,]?\d*|[.,]\d+)(?:[eE][+-]?\d+)?")
 
 
 def _error(key: str, **params: str | float) -> InputValueError:
@@ -86,31 +98,65 @@ class WorkPlane:
         return (coords[0], coords[1], coords[2])
 
 
-def ray_plane(near: Point, far: Point, plane: WorkPlane) -> Point | None:
+def ray_plane(
+    near: Point, far: Point, plane: WorkPlane, *, max_distance: float | None = None
+) -> Point | None:
     """Corte de la recta ``near``→``far`` con el plano; ``None`` si es paralela o va hacia atrás.
 
-    ``near`` es el punto del rayo más cercano a la cámara; un corte con parámetro negativo (detrás
-    de la cámara) se descarta.
+    ``near`` es el punto del rayo más cercano a la cámara (display z = 0); un corte con parámetro
+    negativo (detrás de la cámara) se descarta. El paralelismo se mide relativo a la longitud del
+    rayo (no depende de la escala de la escena). Con ``max_distance`` (m desde ``near``) se
+    descarta un corte más lejano, p. ej. cuando el rayo casi rasante cae fuera de la escena.
     """
+    length = math.dist(near, far)
+    if length == 0.0:
+        return None
     k = plane.axis.position
     delta = far[k] - near[k]
-    if abs(delta) <= _PARALLEL:
+    if abs(delta) <= _PARALLEL * length:
         return None
     t = (plane.offset - near[k]) / delta
-    if t < 0.0:
+    if t < 0.0 or (max_distance is not None and t * length > max_distance):
         return None
     return _lerp(near, far, t)
 
 
 def grid_point(point: Point, plane: WorkPlane, step: float) -> Point:
     """Nudo de rejilla más cercano en el plano (origen en 0; la coordenada normal es el offset)."""
-    if not (math.isfinite(step) and step > 0.0):
+    if not (math.isfinite(step) and step >= MIN_GRID_STEP):
         raise _error("capture.bad_step", step=step)
     coords = list(plane.project(point))
     for i in range(3):
         if i != plane.axis.position:
-            coords[i] = round(coords[i] / step) * step + 0.0  # + 0.0 evita -0.0
+            ratio = coords[i] / step
+            if not math.isfinite(ratio):
+                raise _error("capture.bad_step", step=step)
+            coords[i] = round(ratio) * step + 0.0  # + 0.0 evita -0.0
     return (coords[0], coords[1], coords[2])
+
+
+def levels(nodes: Sequence[Point], axis: PlaneAxis) -> tuple[float, ...]:
+    """Cotas distintas (ordenadas) de los nudos según ``axis``: ayuda para elegir el plano."""
+    found: list[float] = []
+    for value in sorted(node[axis.position] for node in nodes):
+        if not found or value - found[-1] > COINCIDENCE_TOLERANCE:
+            found.append(value)
+    return tuple(found)
+
+
+def coincident_node(
+    point: Point, nodes: Sequence[Point], tol: float = COINCIDENCE_TOLERANCE
+) -> int | None:
+    """Índice del nudo a ≤ ``tol`` de ``point`` (el más cercano), o ``None``.
+
+    Sirve para reutilizar un nudo existente en vez de intentar duplicarlo.
+    """
+    best: tuple[float, int] | None = None
+    for index, node in enumerate(nodes):
+        distance = math.dist(point, node)
+        if distance <= tol and (best is None or distance < best[0]):
+            best = (distance, index)
+    return None if best is None else best[1]
 
 
 # --- Snapping ------------------------------------------------------------------------------
@@ -156,9 +202,10 @@ def _closest_on_segment_to_ray(near: Point, far: Point, a: Point, b: Point) -> P
     return _lerp(a, b, max(0.0, min(1.0, t)))
 
 
-def _nearest(pixel: Pixel, candidates: Sequence[Pixel], radius: float) -> int | None:
+def _nearest(pixel: Pixel, candidates: Sequence[tuple[int, Pixel]], radius: float) -> int | None:
+    """Índice original del candidato más cercano a ``pixel`` dentro de ``radius``."""
     best: tuple[float, int] | None = None
-    for index, other in enumerate(candidates):
+    for index, other in candidates:
         distance = math.dist(pixel, other)
         if distance <= radius and (best is None or distance < best[0]):
             best = (distance, index)
@@ -168,14 +215,15 @@ def _nearest(pixel: Pixel, candidates: Sequence[Pixel], radius: float) -> int | 
 def _on_member(  # noqa: PLR0913, PLR0917 (datos del visor, uso interno)
     pixel: Pixel,
     ray: tuple[Point, Point],
-    project: Callable[[Point], Pixel],
     nodes: Sequence[Point],
-    members: Sequence[tuple[int, int]],
+    projected: Sequence[Pixel],
+    members: Sequence[tuple[int, tuple[int, int]]],
     radius: float,
+    project: Callable[[Point], Pixel],
 ) -> SnapResult | None:
     best: tuple[float, int, Point] | None = None
-    for index, (i, j) in enumerate(members):
-        if distance_to_segment(pixel, project(nodes[i]), project(nodes[j])) > radius:
+    for index, (i, j) in members:
+        if distance_to_segment(pixel, projected[i], projected[j]) > radius:
             continue
         point = _closest_on_segment_to_ray(ray[0], ray[1], nodes[i], nodes[j])
         distance = math.dist(pixel, project(point))
@@ -198,27 +246,47 @@ def snap(  # noqa: PLR0913, PLR0911 (entradas del visor por nombre; una salida p
     modes: Collection[SnapKind] = ALL_SNAPS,
     node_radius: float = NODE_RADIUS,
     member_radius: float = MEMBER_RADIUS,
+    projected: Sequence[Pixel] | None = None,
+    exclude_nodes: Collection[int] = (),
+    exclude_members: Collection[int] = (),
+    max_distance: float | None = None,
 ) -> SnapResult | None:
     """Punto a capturar bajo ``pixel``; ``None`` si no hay nada que capturar.
 
     ``ray`` son dos puntos de mundo del rayo del cursor (cerca y lejos). ``project`` lleva un punto
-    del modelo al píxel donde se ve. Sin candidato de nudo o barra, el rayo se corta con el plano
-    de trabajo (rejilla o libre); si es paralelo al plano o apunta hacia atrás, ``None``.
+    del modelo al píxel donde se ve; ``projected`` (opcional) son ya los píxeles de ``nodes`` (el
+    visor los tiene al pintar y evita reproyectarlos en cada movimiento del ratón).
+    ``exclude_nodes``/``exclude_members`` (índices) no se capturan: lo que se está moviendo y las
+    barras que llegan a ello. Una barra con un extremo excluido tampoco se captura. Sin candidato
+    de nudo o barra, el rayo se corta con el plano de trabajo (rejilla o libre); si es paralelo al
+    plano, apunta hacia atrás o supera ``max_distance``, ``None``.
     """
+    pixels = [project(p) for p in nodes] if projected is None else list(projected)
+    if len(pixels) != len(nodes):
+        raise ValueError("projected debe tener un píxel por nudo")
+    skip_nodes = frozenset(exclude_nodes)
+    skip_members = frozenset(exclude_members)
+    live = [
+        (index, (i, j))
+        for index, (i, j) in enumerate(members)
+        if index not in skip_members and i not in skip_nodes and j not in skip_nodes
+    ]
     if SnapKind.NODE in modes:
-        best = _nearest(pixel, [project(p) for p in nodes], node_radius)
+        best = _nearest(
+            pixel, [(i, p) for i, p in enumerate(pixels) if i not in skip_nodes], node_radius
+        )
         if best is not None:
             return SnapResult(nodes[best], SnapKind.NODE, node=best)
     if SnapKind.MIDPOINT in modes:
-        mids = [_lerp(nodes[i], nodes[j], 0.5) for i, j in members]
-        best = _nearest(pixel, [project(m) for m in mids], member_radius)
+        mids = {index: _lerp(nodes[i], nodes[j], 0.5) for index, (i, j) in live}
+        best = _nearest(pixel, [(k, project(m)) for k, m in mids.items()], member_radius)
         if best is not None:
             return SnapResult(mids[best], SnapKind.MIDPOINT, member=best)
     if SnapKind.ON_MEMBER in modes:
-        found = _on_member(pixel, ray, project, nodes, members, member_radius)
+        found = _on_member(pixel, ray, nodes, pixels, live, member_radius, project)
         if found is not None:
             return found
-    hit = ray_plane(ray[0], ray[1], plane)
+    hit = ray_plane(ray[0], ray[1], plane, max_distance=max_distance)
     if hit is None:
         return None
     if SnapKind.GRID in modes:
@@ -257,16 +325,23 @@ def cursor_text(point: Point) -> str:
     return f"X = {point[0]:.3f}  Y = {point[1]:.3f}  Z = {point[2]:.3f} m"
 
 
-def parse_entry(text: str, *, anchor: Point | None, cursor: Point | None) -> Point:
+def parse_entry(
+    text: str,
+    *,
+    anchor: Point | None,
+    cursor: Point | None,
+    profile: PresentationProfile = PROFILE_SI,
+) -> Point:
     """Punto tecleado durante un gesto.
 
-    - «L»: longitud desde ``anchor`` en la dirección del ``cursor`` (necesita ambos y que no
+    - «L»: longitud (> 0) desde ``anchor`` en la dirección del ``cursor`` (necesita ambos y que no
       coincidan).
     - «x; y; z»: coordenadas absolutas (separadas por «;»: la unidad puede llevar espacio).
     - «@x; y; z»: incrementos desde ``anchor``.
 
     La coma decimal se admite y ``1,000`` se rechaza por ambiguo (como en ``forms``); cada valor
-    admite unidad de longitud. Diagnóstico en español en cualquier rechazo.
+    admite unidad de longitud y, sin ella, la del ``profile``. Diagnóstico en español en cualquier
+    rechazo.
     """
     if not isinstance(text, str) or not text.strip():
         raise _error("forms.empty_value", field="Entrada")
@@ -274,8 +349,11 @@ def parse_entry(text: str, *, anchor: Point | None, cursor: Point | None) -> Poi
     relative = body.startswith("@")
     if relative:
         body = body[1:].strip()
+    tokens = body.split()
+    if ";" not in body and len(tokens) > 1 and all(_PLAIN_NUMBER.fullmatch(t) for t in tokens):
+        raise _error("capture.entry_separator", text=text)
     parts = [p.strip() for p in body.split(";")]
-    values = [forms.parse_length(p, field="Entrada").si_value for p in parts]
+    values = [forms.parse_length(p, field="Entrada", profile=profile).si_value for p in parts]
     if len(values) == _ABSOLUTE_COMPONENTS:
         if not relative:
             return (values[0], values[1], values[2])
@@ -285,8 +363,10 @@ def parse_entry(text: str, *, anchor: Point | None, cursor: Point | None) -> Poi
     if len(values) == 1 and not relative:
         if anchor is None or cursor is None:
             raise _error("capture.entry_no_anchor")
+        if values[0] <= 0.0:
+            raise _error("capture.entry_bad_length", text=text)
         direction = dimensions(anchor, cursor)
-        if direction.length == 0.0:
+        if direction.length < COINCIDENCE_TOLERANCE:
             raise _error("capture.entry_zero_direction")
         scale = values[0] / direction.length
         return (

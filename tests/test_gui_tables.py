@@ -9,7 +9,7 @@ import pytest
 
 from gui_support import frame_model
 from veritas.core.supports.support import RestraintKind
-from veritas.gui import picking, selection, tables
+from veritas.gui import capture, gestures, picking, selection, tables
 from veritas.gui.scene import Scene, SceneSupport, build_scene
 from veritas.gui.tables import entity_name, member_rows, node_rows, support_text
 
@@ -61,7 +61,7 @@ def test_springs_and_tilted_bases_are_named_not_counted_as_fixed() -> None:
     )
 
 
-@pytest.mark.parametrize("module", [selection, picking, tables])
+@pytest.mark.parametrize("module", [selection, picking, tables, capture, gestures])
 def test_pure_gui_modules_import_neither_qt_nor_pyvista(module: ModuleType) -> None:
     assert module.__file__ is not None
     path = Path(module.__file__)
