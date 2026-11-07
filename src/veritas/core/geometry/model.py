@@ -9,7 +9,8 @@ Una revisión de material o sección entra en el modelo analítico solo cuando u
 referencia: crearla o revisarla no incrementa ``model_revision``; reasignarla a una barra
 sí. Revisar un material o una sección no altera las barras, que conservan su par exacto.
 ``revise_*`` no recibe la revisión base: no detecta ediciones concurrentes (un usuario,
-en memoria; se revisará con la persistencia, T-012). Sin deshacer ni persistencia.
+en memoria; se revisará con la persistencia, T-012). El deshacer/rehacer vive en
+``ModelEditor`` (``core/geometry/editing.py``; T-030, ADR-014).
 
 Apoyos (plan T-005): como máximo uno por nudo, gestionado por nudo. Crear, cambiar o
 retirar un apoyo incrementa ``model_revision``; cambiar solo su etiqueta, no. Retirar un
@@ -23,7 +24,7 @@ nombre o la descripción de un caso, no. Retirar un caso retira sus cargas (una 
 """
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from enum import Enum, auto
 from types import MappingProxyType
 from typing import Final, Literal, Protocol
@@ -186,6 +187,28 @@ def _alpha_rad(alpha: Quantity | None, location: Location) -> float:
     return validate_alpha(alpha.require(ANGLE).si_value, location)
 
 
+_MEMBER_LOAD_TYPES: Final = (
+    MemberUniformLoad,
+    MemberPointLoad,
+    MemberDistributedLoad,
+    MemberDistributedMoment,
+)
+"""Cargas que referencian una barra (el peso propio y las demás no)."""
+
+
+@dataclass(frozen=True, slots=True)
+class NodeDependents:
+    """Entidades que dependen de un nudo (plan T-030 E1): impiden borrarlo sin cascada."""
+
+    members: tuple[UUID, ...] = ()
+    support: UUID | None = None
+    loads: tuple[UUID, ...] = ()
+    settlements: tuple[UUID, ...] = ()
+
+    def __bool__(self) -> bool:
+        return bool(self.members or self.support is not None or self.loads or self.settlements)
+
+
 class StructuralModel:
     """Nudos y barras con identidad UUID y contador ``model_revision``."""
 
@@ -241,6 +264,26 @@ class StructuralModel:
         model._restore_loads(snapshot)
         model._model_revision = revision
         return model
+
+    def replace_content(self, snapshot: ModelSnapshot) -> None:
+        """Sustituye el contenido de ESTE modelo por el de ``snapshot`` (todo o nada).
+
+        Igual que ``restore`` pero conserva la identidad del objeto (T-030 E1, ADR-014): quien
+        guarda una referencia al modelo (p. ej. ``Project.model``) la sigue viendo vigente tras
+        deshacer o rehacer. Si ``snapshot`` no es válido lanza antes de tocar nada. Las vistas
+        de solo lectura (``nodes``, ``members``…) obtenidas antes quedan obsoletas.
+        """
+        fresh = StructuralModel.restore(snapshot)
+        self._nodes = fresh._nodes
+        self._members = fresh._members
+        self._materials = fresh._materials
+        self._sections = fresh._sections
+        self._supports = fresh._supports
+        self._support_by_node = fresh._support_by_node
+        self._load_cases = fresh._load_cases
+        self._loads = fresh._loads
+        self._self_weight_id = fresh._self_weight_id
+        self._model_revision = fresh._model_revision
 
     def _restore_entities(self, snapshot: ModelSnapshot) -> None:
         for node in snapshot.nodes:
@@ -450,6 +493,107 @@ class StructuralModel:
         self._members[member.id] = member
         self._model_revision += 1
         return member
+
+    # --- Borrado y dependientes (plan T-030 E1, D4-A; TK-009; ADR-014) ---------------------
+
+    def member_dependents(self, member_id: UUID) -> tuple[UUID, ...]:
+        """Ids de las cargas de barra que referencian la barra (orden de creación).
+
+        El peso propio NO cuenta: sus exclusiones se limpian solas al borrar la barra.
+        """
+        self.member(member_id)
+        return tuple(
+            load.id
+            for load in self._loads.values()
+            if isinstance(load, _MEMBER_LOAD_TYPES) and load.member_id == member_id
+        )
+
+    def node_dependents(self, node_id: UUID) -> "NodeDependents":
+        """Lo que impide borrar un nudo: barras, apoyo, cargas nodales y asientos del apoyo."""
+        self.node(node_id)
+        members = tuple(m.id for m in self._members.values() if node_id in (m.node_i, m.node_j))
+        support_id = self._support_by_node.get(node_id)
+        loads = tuple(
+            load.id
+            for load in self._loads.values()
+            if isinstance(load, NodalLoad) and load.node_id == node_id
+        )
+        settlements = (
+            () if support_id is None else tuple(s.id for s in self._settlements_of(support_id))
+        )
+        return NodeDependents(members, support_id, loads, settlements)
+
+    def remove_member(self, member_id: UUID) -> Member:
+        """Borra la barra (``model_revision`` +1) y devuelve su última revisión.
+
+        Rechaza con ``model.remove_member_dependents`` si quedan cargas de barra (D4-A): el
+        dominio nunca deja referencias colgantes. Si el peso propio la excluía, la exclusión se
+        limpia (revisión n+1 del peso propio; TK-009); si tras borrarla todas las barras que
+        quedan estuvieran excluidas, rechaza con ``load.self_weight_all_excluded``.
+        """
+        member = self.member(member_id)
+        loads = self.member_dependents(member_id)
+        label = member.label or str(member_id)
+        if loads:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "model.remove_member_dependents",
+                    {"member": label, "count": len(loads), "loads": ", ".join(map(str, loads))},
+                    location=Location(entity_id=member.id, revision=member.revision),
+                )
+            )
+        weight = self.self_weight
+        cleaned: SelfWeight | None = None
+        if weight is not None and member_id in weight.excluded_members:
+            cleaned = replace(
+                weight,
+                revision=weight.revision + 1,
+                excluded_members=weight.excluded_members - {member_id},
+            )
+        remaining = set(self._members) - {member_id}
+        excluded = weight.excluded_members - {member_id} if weight is not None else frozenset()
+        if weight is not None and remaining and remaining <= excluded:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "model.remove_member_all_excluded",
+                    {"member": label, "count": len(remaining)},
+                    location=Location(entity_id=member.id, revision=member.revision),
+                )
+            )
+        del self._members[member_id]
+        if cleaned is not None:
+            self._loads[cleaned.id] = cleaned
+        self._model_revision += 1
+        return member
+
+    def remove_node(self, node_id: UUID) -> Node:
+        """Borra el nudo (``model_revision`` +1) y devuelve su última revisión.
+
+        Rechaza con ``model.remove_node_dependents`` si lo usan barras, un apoyo, cargas
+        nodales o asientos de su apoyo (D4-A).
+        """
+        node = self.node(node_id)
+        dependents = self.node_dependents(node_id)
+        if dependents:
+            raise InputValueError(
+                Diagnostic.create(
+                    DiagnosticCode.INPUT_OUT_OF_RANGE,
+                    "model.remove_node_dependents",
+                    {
+                        "node": node.label or str(node_id),
+                        "members": len(dependents.members),
+                        "supports": 0 if dependents.support is None else 1,
+                        "loads": len(dependents.loads),
+                        "settlements": len(dependents.settlements),
+                    },
+                    location=Location(entity_id=node.id, revision=node.revision),
+                )
+            )
+        del self._nodes[node_id]
+        self._model_revision += 1
+        return node
 
     def set_member_orientation(
         self,

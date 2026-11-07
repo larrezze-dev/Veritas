@@ -205,6 +205,27 @@ MESSAGES_ES: Final[dict[str, str]] = {
         "Tensor de inercia no admisible para los ejes principales: se exige Iy, Iz > 0 e "
         "Iyz² ≤ Iy·Iz."
     ),
+    "model.remove_member_dependents": (
+        "No se puede borrar la barra «{member}»: tiene {count} carga(s) de barra ({loads}). "
+        "Bórrelas antes o use «borrar con dependientes»."
+    ),
+    "model.remove_node_dependents": (
+        "No se puede borrar el nudo «{node}»: lo usan {members} barra(s), {supports} apoyo(s), "
+        "{loads} carga(s) nodal(es) y {settlements} asiento(s). Use «borrar con dependientes»."
+    ),
+    "model.remove_member_all_excluded": (
+        "No se puede borrar la barra «{member}»: las {count} barra(s) que quedarían están todas "
+        "excluidas del peso propio. Incluya alguna en el peso propio antes de borrarla."
+    ),
+    "editing.reentrant": (
+        "El editor no es reentrante: una acción no puede llamar al editor (execute, transaction, "
+        "undo o redo)."
+    ),
+    "editing.nothing_to_undo": "No hay ningún paso que deshacer.",
+    "editing.nothing_to_redo": "No hay ningún paso que rehacer.",
+    "editing.in_transaction": "No se puede deshacer ni rehacer dentro de una transacción.",
+    "editing.invalid_name": "El nombre del comando debe ser un texto no vacío.",
+    "editing.invalid_limit": "El límite del historial debe ser un entero ≥ 1 (recibido: {limit}).",
     "section.sketch_too_few_vertices": (
         "El contorno «{field}» tiene {count:g} vértice(s): se exigen al menos 3."
     ),

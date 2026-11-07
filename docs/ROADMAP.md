@@ -13,7 +13,7 @@ El Product Owner puede probar cada fase y detener el desarrollo sin invalidar lo
 | F2 | Catálogo SQLite, importador y tabla buscable | Importación 100 perfiles, filtros y asignación | ACEPTADA 2026-11-05 (T-022, T-023 y T-024 aceptados; puerta superada con `tests/test_f2_gate.py`: importar 100 perfiles sintéticos, buscar con filtros, asignar con `veritas project assign-profile`, borrar el SQLite y reabrir el proyecto; la tabla buscable en GUI pasa a F4, TK-024) |
 | F3A ||| ACEPTADA 2026-11-05 (T-025 E1 y E2 aceptadas; puerta superada con `tests/test_section_editor_e2.py`: perfil I/RHS/SHS/CHS con medidas, A/I contrastadas con referencias independientes, comparación con el catálogo sintético y estado CONTRASTADO) |
 | F3B | Croquis libre, huecos, validación y versiones | Sección con hueco y error por autointersección | ACEPTADA 2026-11-06 (T-029 E1 y E2 aceptadas; remate T-031 aceptado; puerta superada con `tests/test_f3b_gate.py`: sección con hueco y autointersección rechazada por CLI, de extremo a extremo) |
-| F4 | Modelador 3D, inspector, snapping, undo/redo, guardado | Montar pórtico sin código y editar uniones | NO INICIADA |
+| F4 | Modelador 3D, inspector, snapping, undo/redo, guardado | Montar pórtico sin código y editar uniones | EN CURSO (T-030 aprobado 2026-11-06; E1 —edición con deshacer/rehacer en el dominio— ACEPTADA; E2…E7 pendientes) |
 | F5A | Casos, combinaciones manuales y panel simple | Reparto y equilibrio visibles | NO INICIADA |
 | F5B | Generadores CTE DB-SE-AE viento/nieve con referencias | Casos de cálculo verificados y editables | NO INICIADA |
 | F6 | Diagramas, deformadas, filtros, envolventes y tablas | Análisis tipo RSTAB sobre modelo de muestra | NO INICIADA |
