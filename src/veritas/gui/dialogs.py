@@ -155,11 +155,17 @@ class MemberDialog(FormDialog):
 class OrientationDialog(FormDialog):
     """Orientación de una barra: vector de referencia y giro alfa."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        reference: str = "",
+        alpha: str = "",
+    ) -> None:
         super().__init__("Orientar barra", parent)
-        self.reference = QLineEdit()
+        self.reference = QLineEdit(reference)
         self.reference.setPlaceholderText("x; y; z (vacío = referencia por defecto)")
-        self.alpha = QLineEdit()
+        self.alpha = QLineEdit(alpha)
         self.alpha.setPlaceholderText("grados (vacío = conservar el giro actual)")
         self.form.addRow("Referencia", self.reference)
         self.form.addRow("Giro alfa", self.alpha)

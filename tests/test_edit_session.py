@@ -201,3 +201,23 @@ def test_runs_are_kept_byte_for_byte_and_become_stale_after_editing(tmp_path: Pa
     assert validity(after.runs[0], after.model) is Validity.STALE
     session.undo()  # volver al contenido del archivo sin guardar: el archivo conserva lo guardado
     assert session.dirty
+
+
+def test_an_old_schema_file_is_flagged_until_it_is_saved_as_current(tmp_path: Path) -> None:
+    """H10: guardar sobre un archivo de esquema antiguo avisa; ya guardado, deja de avisar."""
+    source = Path(__file__).parent / "data" / "proyecto_v7_ref.json"
+    target = tmp_path / "viejo.veritas"
+    target.write_bytes(source.read_bytes())
+    session = EditSession(open_project(target), target)
+    assert session.upgrades_on_save
+    session.save()
+    assert not session.upgrades_on_save
+    reopened = EditSession(open_project(target), target)
+    assert not reopened.upgrades_on_save
+
+
+def test_new_and_current_files_do_not_warn(tmp_path: Path) -> None:
+    assert not EditSession().upgrades_on_save
+    target = tmp_path / "a.veritas"
+    saved_frame(target)
+    assert not EditSession(open_project(target), target).upgrades_on_save

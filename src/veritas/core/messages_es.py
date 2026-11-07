@@ -238,6 +238,16 @@ MESSAGES_ES: Final[dict[str, str]] = {
     ),
     "forms.zero_vector": "El campo «{field}» no puede ser el vector nulo.",
     "forms.no_choice": "Elija {what} (campo «{field}»).",
+    "capture.bad_step": "El paso de rejilla debe ser un número positivo (recibido: {step}).",
+    "capture.entry_no_anchor": (
+        "Para teclear una longitud o un incremento hace falta un primer punto ya fijado."
+    ),
+    "capture.entry_zero_direction": (
+        "No hay dirección para la longitud tecleada: mueva el cursor fuera del primer punto."
+    ),
+    "capture.entry_components": (
+        "Escriba una longitud, «x; y; z» o «@x; y; z» (recibido: «{text}»)."
+    ),
     "forms.same_nodes": "La barra necesita dos nudos distintos (campo «{field}»).",
     "section.sketch_too_few_vertices": (
         "El contorno «{field}» tiene {count:g} vértice(s): se exigen al menos 3."

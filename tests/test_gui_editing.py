@@ -474,3 +474,25 @@ def test_a_cell_edit_that_changes_nothing_restores_the_model_format(rig: Rig) ->
     assert cell(win.nodes_table, 0, 3).text().startswith("6.5")
     assert len(win.session.editor.undo_names) == 1
     assert rig.errors == []
+
+
+def test_saving_an_old_schema_file_asks_first_and_can_be_declined(rig: Rig, tmp_path: Path) -> None:
+    """H10: sobre un archivo de esquema antiguo, «Guardar» pregunta; rechazar no escribe nada."""
+    target = tmp_path / "viejo.veritas"
+    target.write_bytes((Path(__file__).parent / "data" / "proyecto_v7_ref.json").read_bytes())
+    rig.win.session.open(target)
+    before = target.read_bytes()
+    asked: list[bool] = []
+    answers = iter([False, True])
+
+    def confirm() -> bool:
+        asked.append(True)
+        return next(answers)
+
+    rig.win._confirm_upgrade = confirm  # type: ignore[method-assign]
+    assert not rig.win.save()
+    assert target.read_bytes() == before
+    assert rig.win.save()
+    assert target.read_bytes() != before
+    assert rig.win.save()  # ya está en el esquema vigente: no vuelve a preguntar
+    assert len(asked) == 2

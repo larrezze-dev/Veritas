@@ -333,3 +333,35 @@ def test_session_forms_and_deletion_do_not_import_qt() -> None:
     )
     result = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, check=False)
     assert result.returncode == 0, result.stderr.decode()
+
+
+def test_orientation_defaults_prefill_the_current_values_when_common() -> None:
+    """H1: el diálogo muestra la orientación actual si es común a toda la selección."""
+    model, ids = frame_model()
+    editor = ModelEditor(model)
+    assert forms.orientation_defaults(model, [ids["d"]]) == ("", "")  # referencia por defecto
+    forms.set_orientation_from_text(editor, ids["d"], "0; 1; 0", "30")
+    reference, alpha = forms.orientation_defaults(model, [ids["d"]])
+    assert forms.parse_vector(reference, field="r") == pytest.approx((0.0, 1.0, 0.0))
+    assert float(alpha) == pytest.approx(30.0)
+    # reaplicar lo mostrado no cambia la orientación
+    again = model.member(ids["d"]).orientation
+    forms.set_orientation_from_text(editor, ids["d"], reference, alpha)
+    assert model.member(ids["d"]).orientation.alpha == pytest.approx(again.alpha)
+
+
+def test_orientation_defaults_stay_empty_when_the_selection_differs() -> None:
+    model, ids = frame_model()
+    editor = ModelEditor(model)
+    forms.set_orientation_from_text(editor, ids["d"], "0; 1; 0", "30")
+    other = next(i for i in ids.values() if i != ids["d"] and _is_member(model, i))
+    assert forms.orientation_defaults(model, [ids["d"], other]) == ("", "")
+    assert forms.orientation_defaults(model, []) == ("", "")
+
+
+def _is_member(model: object, ident: object) -> bool:
+    try:
+        model.member(ident)  # type: ignore[attr-defined]
+    except Exception:
+        return False
+    return True

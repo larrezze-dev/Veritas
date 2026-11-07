@@ -11,6 +11,7 @@ espacios). Los ángulos por defecto van en grados. Todo valor no finito se recha
 
 import math
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Final
 from uuid import UUID
@@ -19,6 +20,7 @@ from veritas.core import units as u
 from veritas.core.diagnostics import Diagnostic, DiagnosticCode, InputValueError
 from veritas.core.geometry.editing import ModelEditor
 from veritas.core.geometry.entities import Member, Node
+from veritas.core.geometry.local_axes import ReferenceSource
 from veritas.core.geometry.model import StructuralModel
 from veritas.core.materials.material import MaterialFamily, MaterialRevision
 from veritas.core.presentation import PROFILE_SI, PresentationProfile, QuantityKind
@@ -205,6 +207,24 @@ def parse_orientation(reference: str, alpha: str) -> tuple[Vector3 | None, u.Qua
     direction = parse_vector(reference, field="Referencia") if reference.strip() else None
     angle = parse_angle(alpha, field="Giro alfa") if alpha.strip() else None
     return direction, angle
+
+
+def orientation_defaults(model: StructuralModel, member_ids: Iterable[UUID]) -> tuple[str, str]:
+    """Texto inicial del diálogo «Orientar barra» (H1): valores actuales si son comunes.
+
+    Referencia solo si es explícita en todas (si no, vacío = por defecto); giro en grados. Con
+    orientaciones distintas entre las barras, ambos campos quedan vacíos (no se inventa un valor).
+    """
+    orientations = [model.member(i).orientation for i in member_ids]
+    if not orientations or any(o != orientations[0] for o in orientations):
+        return "", ""
+    orientation = orientations[0]
+    reference = ""
+    if orientation.source is ReferenceSource.EXPLICIT:
+        r = orientation.reference
+        reference = f"{r.x:.12g}; {r.y:.12g}; {r.z:.12g}"
+    alpha = "" if orientation.alpha == 0.0 else f"{math.degrees(orientation.alpha):.12g}"
+    return reference, alpha
 
 
 def set_orientation_from_text(

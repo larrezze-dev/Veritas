@@ -15,6 +15,7 @@ ejecuciones ``runs`` y normativas ``norms`` que se conservan tal cual al guardar
   la rechaza; una excepción que no es de dominio se propaga (es un fallo del programa).
 """
 
+import json
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -26,6 +27,7 @@ from veritas.core.geometry.model import StructuralModel
 from veritas.core.geometry.snapshot import ModelSnapshot
 from veritas.core.messages_es import render_message
 from veritas.core.presentation import PresentationProfile
+from veritas.persistence.migrations import CURRENT_SCHEMA_VERSION
 from veritas.persistence.norms import NO_NORMS, NormsState
 from veritas.persistence.project import Project, open_project, save_project
 from veritas.persistence.runs import RunRecord
@@ -58,6 +60,7 @@ class EditSession:
         self._runs: tuple[RunRecord, ...] = ()
         self._norms: NormsState = NO_NORMS
         self._path: Path | None = None
+        self._file_version: int | None = None
         self._saved: ModelSnapshot = self._editor.model.snapshot()
         self._load(project, None if path is None else Path(path), model)
 
@@ -78,6 +81,7 @@ class EditSession:
         self._runs = () if project is None else project.runs
         self._norms = NO_NORMS if project is None else project.norms
         self._path = path
+        self._file_version = None if project is None or path is None else _file_version(path)
         self._saved = model.snapshot()
         with suppress(DiagnosticError):  # el editor inicial vacío nunca estuvo suscrito
             previous.unsubscribe(self._forward)  # el anterior queda inerte
@@ -98,6 +102,11 @@ class EditSession:
     def dirty(self) -> bool:
         """El contenido difiere del último guardado o apertura."""
         return self.model.snapshot() != self._saved
+
+    @property
+    def upgrades_on_save(self) -> bool:
+        """Guardar reescribiría con el esquema vigente un archivo más antiguo (H10)."""
+        return self._file_version is not None and self._file_version < CURRENT_SCHEMA_VERSION
 
     @property
     def runs(self) -> tuple[RunRecord, ...]:
@@ -178,6 +187,16 @@ class EditSession:
     def _write(self, target: Path) -> None:
         saved = save_project(target, self.model, self._profiles, runs=self._runs, norms=self._norms)
         self._path = target
+        self._file_version = CURRENT_SCHEMA_VERSION
         self._saved = self.model.snapshot()
         self._profiles, self._runs, self._norms = saved.user_profiles, saved.runs, saved.norms
         self._forward()
+
+
+def _file_version(path: Path) -> int | None:
+    """Versión de esquema declarada por un archivo ya validado; ``None`` si no se puede leer."""
+    try:
+        version = json.loads(path.read_bytes()).get("schema_version")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return version if isinstance(version, int) else None

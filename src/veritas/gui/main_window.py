@@ -230,6 +230,17 @@ class MainWindow(QMainWindow):
             return DISCARD
         return CANCEL
 
+    def _confirm_upgrade(self) -> bool:
+        """Avisa de que guardar reescribe el archivo antiguo con el esquema vigente (H10)."""
+        answer = QMessageBox.question(
+            self,
+            APP_NAME,
+            "El archivo está en un esquema antiguo. Guardar lo reescribe con el esquema vigente "
+            "y las versiones anteriores de la aplicación podrían no abrirlo. "
+            "Use «Guardar como» para conservar el original. ¿Guardar igualmente?",
+        )
+        return bool(answer == QMessageBox.StandardButton.Yes)
+
     def _show_error(self, text: str) -> None:
         QMessageBox.warning(self, APP_NAME, text)
 
@@ -273,6 +284,8 @@ class MainWindow(QMainWindow):
         """Guarda; sin ruta pide «Guardar como». ``False`` si se canceló o falló."""
         if self.session.path is None:
             return self.save_as()
+        if self.session.upgrades_on_save and not self._confirm_upgrade():
+            return False
         return self._write(self.session.save)
 
     def save_as(self, path: Path | None = None) -> bool:
@@ -352,7 +365,8 @@ class MainWindow(QMainWindow):
         if not members:
             self.statusBar().showMessage("Seleccione al menos una barra para orientarla.")
             return
-        dialog = OrientationDialog(self)
+        current_ref, current_alpha = forms.orientation_defaults(self.session.model, members)
+        dialog = OrientationDialog(self, reference=current_ref, alpha=current_alpha)
         if not self._exec(dialog):
             return
         reference, alpha = dialog.result_input
